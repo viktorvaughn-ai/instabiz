@@ -1,0 +1,87 @@
+/**
+ * instabiz.css
+ * ============
+ * Claude Orange Light Theme — buttons only.
+ * Everything else left to Frappe defaults.
+ */
+
+/* ─── CSS variables ── */
+:root {
+    --ib-primary:       #d97757;
+    --ib-primary-dark:  #c0622f;
+    --ib-primary-xdark: #a44e22;
+    --ib-tint-mid:      #f7ede7;
+    --ib-tint-border:   #f1e0d6;
+    --ib-text:          #2c1a0e;
+    --ib-radius:        6px;
+}
+
+/* ─── Primary button ── */
+.btn-primary,
+.btn.btn-primary {
+    background: var(--ib-primary) !important;
+    border-color: var(--ib-primary) !important;
+    color: #fff !important;
+    border-radius: var(--ib-radius) !important;
+    font-weight: 600;
+    box-shadow: 0 1px 4px rgba(217,119,87,0.18);
+    transition: background 0.15s, box-shadow 0.15s;
+}
+.btn-primary:hover,
+.btn.btn-primary:hover {
+    background: var(--ib-primary-dark) !important;
+    border-color: var(--ib-primary-dark) !important;
+    box-shadow: 0 2px 8px rgba(192,98,47,0.22);
+}
+.btn-primary:active,
+.btn.btn-primary:active {
+    background: var(--ib-primary-xdark) !important;
+    border-color: var(--ib-primary-xdark) !important;
+}
+
+/* ─── Secondary / default button ── */
+.btn-default,
+.btn.btn-default,
+.btn-secondary,
+.btn.btn-secondary {
+    background: #fff !important;
+    border: 1.5px solid var(--ib-tint-border) !important;
+    color: var(--ib-text) !important;
+    border-radius: var(--ib-radius) !important;
+    font-weight: 500;
+    transition: background 0.15s, border-color 0.15s;
+}
+.btn-default:hover,
+.btn.btn-default:hover,
+.btn-secondary:hover {
+    background: var(--ib-tint-mid) !important;
+    border-color: var(--ib-primary) !important;
+    color: var(--ib-primary) !important;
+}
+
+/* ─── Danger button ── */
+.btn-danger,
+.btn.btn-danger {
+    background: #e53e3e !important;
+    border-color: #e53e3e !important;
+    color: #fff !important;
+    border-radius: var(--ib-radius) !important;
+}
+.btn-danger:hover {
+    background: #c53030 !important;
+    border-color: #c53030 !important;
+}
+
+/* ─── Submit button ── */
+.btn[data-label="Submit"],
+button[data-label="Submit"] {
+    background: #2d8a4e !important;
+    border-color: #2d8a4e !important;
+    color: #fff !important;
+    border-radius: var(--ib-radius) !important;
+}
+
+/* ─── IB Summary bar ── */
+.ib-summary-bar {
+    font-family: inherit;
+}
