@@ -65,8 +65,7 @@ def custom_make_delivery_note(source_name, target_doc=None):
                     "price_list_currency":   "price_list_currency",
                     "plc_conversion_rate":   "plc_conversion_rate",
                     "conversion_rate":       "conversion_rate",
-                    # Carry warehouse through to Delivery Note
-                    #"set_warehouse":         "set_warehouse",
+                    "custom_location":       "custom_location",                    
                 },
             },
             "Sales Order Item": {

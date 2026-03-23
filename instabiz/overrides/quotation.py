@@ -90,8 +90,7 @@ def custom_make_sales_order(source_name, target_doc=None):
                     "plc_conversion_rate":   "plc_conversion_rate",
                     "conversion_rate":       "conversion_rate",
                     "transaction_date":      "transaction_date",
-                    # Warehouse: custom_warehouse on Quotation → set_warehouse on SO
-                    #"custom_warehouse":      "set_warehouse",
+                    "custom_location":       "custom_location",
                 },
             },
             "Quotation Item": {
