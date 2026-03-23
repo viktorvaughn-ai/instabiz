@@ -66,7 +66,7 @@ def custom_make_delivery_note(source_name, target_doc=None):
                     "plc_conversion_rate":   "plc_conversion_rate",
                     "conversion_rate":       "conversion_rate",
                     # Carry warehouse through to Delivery Note
-                    "set_warehouse":         "set_warehouse",
+                    #"set_warehouse":         "set_warehouse",
                 },
             },
             "Sales Order Item": {
