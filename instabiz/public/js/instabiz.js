@@ -28,30 +28,6 @@ function ib_is_editable(frm) {
     return frm.doc.docstatus === 0;
 }
 
-// ── toggle width/length fields based on UOM ───────────────────────────────────
-function ib_sync_dimension_field_state(frm, row) {
-    if (!frm || !frm.get_field) return;
-    const uom = (row && row.uom) || "";
-    const is_sqm = uom === "Square Meter";
-
-    const grid = frm.fields_dict.items && frm.fields_dict.items.grid;
-    if (!grid || !row || !row.name) return;
-
-    const grid_row = grid.grid_rows_by_docname[row.name];
-    if (!grid_row) return;
-
-    // toggle_editable is the correct method in Frappe v15
-    // falls back gracefully if method doesn't exist
-    const toggle = grid_row.toggle_editable
-        ? grid_row.toggle_editable.bind(grid_row)
-        : (grid_row.toggle_enable
-            ? grid_row.toggle_enable.bind(grid_row)
-            : () => {});
-
-    toggle("width_mm", is_sqm);
-    toggle("length_mtr", is_sqm);
-}
-
 // ── core qty calculation (matches utils.py exactly) ───────────────────────────
 function ib_calc_qty(row) {
     const uom        = (row.uom || "").trim();
@@ -60,7 +36,7 @@ function ib_calc_qty(row) {
     const qty_pkg    = flt(row.qty_pkg);
     const total_pkg  = flt(row.total_pkg);
 
-    if (uom === "Square Meter") {
+    if (uom === "SQMT") {
         if (!width_mm || !length_mtr || !qty_pkg || !total_pkg) return null;
         return flt((width_mm / 1000) * length_mtr * qty_pkg * total_pkg, 3);
     } else {
@@ -76,6 +52,13 @@ function ib_trigger_tax_calc(frm) {
     } catch (e) {
         try { frm.trigger("calculate_taxes_and_totals"); } catch (_) {}
     }
+}
+
+// ── refresh grid to make updated values visible ───────────────────────────────
+function ib_refresh_grid(frm) {
+    try {
+        frm.fields_dict.items.grid.refresh();
+    } catch (_) {}
 }
 
 // ── row-level recalc ──────────────────────────────────────────────────────────
@@ -105,6 +88,7 @@ function ib_recalc_row(frm, cdt, cdn, from_dimensions) {
 
     requestAnimationFrame(() => {
         row.__ib_updating = false;
+        ib_refresh_grid(frm);
         ib_trigger_tax_calc(frm);
     });
 }
@@ -118,29 +102,16 @@ function ib_debounce(fn, ms) {
     };
 }
 
-
-// ── Sales Order-specific hooks ────────────────────────────────────────────────
-// Handles two cases:
-//   A) SO created directly (not from Quotation) — field is blank, fill it.
-//   B) SO created from Quotation — field already populated via Python mapper,
-//      blank-guard inside ib_set_custom_sales_person skips overwriting it.
-frappe.ui.form.on("Sales Order", {
-    refresh(frm) {
-        ib_set_custom_sales_person(frm);
-    },
-    sales_team_add(frm)    { ib_set_custom_sales_person(frm); },
-    sales_team_remove(frm) { ib_set_custom_sales_person(frm); },
-});
-
 // ── wire up all 4 doctypes ────────────────────────────────────────────────────
 IB_DOCTYPES.forEach(doctype => {
     frappe.ui.form.on(doctype, {
         refresh(frm) {
-            // Sync field states for all existing rows on load
-            // wrapped in try/catch so a single bad row never breaks the form
-            (frm.doc.items || []).forEach(row => {
-                try { ib_sync_dimension_field_state(frm, row); } catch (_) {}
-            });
+            // Disable UOM auto-fetch from Item master at meta level
+            const uom_df = frappe.meta.get_docfield(`${doctype} Item`, "uom");
+            if (uom_df) {
+                uom_df.fetch_from = "";
+                uom_df.fetch_enabled = 0;
+            }
         },
 
         taxes_and_charges: (frm) => ib_trigger_tax_calc(frm),
@@ -157,20 +128,18 @@ IB_DOCTYPES.forEach(doctype => {
 
     frappe.ui.form.on(`${doctype} Item`, {
         item_code(frm, cdt, cdn) {
-            // Give Frappe time to complete fetch_from, then recalc
+            // Clear immediately
+            frappe.model.set_value(cdt, cdn, "uom", "");
+            // Clear again after fetch completes
             setTimeout(() => {
-                try {
-                    const row = locals[cdt][cdn];
-                    ib_sync_dimension_field_state(frm, row);
-                    ib_recalc_row(frm, cdt, cdn, true);
-                } catch (_) {}
-            }, 300);
+                frappe.model.set_value(cdt, cdn, "uom", "");
+                const row = locals[cdt][cdn];
+                ib_recalc_row(frm, cdt, cdn, true);
+            }, 800);
         },
 
         uom: ib_debounce((frm, cdt, cdn) => {
             try {
-                const row = locals[cdt][cdn];
-                ib_sync_dimension_field_state(frm, row);
                 ib_recalc_row(frm, cdt, cdn, true);
             } catch (_) {}
         }, IB_DEBOUNCE),
@@ -180,7 +149,7 @@ IB_DOCTYPES.forEach(doctype => {
         qty_pkg:      ib_debounce((frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, true),  IB_DEBOUNCE),
         total_pkg:    ib_debounce((frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, true),  IB_DEBOUNCE),
 
-        qty:          ib_debounce((frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, false), IB_DEBOUNCE),
+        qty:          ib_debcleaounce((frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, false), IB_DEBOUNCE),
         rate:         ib_debounce((frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, false), IB_DEBOUNCE),
 
         items_remove: (frm) => ib_trigger_tax_calc(frm),

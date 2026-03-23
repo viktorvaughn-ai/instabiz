@@ -32,7 +32,7 @@ def custom_make_delivery_note(source_name, target_doc=None):
             target_doc.customer = source_doc.customer
             target_doc.customer_name = source_doc.customer_name
 
-            customer_doc = frappe.get_cached_doc("Customer", source_doc.party_name)
+            customer_doc = frappe.get_cached_doc("Customer", source_doc.customer)
             if not target_doc.get("customer_group") and customer_doc.customer_group:
                 target_doc.customer_group = customer_doc.customer_group
             if not target_doc.get("territory") and customer_doc.territory:
@@ -65,6 +65,8 @@ def custom_make_delivery_note(source_name, target_doc=None):
                     "price_list_currency":   "price_list_currency",
                     "plc_conversion_rate":   "plc_conversion_rate",
                     "conversion_rate":       "conversion_rate",
+                    # Carry warehouse through to Delivery Note
+                    "set_warehouse":         "set_warehouse",
                 },
             },
             "Sales Order Item": {

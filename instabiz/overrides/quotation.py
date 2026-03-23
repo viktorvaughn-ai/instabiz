@@ -30,6 +30,9 @@ def _set_default_terms(doc):
 
 
 class CustomQuotation(Quotation):
+     
+    def set_sales_person(self):
+        pass # fdf
 
     def before_insert(self):
         _set_default_terms(self)
@@ -87,6 +90,8 @@ def custom_make_sales_order(source_name, target_doc=None):
                     "plc_conversion_rate":   "plc_conversion_rate",
                     "conversion_rate":       "conversion_rate",
                     "transaction_date":      "transaction_date",
+                    # Warehouse: custom_warehouse on Quotation → set_warehouse on SO
+                    "custom_warehouse":      "set_warehouse",
                 },
             },
             "Quotation Item": {
