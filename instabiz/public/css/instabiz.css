@@ -16,6 +16,12 @@
     --ib-radius:        6px;
 }
 
+
+/* Awesome listbox */
+.awesomplete > [role=listbox] {
+    min-width: 600px !important;
+}
+
 /* ─── Primary button ── */
 .btn-primary,
 .btn.btn-primary {
