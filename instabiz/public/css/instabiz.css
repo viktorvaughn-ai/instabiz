@@ -18,7 +18,7 @@
 
 
 /* Awesome listbox */
-.awesomplete > [role=listbox] {
+ul[role="listbox"][id^="awesomplete_list"] {
     min-width: 600px !important;
 }
 

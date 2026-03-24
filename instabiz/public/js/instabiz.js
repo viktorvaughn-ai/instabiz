@@ -83,6 +83,9 @@ IB_DOCTYPES.forEach(doctype => {
         refresh(frm) {
             const uom_df = frappe.meta.get_docfield(`${doctype} Item`, "uom");
             if (uom_df) { uom_df.fetch_from = ""; uom_df.fetch_enabled = 0; }
+            frm.set_query("item_code", "items", () => ({
+                page_length: 50
+            }));
         },
 
         after_save:   (frm) => frm.refresh(),
