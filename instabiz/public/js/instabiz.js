@@ -1,13 +1,61 @@
 /**
  * instabiz.js — Frappe v15 / ERPNext v15
- *
- * Tax calculation is handled entirely by the ERPNext tax engine server-side.
- * This file only manages custom dimension → qty → amount recalc on the
- * child table rows.
  */
 
-const IB_DOCTYPES = ["Quotation", "Sales Order", "Delivery Note", "Sales Invoice"];
-const IB_DEBOUNCE = 300;
+// ════════════════════════════════════════════════════════════════════════════
+// 1. GSTIN AUTOFILL  (bypass India Compliance paid API)
+// ════════════════════════════════════════════════════════════════════════════
+frappe.after_ajax(function () {
+    if (typeof india_compliance === "undefined") return;
+
+    // Force IC to think the API is active — our backend handles the real call
+    india_compliance.is_api_enabled = function () { return true; };
+
+    // Patch boot settings so the quick-entry form enables autofill
+    const gs = frappe.boot.gst_settings;
+    if (gs) {
+        gs.sandbox_mode        = false;
+        gs.autofill_party_info = true;
+        gs.enable_api          = true;
+    }
+
+    // Intercept the GSTIN backend call to:
+    //   • show a loading spinner while fetching
+    //   • clear the "Status: …" description IC sets after the result arrives
+    const GSTIN_METHOD = "india_compliance.gst_india.utils.gstin_info.get_gstin_info";
+    const _orig_call   = frappe.call.bind(frappe);
+
+    frappe.call = function (opts, ...rest) {
+        if (opts && opts.method === GSTIN_METHOD) {
+            const $desc = $('.modal:visible [data-fieldname="_gstin"] .help-box');
+
+            // Show spinner
+            $desc.html(
+                '<span class="ib-gstin-loading">' +
+                '<span class="ib-gstin-spinner"></span>' +
+                __("Fetching GSTIN info…") +
+                '</span>'
+            );
+
+            // After IC sets "Status: …", wipe it out
+            const promise = _orig_call(opts, ...rest);
+            promise.then(function () {
+                setTimeout(function () {
+                    $('.modal:visible [data-fieldname="_gstin"] .help-box').html("");
+                }, 50);
+            });
+            return promise;
+        }
+        return _orig_call(opts, ...rest);
+    };
+});
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// 2. DIMENSION RECALC  (qty from width/length/pkg, amount from qty × rate)
+// ════════════════════════════════════════════════════════════════════════════
+const IB_DOCTYPES  = ["Quotation", "Sales Order", "Delivery Note", "Sales Invoice"];
+const IB_DEBOUNCE  = 300;
 
 function ib_is_editable(frm) {
     return frm && frm.doc && frm.doc.docstatus === 0;
@@ -18,87 +66,67 @@ function ib_is_sqmt(uom) {
 }
 
 function ib_calc_qty(row) {
-    const width_mm   = flt(row.width_mm);
-    const length_mtr = flt(row.length_mtr);
-    const qty_pkg    = flt(row.qty_pkg);
-    const total_pkg  = flt(row.total_pkg);
-
+    const w = flt(row.width_mm), l = flt(row.length_mtr);
+    const p = flt(row.qty_pkg),  t = flt(row.total_pkg);
     if (ib_is_sqmt(row.uom)) {
-        if (!width_mm || !length_mtr || !qty_pkg || !total_pkg) return null;
-        return flt((width_mm / 1000) * length_mtr * qty_pkg * total_pkg, 3);
-    } else {
-        if (!qty_pkg || !total_pkg) return null;
-        return flt(qty_pkg * total_pkg, 3);
+        if (!w || !l || !p || !t) return null;
+        return flt((w / 1000) * l * p * t, 3);
     }
+    if (!p || !t) return null;
+    return flt(p * t, 3);
 }
 
 function ib_debounce(fn, ms) {
-    let t;
+    let timer;
     return function (...args) {
-        clearTimeout(t);
-        t = setTimeout(() => fn.apply(this, args), ms);
+        clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), ms);
     };
 }
 
-// ── core recalc ───────────────────────────────────────────────────────────────
-// Recalculates qty (from dimensions, when from_dim=true) and amount for a
-// single child row. Tax/totals are left entirely to the ERPNext tax engine.
-//
-// set_value is only called when the value actually changes to avoid
-// re-entering this function via the qty/rate triggers.
 async function ib_recalc_row(frm, cdt, cdn, from_dim) {
     if (!ib_is_editable(frm)) return;
-
     const row = locals[cdt][cdn];
-    if (!row || !row.item_code) return;
-    if (row.__ib_updating) return;
+    if (!row || !row.item_code || row.__ib_updating) return;
 
     row.__ib_updating = true;
     try {
         if (from_dim) {
             const new_qty = ib_calc_qty(row);
-            if (new_qty !== null && flt(new_qty, 3) !== flt(row.qty, 3)) {
+            if (new_qty !== null && flt(new_qty, 3) !== flt(row.qty, 3))
                 await frappe.model.set_value(cdt, cdn, "qty", new_qty);
-            }
         }
-
-        // Re-read from locals AFTER the await — value is now committed in model
-        const current_row = locals[cdt][cdn];
-        const qty    = flt(current_row.qty);
-        const rate   = flt(current_row.rate);
-        const amount = flt(qty * rate, 2);
-
-        if (flt(amount, 2) !== flt(current_row.amount, 2)) {
+        const r      = locals[cdt][cdn];
+        const amount = flt(flt(r.qty) * flt(r.rate), 2);
+        if (flt(amount, 2) !== flt(r.amount, 2))
             await frappe.model.set_value(cdt, cdn, "amount", amount);
-        }
-
     } finally {
         row.__ib_updating = false;
         frm.refresh_field("items");
     }
 }
 
+
+// ════════════════════════════════════════════════════════════════════════════
+// 3. FORM HANDLERS  (all IB transaction doctypes)
+// ════════════════════════════════════════════════════════════════════════════
 const IB_REOPEN_DOCTYPES = ["Quotation", "Sales Order"];
 
-IB_DOCTYPES.forEach(doctype => {
+IB_DOCTYPES.forEach(function (doctype) {
     frappe.ui.form.on(doctype, {
         refresh(frm) {
+            // Prevent UOM from being auto-fetched from item master
             const uom_df = frappe.meta.get_docfield(`${doctype} Item`, "uom");
             if (uom_df) { uom_df.fetch_from = ""; uom_df.fetch_enabled = 0; }
 
-            frm.set_query("item_code", "items", () => ({
-                page_length: 50
-            }));
+            frm.set_query("item_code", "items", () => ({ page_length: 50 }));
 
-            // Reopen button — only for Quotation and Sales Order when cancelled
+            // Reopen button for cancelled Quotation / Sales Order
             if (
                 frm.doc.docstatus === 2 &&
                 IB_REOPEN_DOCTYPES.includes(doctype) &&
                 frappe.model.can_cancel(doctype)
             ) {
-                // set_primary_action replaces the Amend button in the primary slot.
-                // After reload_doc, Frappe calls set_primary_action("Submit") which
-                // cleanly replaces our Reopen — no stale buttons, no class conflicts.
                 frm.page.set_primary_action(__("Reopen"), function () {
                     frappe.confirm(
                         __("Reopen this {0}?").replace("{0}", __(doctype)),
@@ -110,9 +138,7 @@ IB_DOCTYPES.forEach(doctype => {
                                 args: { name: frm.doc.name },
                                 freeze: true,
                                 freeze_message: __("Reopening…"),
-                                callback: function (r) {
-                                    if (!r.exc) window.location.reload();
-                                },
+                                callback: function (r) { if (!r.exc) window.location.reload(); },
                             });
                         }
                     );
@@ -127,12 +153,7 @@ IB_DOCTYPES.forEach(doctype => {
 
     frappe.ui.form.on(`${doctype} Item`, {
         item_code(frm, cdt, cdn) {
-            // Clear UOM immediately so Frappe doesn't lock in a stale value
             frappe.model.set_value(cdt, cdn, "uom", "");
-            
-
-            // Wait for fetch_from fields (width_mm, length_mtr, qty_pkg, color)
-            // to resolve from the server before running recalc.
             setTimeout(async () => {
                 await frappe.model.set_value(cdt, cdn, "uom", "");
                 await ib_recalc_row(frm, cdt, cdn, true);
@@ -140,85 +161,70 @@ IB_DOCTYPES.forEach(doctype => {
             }, 1200);
         },
 
-        // Dimension fields — recalculate qty then amount
-        uom:        ib_debounce(async (frm, cdt, cdn) => { await ib_recalc_row(frm, cdt, cdn, true);  }, IB_DEBOUNCE),
-        width_mm:   ib_debounce(async (frm, cdt, cdn) => { await ib_recalc_row(frm, cdt, cdn, true);  }, IB_DEBOUNCE),
-        length_mtr: ib_debounce(async (frm, cdt, cdn) => { await ib_recalc_row(frm, cdt, cdn, true);  }, IB_DEBOUNCE),
-        qty_pkg:    ib_debounce(async (frm, cdt, cdn) => { await ib_recalc_row(frm, cdt, cdn, true);  }, IB_DEBOUNCE),
-        total_pkg:  ib_debounce(async (frm, cdt, cdn) => { await ib_recalc_row(frm, cdt, cdn, true);  }, IB_DEBOUNCE),
-
-        // qty and rate only recalculate amount — do not re-derive qty from dims
-        qty:        ib_debounce(async (frm, cdt, cdn) => { await ib_recalc_row(frm, cdt, cdn, false); }, IB_DEBOUNCE),
-        rate:       ib_debounce(async (frm, cdt, cdn) => { await ib_recalc_row(frm, cdt, cdn, false); }, IB_DEBOUNCE),
+        uom:        ib_debounce(async (frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, true),  IB_DEBOUNCE),
+        width_mm:   ib_debounce(async (frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, true),  IB_DEBOUNCE),
+        length_mtr: ib_debounce(async (frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, true),  IB_DEBOUNCE),
+        qty_pkg:    ib_debounce(async (frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, true),  IB_DEBOUNCE),
+        total_pkg:  ib_debounce(async (frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, true),  IB_DEBOUNCE),
+        qty:        ib_debounce(async (frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, false), IB_DEBOUNCE),
+        rate:       ib_debounce(async (frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, false), IB_DEBOUNCE),
 
         items_remove: (frm) => frm.refresh_field("items"),
     });
 });
 
-// frappe.router.on("change", function () {
-//     const route = frappe.get_route();
-//     if (!route || route[0] !== "List") return;
 
-//     if (route[1] === "Quotation") {
-//         setTimeout(function () {
-//             if (frappe.listview_settings["Quotation"]) {
-//                 frappe.listview_settings["Quotation"].button = {
-//                     show: function (doc) {
-//                         return ["Open", "Ordered"].includes(doc.status);
-//                     },
-//                     get_label: function () { return __("Print"); },
-//                     get_description: function (doc) { return __("Print Preview"); },
-//                     action: function (doc) {
-//                         window.open("/printview?doctype=Quotation&name=" + encodeURIComponent(doc.name) + "&format=QuotationPF&no_letterhead=1&letterhead=No%20Letterhead&settings=%7B%7D", "_blank");
-//                     },
-//                 };
-//                 if (cur_list) cur_list.render();
-//             }
-//         }, 500);
-//     }
-
-//     if (route[1] === "Sales Order") {
-//         setTimeout(function () {
-//             if (frappe.listview_settings["Sales Order"]) {
-//                 frappe.listview_settings["Sales Order"].button = {
-//                     show: function (doc) {
-//                         return !["Draft", "Cancelled"].includes(doc.status);
-//                     },
-//                     get_label: function () { return __("Print"); },
-//                     get_description: function (doc) { return __("Print Preview"); },
-//                     action: function (doc) {
-//                         window.open("/printview?doctype=Sales%20Order&name=" + encodeURIComponent(doc.name) + "&format=OSPF_V2&no_letterhead=1&letterhead=No%20Letterhead&settings=%7B%7D", "_blank");
-//                     },
-//                 };
-//                 if (cur_list) cur_list.render();
-//             }
-//         }, 500);
-//     }
-// });
-
-// ── Quotation list view settings (must be defined before list renders) ────
+// ════════════════════════════════════════════════════════════════════════════
+// 4. QUOTATION LIST VIEW
+// ════════════════════════════════════════════════════════════════════════════
 frappe.listview_settings["Quotation"] = frappe.listview_settings["Quotation"] || {};
-frappe.listview_settings["Quotation"].add_fields = ["transaction_date", "custom_sales_person"];
-frappe.listview_settings["Quotation"].onload = function (listview) {
-    listview.page.add_field({
-        fieldtype: "Link",
-        fieldname: "party_name",
-        options:   "Customer",
-        label:     "Customer",
-        change: function () {
-            const val = this.get_value();
-            if (val) {
-                listview.filter_area.add([[listview.doctype, "party_name", "=", val]]);
-            } else {
-                listview.filter_area.remove(listview.doctype, "party_name");
-            }
-        },
-    });
-};
 
-// ── Sales Order list view settings ────────────────────────────────────────
+Object.assign(frappe.listview_settings["Quotation"], {
+    add_fields: ["transaction_date", "custom_sales_person"],
+
+    onload(listview) {
+        listview.page.add_field({
+            fieldtype: "Link",
+            fieldname: "party_name",
+            options:   "Customer",
+            label:     "Customer",
+            change() {
+                const val = this.get_value();
+                if (val) {
+                    listview.filter_area.add([[listview.doctype, "party_name", "=", val]]);
+                } else {
+                    listview.filter_area.remove(listview.doctype, "party_name");
+                }
+            },
+        });
+    },
+});
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// 5. SALES ORDER LIST VIEW
+// ════════════════════════════════════════════════════════════════════════════
 frappe.listview_settings["Sales Order"] = frappe.listview_settings["Sales Order"] || {};
-frappe.listview_settings["Sales Order"].add_fields = ["custom_sales_person"];
+
+Object.assign(frappe.listview_settings["Sales Order"], {
+    add_fields: ["custom_sales_person"],
+});
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// 6. LIST VIEW FORMATTERS  (applied after route change so cur_list exists)
+// ════════════════════════════════════════════════════════════════════════════
+function ib_name_formatter(value, df, doc) {
+    var date = (doc.creation || "").split(" ")[0];
+    if (date) date = frappe.datetime.str_to_user(date);
+    return '<span title="' + value + '">' +
+        (date ? date + "<br>" : "") +
+        "<strong>" + value + "</strong></span>";
+}
+
+function ib_sales_person_formatter(value, df, doc) {
+    return doc.owner === frappe.session.user ? "You" : (value || "");
+}
 
 frappe.router.on("change", function () {
     const route = frappe.get_route();
@@ -229,49 +235,25 @@ frappe.router.on("change", function () {
             var ls = frappe.listview_settings["Quotation"];
             if (!ls) return;
 
-            // ── Print button (all users) ──────────────────────────
             ls.button = {
-                show: function (doc) {
-                    return ["Open", "Ordered", "Pending", "Confirmed", "Draft", "Cancelled"].includes(doc.status);
-                },
-                get_label: function () { return __("Print"); },
-                get_description: function (doc) { return __("Print Preview"); },
-                action: function (doc) {
-                    window.open("/printview?doctype=Quotation&name=" + encodeURIComponent(doc.name) + "&format=QPF_V2&no_letterhead=1&letterhead=No%20Letterhead&settings=%7B%7D", "_blank");
-                },
+                show: () => true,
+                get_label: () => __("Print"),
+                get_description: () => __("Print Preview"),
+                action: (doc) => window.open(
+                    "/printview?doctype=Quotation&name=" + encodeURIComponent(doc.name) +
+                    "&format=QPF_V2&no_letterhead=1&letterhead=No%20Letterhead&settings=%7B%7D",
+                    "_blank"
+                ),
             };
 
-            // ── Status indicators (all users) ─────────────────────
             ls.get_indicator = function (doc) {
-                if (doc.status === "Pending") {
-                    return [__("Pending"), "orange"];
-                } else if (doc.status === "Confirmed") {
-                    return [__("Confirmed"), "green"];
-                } else if (doc.status === "Cancelled") {
-                    return [__("Cancelled"), "red"];
-                } else if (doc.status === "Draft") {
-                    return [__("Draft"), "red"];
-                }
-                return [__(doc.status), "grey"];
+                const map = { Pending: "orange", Confirmed: "green", Cancelled: "red", Draft: "red" };
+                return [__(doc.status), map[doc.status] || "grey"];
             };
 
-            // ── Date + ID two-line format (all users) ─────────────
             ls.formatters = ls.formatters || {};
-            ls.formatters.name = function (value, df, doc) {
-                var date = doc.creation || "";
-                if (date) {
-                    date = frappe.datetime.str_to_user(date.split(" ")[0]);
-                }
-                return '<span title="' + value + '">' + (date ? date + "<br>" : "") + "<strong>" + value + "</strong></span>";
-            };
-
-            // ── Sales Person column (all users) ─────────────────── 
-            ls.formatters.custom_sales_person = function (value, df, doc) {
-                if (doc.owner === frappe.session.user) {
-                    return "You";
-                }
-                return value || "";
-            };
+            ls.formatters.name                = ib_name_formatter;
+            ls.formatters.custom_sales_person = ib_sales_person_formatter;
 
             if (cur_list) cur_list.render();
         }, 500);
@@ -282,39 +264,22 @@ frappe.router.on("change", function () {
             var ls = frappe.listview_settings["Sales Order"];
             if (!ls) return;
 
-            // ── Print button ──────────────────────────────────────
             ls.button = {
-                show: function (doc) {
-                    return ["Draft", "Cancelled", "To Deliver and Bill", "To Bill"].includes(doc.status);
-                },
-                get_label: function () { return __("Print"); },
-                get_description: function (doc) { return __("Print Preview"); },
-                action: function (doc) {
-                    window.open("/printview?doctype=Sales%20Order&name=" + encodeURIComponent(doc.name) + "&format=OSPF_V2&no_letterhead=1&letterhead=No%20Letterhead&settings=%7B%7D", "_blank");
-                },
+                show: (doc) => !["Draft", "Cancelled"].includes(doc.status),
+                get_label: () => __("Print"),
+                get_description: () => __("Print Preview"),
+                action: (doc) => window.open(
+                    "/printview?doctype=Sales%20Order&name=" + encodeURIComponent(doc.name) +
+                    "&format=OSPF_V2&no_letterhead=1&letterhead=No%20Letterhead&settings=%7B%7D",
+                    "_blank"
+                ),
             };
 
-            // ── Date + ID two-line format ─────────────────────────
             ls.formatters = ls.formatters || {};
-            ls.formatters.name = function (value, df, doc) {
-                var date = doc.creation || "";
-                if (date) {
-                    date = frappe.datetime.str_to_user(date.split(" ")[0]);
-                }
-                return '<span title="' + value + '">' + (date ? date + "<br>" : "") + "<strong>" + value + "</strong></span>";
-            };
-
-            // ── Sales Person "You" formatter ──────────────────────
-            ls.formatters.custom_sales_person = function (value, df, doc) {
-                if (doc.owner === frappe.session.user) {
-                    return "You";
-                }
-                return value || "";
-            };
+            ls.formatters.name                = ib_name_formatter;
+            ls.formatters.custom_sales_person = ib_sales_person_formatter;
 
             if (cur_list) cur_list.render();
         }, 500);
     }
 });
-
-

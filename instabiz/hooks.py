@@ -48,8 +48,18 @@ override_whitelisted_methods = {
     # Delivery Note → Sales Invoice
     "erpnext.stock.doctype.delivery_note.delivery_note.make_sales_invoice":
         "instabiz.overrides.delivery_note.custom_make_sales_invoice",
+
+    # GSTIN lookup — replace India Compliance's paid API with free gstincheck.co.in
+    "india_compliance.gst_india.utils.gstin_info.get_gstin_info":
+        "instabiz.overrides.gstin.get_gstin_info",
 }
 
 # ── Frontend assets ───────────────────────────────────────────────────────────
 app_include_css = ["/assets/instabiz/css/instabiz.css"]
-app_include_js  = ["/assets/instabiz/js/instabiz.js"]
+app_include_js  = [
+    "/assets/instabiz/js/gstin.js",           # GSTIN autofill (IC bypass)
+    "/assets/instabiz/js/recalc.js",          # dimension → qty → amount helpers
+    "/assets/instabiz/js/form.js",            # form handlers (depends on recalc.js)
+    "/assets/instabiz/js/quotation_list.js",  # Quotation list view
+    "/assets/instabiz/js/sales_order_list.js",# Sales Order list view
+]
