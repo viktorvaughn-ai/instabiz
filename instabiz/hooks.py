@@ -4,10 +4,17 @@ app_publisher = "Instabiz Solutions India Pvt Ltd"
 app_description = "Custom ERP extensions for Instabiz"
 app_version = "0.0.1"
 
-# ── Fixtures ─────────────────────────────────────────────────────────────────
-fixtures = ["Custom Field"]
-
+# ── Fixtures ──────────────────────────────────────────────────────────────────
+fixtures = [
+    "Custom Field",
+    {
+        "dt": "Property Setter",
+        "filters": [["doc_type", "in", ["Quotation"]]]
+    },
+]
 # ── Class overrides ───────────────────────────────────────────────────────────
+# recalculate_items runs inside each class's validate(), so no need to also
+# register it as a doc_event — that would execute it twice per save.
 override_doctype_class = {
     "Quotation":     "instabiz.overrides.quotation.CustomQuotation",
     "Sales Order":   "instabiz.overrides.sales_order.CustomSalesOrder",
@@ -16,23 +23,33 @@ override_doctype_class = {
 }
 
 # ── Server-side doc events ────────────────────────────────────────────────────
+# REMOVED: recalculate_* hooks — already handled inside the override classes
+# above. Keeping them here caused double execution on every validate.
 doc_events = {
-"Quotation": {"validate": "instabiz.overrides.quotation.recalculate_quotation"},
-"Sales Order": {"validate": "instabiz.overrides.sales_order.recalculate_sales_order"},
-"Delivery Note": {"validate": "instabiz.overrides.delivery_note.recalculate_delivery_note"},
-"Sales Invoice": {"validate": "instabiz.overrides.sales_invoice.recalculate_sales_invoice"},
+    "User": {
+        "after_insert": [
+            "instabiz.overrides.user.create_sales_person_for_user",
+            "instabiz.overrides.user.copy_admin_defaults",
+            "instabiz.overrides.user.copy_admin_ui_settings",
+        ],
+    },
 }
 
 # ── Whitelisted method overrides ──────────────────────────────────────────────
 override_whitelisted_methods = {
+    # Quotation → Sales Order
     "erpnext.selling.doctype.quotation.quotation.make_sales_order":
         "instabiz.overrides.quotation.custom_make_sales_order",
+
+    # Sales Order → Delivery Note  ← THIS WAS MISSING
+    "erpnext.selling.doctype.sales_order.sales_order.make_delivery_note":
+        "instabiz.overrides.sales_order.custom_make_delivery_note",
+
+    # Delivery Note → Sales Invoice
     "erpnext.stock.doctype.delivery_note.delivery_note.make_sales_invoice":
         "instabiz.overrides.delivery_note.custom_make_sales_invoice",
 }
 
 # ── Frontend assets ───────────────────────────────────────────────────────────
 app_include_css = ["/assets/instabiz/css/instabiz.css"]
-#web_include_css = ["/assets/instabiz/css/instabiz.css"]
-
-app_include_js = ["/assets/instabiz/js/instabiz.js"]
+app_include_js  = ["/assets/instabiz/js/instabiz.js"]

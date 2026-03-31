@@ -10,12 +10,15 @@ from instabiz.overrides.utils import (
     map_address_contact_fields,
 )
 
+from instabiz.overrides.naming import (
+    autoname_quotation
+)
+
 DEFAULT_TERMS = "Quotation Terms"
 
 
 def recalculate_quotation(doc, method=None):
     recalculate_items(doc)
-
 
 def _set_default_terms(doc):
     """Auto-populate tc_name and terms if not already set."""
@@ -28,21 +31,105 @@ def _set_default_terms(doc):
         if terms_text:
             doc.terms = terms_text
 
+def _set_sales_person(doc):
+    """Auto-populate custom_sales_person from the document creator's first name."""
+    if not doc.get("custom_sales_person"):
+        full_name = frappe.db.get_value("User", doc.owner, "first_name")
+        if full_name:
+            doc.custom_sales_person = full_name
+
+
+def _sync_sales_team(doc):
+    """
+    Mirror custom_sales_person into the standard sales_team child table so that
+    ERPNext analytics and Sales Person reports work correctly.
+
+    Lookup order:
+      1. Match tabSales Person.employee_name = custom_sales_person
+      2. Fallback: match tabSales Person.name = custom_sales_person
+    If no record is found the function returns silently (no error).
+    Duplicate rows are never added.
+    """
+    sp_value = (doc.get("custom_sales_person") or "").strip()
+    if not sp_value:
+        return
+
+    # Match by sales_person_name (the display name field on Sales Person)
+    sp_name = frappe.db.get_value("Sales Person", {"sales_person_name": sp_value}, "name")
+
+    if not sp_name:
+        return  # No matching Sales Person master – skip silently
+
+    # Guard against duplicate rows
+    for row in doc.get("sales_team") or []:
+        if row.sales_person == sp_name:
+            return
+
+    doc.append("sales_team", {
+        "sales_person": sp_name,
+        "allocated_percentage": 100,
+    })
 
 class CustomQuotation(Quotation):
-     
-    def set_sales_person(self):
-        pass # fdf
+    def autoname(self):
+        self.flags.name_set = True
+        autoname_quotation(self)
+
 
     def before_insert(self):
         _set_default_terms(self)
 #       _set_custom_sales_person(self)
+        _set_sales_person(self)
 
     def validate(self):
+        if not self.custom_location or self.custom_location == "Select":
+            frappe.throw("Please select a Location before saving.")
         _set_default_terms(self)
-#       _set_custom_sales_person(self)
+        _set_sales_person(self)
+        _sync_sales_team(self)
         recalculate_items(self)
         super().validate()
+
+    def set_status(self, update=False, status=None, update_modified=True):
+        super().set_status(update=update, status=status, update_modified=update_modified)
+
+        status_map = {
+            "Open": "Pending",
+            "Replied": "Pending",
+            "Ordered": "Confirmed",
+            "Partially Ordered": "Confirmed",
+            "Lost": "Cancelled",
+            "Expired": "Pending",
+        }
+
+        if self.status in status_map:
+            self.status = status_map[self.status]
+            if update:
+                self.db_set("status", self.status, update_modified=update_modified)
+
+
+@frappe.whitelist()
+def reopen_quotation(name):
+    """Reopen a cancelled Quotation, resetting it back to submitted (docstatus=1)."""
+    doc = frappe.get_doc("Quotation", name)
+    frappe.has_permission("Quotation", "cancel", doc=doc, throw=True)
+
+    if doc.docstatus != 2:
+        frappe.throw(frappe._("Only a cancelled Quotation can be reopened."))
+
+    frappe.db.set_value("Quotation", name, "docstatus", 0)
+    # Reset child table rows — they carry their own docstatus=2 after cancellation
+    # which makes existing rows read-only even when the parent is Draft
+    frappe.db.sql("UPDATE `tabQuotation Item` SET docstatus=0 WHERE parent=%s", name)
+    doc.reload()
+    doc.set_status(update=True)
+
+    doc.add_comment("Edit", frappe._("Reopened by {0}").format(frappe.session.user))
+    frappe.msgprint(
+        frappe._("Quotation {0} has been reopened.").format(name),
+        indicator="green",
+        alert=True,
+    )
 
 
 @frappe.whitelist()
@@ -100,6 +187,10 @@ def custom_make_sales_order(source_name, target_doc=None):
                 "field_map": {
                     "custom_branding": "custom_branding",
                     "custom_marking":  "custom_marking",
+                    "custom_thickness":  "custom_thickness",
+                    "custom_reference_po":  "custom_reference_po",
+                    "parent":          "prevdoc_docname",   # ← ADD THIS
+                    "name":            "quotation_item",
                 },
             },
             "Sales Taxes and Charges": {

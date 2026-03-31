@@ -16,6 +16,43 @@
     --ib-radius:        6px;
 }
 
+/* Hide extra filter option */
+.standard-filter-section .filter-box[data-fieldname="customer_name"] {
+    display: none !important;
+}
+
+/* Hide like/heart column from all list views */
+.list-liked-by-me,
+.list-row-like {
+    display: none !important;
+}
+
+
+
+/* Quotation List View Item Cosmetic */
+
+.frappe-list .list-row .list-row-col,
+.frappe-list .list-row .level-left {
+    font-size: 12px !important;
+}
+
+.frappe-list .list-header-subject .list-row-col {
+    font-size: 11px !important;
+}
+
+.list-row .level-left,
+.list-row-head .level-left {
+    flex: 7 !important;
+    min-width: 80% !important;
+}
+
+/* Allow ID column text to wrap instead of truncate */
+.list-row .list-row--col .ellipsis {
+    overflow: visible !important;
+    text-overflow: unset !important;
+    white-space: normal !important;
+}
+
 
 /* Awesome listbox */
 ul[role="listbox"][id^="awesomplete_list"] {
@@ -45,11 +82,11 @@ ul[role="listbox"][id^="awesomplete_list"] {
     border-color: var(--ib-primary-xdark) !important;
 }
 
-/* ─── Secondary / default button ── */
-.btn-default,
-.btn.btn-default,
-.btn-secondary,
-.btn.btn-secondary {
+/* ─── Secondary / default button (light mode) ── */
+[data-theme="light"] .btn-default,
+[data-theme="light"] .btn.btn-default,
+[data-theme="light"] .btn-secondary,
+[data-theme="light"] .btn.btn-secondary {
     background: #fff !important;
     border: 1.5px solid var(--ib-tint-border) !important;
     color: var(--ib-text) !important;
@@ -57,9 +94,10 @@ ul[role="listbox"][id^="awesomplete_list"] {
     font-weight: 500;
     transition: background 0.15s, border-color 0.15s;
 }
-.btn-default:hover,
-.btn.btn-default:hover,
-.btn-secondary:hover {
+[data-theme="light"] .btn-default:hover,
+[data-theme="light"] .btn.btn-default:hover,
+[data-theme="light"] .btn-secondary:hover,
+[data-theme="light"] .btn.btn-secondary:hover {
     background: var(--ib-tint-mid) !important;
     border-color: var(--ib-primary) !important;
     color: var(--ib-primary) !important;
@@ -90,4 +128,47 @@ button[data-label="Submit"] {
 /* ─── IB Summary bar ── */
 .ib-summary-bar {
     font-family: inherit;
+}
+
+/* ─── Dark theme overrides ── */
+[data-theme="dark"] {
+    --ib-tint-mid:    #2e2420;
+    --ib-tint-border: #4a3a32;
+    --ib-text:        #e8d5c8;
+}
+
+/* Secondary buttons — use Frappe's own dark-mode surface variables */
+[data-theme="dark"] .btn-default,
+[data-theme="dark"] .btn.btn-default,
+[data-theme="dark"] .btn-secondary,
+[data-theme="dark"] .btn.btn-secondary {
+    background: var(--fg-color) !important;
+    border: 1.5px solid var(--border-color) !important;
+    color: var(--text-color) !important;
+    border-radius: var(--ib-radius) !important;
+    font-weight: 500;
+}
+[data-theme="dark"] .btn-default:hover,
+[data-theme="dark"] .btn.btn-default:hover,
+[data-theme="dark"] .btn-secondary:hover,
+[data-theme="dark"] .btn.btn-secondary:hover {
+    background: var(--ib-tint-mid) !important;
+    border-color: var(--ib-primary) !important;
+    color: var(--ib-primary) !important;
+}
+
+/* Danger button dark */
+[data-theme="dark"] .btn-danger,
+[data-theme="dark"] .btn.btn-danger {
+    background: #e53e3e !important;
+    border-color: #e53e3e !important;
+    color: #fff !important;
+}
+
+/* Submit button dark */
+[data-theme="dark"] .btn[data-label="Submit"],
+[data-theme="dark"] button[data-label="Submit"] {
+    background: #2d8a4e !important;
+    border-color: #2d8a4e !important;
+    color: #fff !important;
 }

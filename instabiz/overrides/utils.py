@@ -15,6 +15,9 @@ DIMENSION_FIELDS = [
     "ib_marking",
     "custom_branding",
     "custom_marking",
+    "custom_thickness",
+    "custom_specifications",
+    "custom_description"
 ]
 
 # ── Parent-level fields carried across document chain ─────────────────────────

@@ -1,7 +1,7 @@
 """instabiz.overrides.delivery_note"""
 import frappe
-from frappe.model.mapper import get_mapped_doc
-from erpnext.stock.doctype.delivery_note.delivery_note import DeliveryNote
+from frappe.model.mapper import get_mapped_doc  # pyright: ignore[reportMissingImports]
+from erpnext.stock.doctype.delivery_note.delivery_note import DeliveryNote  # pyright: ignore[reportMissingImports]
 
 from instabiz.overrides.utils import (
     recalculate_items,
@@ -10,12 +10,20 @@ from instabiz.overrides.utils import (
     map_address_contact_fields,
 )
 
+from instabiz.overrides.naming import (
+    autoname_delivery_note
+)
+
 
 def recalculate_delivery_note(doc, method=None):
     recalculate_items(doc)
 
 
 class CustomDeliveryNote(DeliveryNote):
+    # def autoname(self):
+    #     self.flags.name_set = True
+    #     autoname_delivery_note(self)
+
     def validate(self):
         recalculate_items(self)
         super().validate()
