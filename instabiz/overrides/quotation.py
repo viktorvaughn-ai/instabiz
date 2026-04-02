@@ -20,8 +20,40 @@ DEFAULT_TERMS = "Quotation Terms"
 def recalculate_quotation(doc, method=None):
     recalculate_items(doc)
 
+
+def _set_default_taxes(doc):
+    """Auto-apply the default Sales Taxes and Charges template on new documents only."""
+    # Only apply on new documents — never overwrite user's manual tax changes
+    if not doc.is_new():
+        return
+    if doc.get("taxes"):
+        return  # already has tax rows — nothing to do
+
+    tax_template = frappe.db.get_value(
+        "Sales Taxes and Charges Template",
+        {"is_default": 1, "company": doc.company},
+        "name",
+    )
+    if not tax_template:
+        return
+
+    doc.taxes_and_charges = tax_template
+    template_doc = frappe.get_doc("Sales Taxes and Charges Template", tax_template)
+    for row in template_doc.taxes:
+        doc.append("taxes", {
+            "charge_type":  row.charge_type,
+            "account_head": row.account_head,
+            "description":  row.description,
+            "rate":         row.rate,
+            "included_in_print_rate": row.included_in_print_rate,
+        })
+
+
 def _set_default_terms(doc):
-    """Auto-populate tc_name and terms if not already set."""
+    """Auto-populate tc_name and terms on new documents only."""
+    # Only apply on new documents — never overwrite user's manual edits
+    if not doc.is_new():
+        return
     if not doc.get("tc_name"):
         doc.tc_name = DEFAULT_TERMS
     if not doc.get("terms"):
@@ -44,12 +76,15 @@ def _sync_sales_team(doc):
     Mirror custom_sales_person into the standard sales_team child table so that
     ERPNext analytics and Sales Person reports work correctly.
 
-    Lookup order:
-      1. Match tabSales Person.employee_name = custom_sales_person
-      2. Fallback: match tabSales Person.name = custom_sales_person
-    If no record is found the function returns silently (no error).
+    If the Quotation doctype does not expose a sales_team table field
+    (e.g. removed via customisation), the function returns silently.
     Duplicate rows are never added.
     """
+    # Safety: verify the field actually exists on this doctype before appending
+    # Use doc.doctype so this works for both Quotation and Sales Order
+    if not frappe.get_meta(doc.doctype).get_field("sales_team"):
+        return
+
     sp_value = (doc.get("custom_sales_person") or "").strip()
     if not sp_value:
         return
@@ -77,14 +112,13 @@ class CustomQuotation(Quotation):
 
 
     def before_insert(self):
+        _set_default_taxes(self)
         _set_default_terms(self)
-#       _set_custom_sales_person(self)
         _set_sales_person(self)
 
     def validate(self):
         if not self.custom_location or self.custom_location == "Select":
             frappe.throw("Please select a Location before saving.")
-        _set_default_terms(self)
         _set_sales_person(self)
         _sync_sales_team(self)
         recalculate_items(self)
@@ -118,9 +152,10 @@ def reopen_quotation(name):
         frappe.throw(frappe._("Only a cancelled Quotation can be reopened."))
 
     frappe.db.set_value("Quotation", name, "docstatus", 0)
-    # Reset child table rows — they carry their own docstatus=2 after cancellation
-    # which makes existing rows read-only even when the parent is Draft
+    # Reset all child table rows — they carry docstatus=2 after cancellation
+    # which makes them read-only even when the parent is back to Draft
     frappe.db.sql("UPDATE `tabQuotation Item` SET docstatus=0 WHERE parent=%s", name)
+    frappe.db.sql("UPDATE `tabSales Taxes and Charges` SET docstatus=0 WHERE parent=%s AND parenttype='Quotation'", name)
     doc.reload()
     doc.set_status(update=True)
 

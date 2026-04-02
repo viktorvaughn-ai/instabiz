@@ -57,13 +57,13 @@ def get_next_dn_si_number(warehouse_code):
 def autoname_quotation(doc, method=None):
     wh       = get_warehouse_code(doc)
     prefix   = f"IB-{wh}-Q-"
-    doc.name = frappe.model.naming.make_autoname(f"{prefix}.#######")
+    doc.name = frappe.model.naming.make_autoname(f"{prefix}.#####")
 
 
 def autoname_sales_order(doc, method=None):
     wh       = get_warehouse_code(doc)
     prefix   = f"IB-{wh}-SO-"
-    doc.name = frappe.model.naming.make_autoname(f"{prefix}.#######")
+    doc.name = frappe.model.naming.make_autoname(f"{prefix}.#####")
 
 
 def autoname_delivery_note(doc, method=None):
@@ -81,7 +81,7 @@ def autoname_delivery_note(doc, method=None):
     
     # Otherwise, get next shared number
     num = get_next_dn_si_number(wh)
-    doc.name = f"IB-{wh}-DN-{num:07d}"
+    doc.name = f"IB-{wh}-DN-{num:05d}"
 
 
 def autoname_sales_invoice(doc, method=None):
@@ -101,4 +101,4 @@ def autoname_sales_invoice(doc, method=None):
     
     # Otherwise, get next shared number
     num = get_next_dn_si_number(wh)
-    doc.name = f"IB-{wh}-INV-{num:07d}"
+    doc.name = f"IB-{wh}-INV-{num:05d}"

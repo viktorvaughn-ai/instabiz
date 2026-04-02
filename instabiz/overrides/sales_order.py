@@ -86,9 +86,10 @@ def reopen_sales_order(name):
     # Reset to Draft so the document is editable; on_submit will handle
     # reserved qty and Quotation status update when re-submitted
     frappe.db.set_value("Sales Order", name, "docstatus", 0)
-    # Reset child table rows — they carry their own docstatus=2 after cancellation
-    # which makes existing rows read-only even when the parent is Draft
+    # Reset all child table rows — they carry docstatus=2 after cancellation
+    # which makes them read-only even when the parent is back to Draft
     frappe.db.sql("UPDATE `tabSales Order Item` SET docstatus=0 WHERE parent=%s", name)
+    frappe.db.sql("UPDATE `tabSales Taxes and Charges` SET docstatus=0 WHERE parent=%s AND parenttype='Sales Order'", name)
     doc.reload()
 
     # Revert linked Quotation status to Pending (SO is now Draft, not submitted)

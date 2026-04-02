@@ -1,12 +1,21 @@
 /**
  * sales_order_list.js
- * Sales Order list view — name formatter, sales person column, print button.
+ * Sales Order list view — name formatter, sales person column, print button, auto-collapse sidebar.
  */
 
 frappe.listview_settings["Sales Order"] = frappe.listview_settings["Sales Order"] || {};
 
 Object.assign(frappe.listview_settings["Sales Order"], {
     add_fields: ["custom_sales_person"],
+
+    onload(listview) {
+        // Force-hide sidebar immediately (no transition)
+        $('.layout-side-section').css({
+            'display': 'none',
+            'transition': 'none'
+        });
+        $('.layout-main-section').css('margin-left', '0');
+    },
 });
 
 frappe.router.on("change", function () {
@@ -18,7 +27,7 @@ frappe.router.on("change", function () {
         if (!ls) return;
 
         ls.button = {
-            show: (doc) => !["Draft", "Cancelled"].includes(doc.status),
+            show: () => true,
             get_label: () => __("Print"),
             get_description: () => __("Print Preview"),
             action: (doc) => window.open(
@@ -36,6 +45,10 @@ frappe.router.on("change", function () {
         ls.formatters.custom_sales_person = function (value, df, doc) {
             return doc.owner === frappe.session.user ? "You" : (value || "");
         };
+
+        // Ensure sidebar stays hidden after render
+        $('.layout-side-section').css('display', 'none');
+        $('.layout-main-section').css('margin-left', '0');
 
         if (cur_list) cur_list.render();
     }, 500);

@@ -26,7 +26,6 @@ from instabiz.overrides.gstin import _get_address
 _API_URL = "https://api.gstincheck.co.in/check/{api_key}/{gstin}"
 
 # Keys baked into the script — caller can override via the api_keys argument.
-_BUNDLED_KEYS = []
 
 
 # ── Key rotation state ────────────────────────────────────────────────────────
@@ -74,6 +73,12 @@ def backfill_customers_gstin(dry_run=True, delay=1.5, api_keys=None):
 
     for i, (customer_name, gstin) in enumerate(customers, 1):
         prefix = f"[{i}/{total}] {customer_name} ({gstin})"
+
+        # Live check — skip if address was created since the query ran (saves API credit)
+        if _has_billing_address(customer_name):
+            print(f"  SKIP  {prefix} — address already exists")
+            skipped += 1
+            continue
 
         if pool.current is None:
             print(f"\n  [STOP] All API keys exhausted at record {i}/{total}. Re-run after adding more keys.\n")
@@ -192,6 +197,16 @@ def _api_fetch(api_key, gstin):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _has_billing_address(customer_name):
+    """Return True if the customer already has a linked Billing Address."""
+    return frappe.db.exists({
+        "doctype": "Dynamic Link",
+        "link_doctype": "Customer",
+        "link_name": customer_name,
+        "parenttype": "Address",
+    }) is not None
+
 
 def _find_customers_without_address():
     """Return [(customer_name, gstin)] for customers with GSTIN but no Billing Address."""

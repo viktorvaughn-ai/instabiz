@@ -64,7 +64,7 @@
 
 .list-row .level-left,
 .list-row-head .level-left {
-    flex: 7 !important;
+    flex: 4 !important;
     min-width: 80% !important;
 }
 

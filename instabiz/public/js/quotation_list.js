@@ -1,7 +1,7 @@
 /**
  * quotation_list.js
  * Quotation list view — Customer filter, status indicators,
- * name formatter, sales person column, print button.
+ * name formatter, sales person column, print button, auto-collapse sidebar.
  */
 
 frappe.listview_settings["Quotation"] = frappe.listview_settings["Quotation"] || {};
@@ -10,6 +10,7 @@ Object.assign(frappe.listview_settings["Quotation"], {
     add_fields: ["transaction_date", "custom_sales_person"],
 
     onload(listview) {
+        // Customer filter
         listview.page.add_field({
             fieldtype: "Link",
             fieldname: "party_name",
@@ -24,6 +25,13 @@ Object.assign(frappe.listview_settings["Quotation"], {
                 }
             },
         });
+
+        // Force-hide sidebar immediately (no transition)
+        $('.layout-side-section').css({
+            'display': 'none',
+            'transition': 'none'
+        });
+        $('.layout-main-section').css('margin-left', '0');
     },
 });
 
@@ -59,6 +67,10 @@ frappe.router.on("change", function () {
         ls.formatters.custom_sales_person = function (value, df, doc) {
             return doc.owner === frappe.session.user ? "You" : (value || "");
         };
+
+        // Ensure sidebar stays hidden after render
+        $('.layout-side-section').css('display', 'none');
+        $('.layout-main-section').css('margin-left', '0');
 
         if (cur_list) cur_list.render();
     }, 500);
