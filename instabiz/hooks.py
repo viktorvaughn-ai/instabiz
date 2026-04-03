@@ -33,6 +33,24 @@ doc_events = {
             "instabiz.overrides.user.copy_admin_ui_settings",
         ],
     },
+    "Lead": {
+        "before_insert": "instabiz.overrides.lead.on_before_insert",
+        "before_save":   "instabiz.overrides.lead.on_before_save",
+        "after_insert":  "instabiz.overrides.lead.on_after_insert",
+        "after_save":    "instabiz.overrides.lead.on_after_save",
+    },
+}
+
+# ── Permission query conditions ───────────────────────────────────────────────
+permission_query_conditions = {
+    "Lead": "instabiz.overrides.lead.get_permission_query_conditions",
+}
+
+# ── Scheduled jobs ────────────────────────────────────────────────────────────
+scheduler_events = {
+    "daily": [
+        "instabiz.overrides.lead.reassign_stale_leads",
+    ],
 }
 
 # ── Whitelisted method overrides ──────────────────────────────────────────────

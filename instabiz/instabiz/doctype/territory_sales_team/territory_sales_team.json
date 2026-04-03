@@ -1,0 +1,86 @@
+{
+ "actions": [],
+ "autoname": "field:team_name",
+ "creation": "2026-04-03 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "team_name",
+  "territory_cluster",
+  "cb1",
+  "rr_index",
+  "members_section",
+  "members"
+ ],
+ "fields": [
+  {
+   "fieldname": "team_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Team Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "territory_cluster",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Territory Cluster",
+   "options": "Territory",
+   "reqd": 1,
+   "unique": 1,
+   "description": "Parent territory — all child territories are handled by this team"
+  },
+  {
+   "fieldname": "cb1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "rr_index",
+   "fieldtype": "Int",
+   "label": "Round-Robin Index",
+   "default": "0",
+   "description": "Index of the next member to be assigned (auto-managed)"
+  },
+  {
+   "fieldname": "members_section",
+   "fieldtype": "Section Break",
+   "label": "Team Members"
+  },
+  {
+   "fieldname": "members",
+   "fieldtype": "Table",
+   "label": "Members",
+   "options": "Territory Sales Team Member",
+   "reqd": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-04-03 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "Territory Sales Team",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Sales User"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

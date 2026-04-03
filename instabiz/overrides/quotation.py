@@ -213,6 +213,7 @@ def custom_make_sales_order(source_name, target_doc=None):
                     "conversion_rate":       "conversion_rate",
                     "transaction_date":      "transaction_date",
                     "custom_location":       "custom_location",
+                    "custom_reference_po":   "custom_reference_po",
                 },
             },
             "Quotation Item": {
@@ -223,7 +224,6 @@ def custom_make_sales_order(source_name, target_doc=None):
                     "custom_branding": "custom_branding",
                     "custom_marking":  "custom_marking",
                     "custom_thickness":  "custom_thickness",
-                    "custom_reference_po":  "custom_reference_po",
                     "parent":          "prevdoc_docname",   # ← ADD THIS
                     "name":            "quotation_item",
                 },
