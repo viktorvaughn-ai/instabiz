@@ -9,7 +9,7 @@ fixtures = [
     "Custom Field",
     {
         "dt": "Property Setter",
-        "filters": [["doc_type", "in", ["Quotation"]]]
+        "filters": [["doc_type", "in", ["Quotation", "Lead"]]]
     },
 ]
 # ── Class overrides ───────────────────────────────────────────────────────────
@@ -34,23 +34,9 @@ doc_events = {
         ],
     },
     "Lead": {
-        "before_insert": "instabiz.overrides.lead.on_before_insert",
-        "before_save":   "instabiz.overrides.lead.on_before_save",
-        "after_insert":  "instabiz.overrides.lead.on_after_insert",
-        "after_save":    "instabiz.overrides.lead.on_after_save",
+        "after_insert": "instabiz.overrides.lead.assign_lead_owner",
+        "on_update":    "instabiz.overrides.lead.assign_lead_owner",
     },
-}
-
-# ── Permission query conditions ───────────────────────────────────────────────
-permission_query_conditions = {
-    "Lead": "instabiz.overrides.lead.get_permission_query_conditions",
-}
-
-# ── Scheduled jobs ────────────────────────────────────────────────────────────
-scheduler_events = {
-    "daily": [
-        "instabiz.overrides.lead.reassign_stale_leads",
-    ],
 }
 
 # ── Whitelisted method overrides ──────────────────────────────────────────────
@@ -75,9 +61,22 @@ override_whitelisted_methods = {
 # ── Frontend assets ───────────────────────────────────────────────────────────
 app_include_css = ["/assets/instabiz/css/instabiz.css"]
 app_include_js  = [
-    "/assets/instabiz/js/gstin.js",           # GSTIN autofill (IC bypass)
-    "/assets/instabiz/js/recalc.js",          # dimension → qty → amount helpers
-    "/assets/instabiz/js/form.js",            # form handlers (depends on recalc.js)
-    "/assets/instabiz/js/quotation_list.js",  # Quotation list view
-    "/assets/instabiz/js/sales_order_list.js",# Sales Order list view
+    "https://cdn.jsdelivr.net/npm/iconify-icon@2.1.0/dist/iconify-icon.min.js",  # Iconify icons (CDN)
+    "/assets/instabiz/js/pincode.js",               # shared pincode autofill utility
+    "/assets/instabiz/js/gstin.js",                 # GSTIN autofill (IC bypass)
+    "/assets/instabiz/js/recalc.js",                # dimension → qty → amount helpers
+    "/assets/instabiz/js/form.js",                  # form handlers (depends on recalc.js)
+    "/assets/instabiz/js/quotation_list.js",        # Quotation list view
+    "/assets/instabiz/js/sales_order_list.js",      # Sales Order list view
 ]
+
+# ── DocType-specific list JS (appended AFTER the app's own list JS) ───────────
+doctype_list_js = {
+    "Employee Checkin": "public/js/employee_checkin_list.js",
+    "Lead":             "public/js/lead_list.js",
+}
+
+doctype_js = {
+    "Lead":    "public/js/lead.js",
+    "Address": "public/js/address.js",
+}

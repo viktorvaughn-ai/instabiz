@@ -1,0 +1,411 @@
+{% extends "templates/web.html" %}
+
+{% block title %}Attendance{% endblock %}
+
+{% block head_include %}
+<link rel="manifest" href="/checkin/manifest.json">
+<meta name="theme-color" content="#d97757">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Attendance">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #f0ece8;
+  }
+
+  /* Hide Frappe navbar/footer */
+  header.navbar, .web-footer, footer { display: none !important; }
+  .container { padding: 0 !important; max-width: 100% !important; }
+
+  .ck-screen {
+    min-height: 100svh;
+    display: flex;
+    flex-direction: column;
+    padding: env(safe-area-inset-top, 20px) 24px env(safe-area-inset-bottom, 24px);
+  }
+
+  /* ── Top bar ── */
+  .ck-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 16px;
+    margin-bottom: 12px;
+  }
+  .ck-brand {
+    font-size: 14px;
+    font-weight: 700;
+    color: #d97757;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .ck-date {
+    font-size: 13px;
+    color: #8d99a6;
+    font-weight: 500;
+  }
+
+  /* ── Hero section ── */
+  .ck-hero {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 16px 0 24px;
+  }
+
+  .ck-greeting {
+    font-size: 17px;
+    color: #8d99a6;
+    margin-bottom: 4px;
+    font-weight: 400;
+  }
+  .ck-name {
+    font-size: 32px;
+    font-weight: 800;
+    color: #1f272e;
+    line-height: 1.15;
+    margin-bottom: 32px;
+  }
+
+  .ck-status-block {
+    background: #fff;
+    border-radius: 20px;
+    padding: 28px 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+
+  .ck-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 18px;
+    border-radius: 99px;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 16px;
+  }
+  .ck-pill::before {
+    content: "";
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.8;
+  }
+  .ck-pill.in   { background: #d4edda; color: #1a7a3a; }
+  .ck-pill.none { background: #f0f0f0; color: #6c757d; }
+  .ck-pill.done { background: #cce5ff; color: #004085; }
+
+  .ck-duration {
+    font-size: 52px;
+    font-weight: 800;
+    color: #1f272e;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -1px;
+    line-height: 1;
+    margin-bottom: 8px;
+    min-height: 52px;
+  }
+  .ck-since {
+    font-size: 14px;
+    color: #8d99a6;
+    min-height: 20px;
+  }
+
+  /* ── Button ── */
+  .ck-btn {
+    width: 100%;
+    padding: 22px;
+    border: none;
+    border-radius: 18px;
+    font-size: 20px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    transition: transform 0.12s, box-shadow 0.12s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .ck-btn:active  { transform: scale(0.97); box-shadow: none; }
+  .ck-btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+  .ck-btn.checkin  {
+    background: #d97757;
+    color: #fff;
+    box-shadow: 0 6px 20px rgba(217,119,87,0.35);
+  }
+  .ck-btn.checkout {
+    background: #1f272e;
+    color: #fff;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+  }
+  .ck-btn.done-btn {
+    background: #e9ecef;
+    color: #6c757d;
+  }
+
+  .ck-last {
+    text-align: center;
+    font-size: 13px;
+    color: #adb5bd;
+    min-height: 18px;
+  }
+
+  /* ── Spinner ── */
+  .ck-spinner {
+    width: 22px; height: 22px;
+    border: 3px solid rgba(255,255,255,0.35);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: none;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Error ── */
+  .ck-error-card {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+  }
+  .ck-error {
+    background: #fff5f5;
+    border: 1px solid #fed7d7;
+    color: #c53030;
+    border-radius: 16px;
+    padding: 24px;
+    font-size: 15px;
+    line-height: 1.6;
+    width: 100%;
+  }
+</style>
+{% endblock %}
+
+{% block page_content %}
+{% if error %}
+<div class="ck-screen">
+  <div class="ck-topbar">
+    <span class="ck-brand">Instabiz</span>
+  </div>
+  <div class="ck-error-card">
+    <div class="ck-error">{{ error }}</div>
+  </div>
+</div>
+
+{% else %}
+<div class="ck-screen">
+  <div class="ck-topbar">
+    <span class="ck-brand">Instabiz</span>
+    <span class="ck-date" id="ck-date"></span>
+  </div>
+
+  <div class="ck-hero">
+    <div class="ck-greeting" id="ck-greeting">Good day,</div>
+    <div class="ck-name">{{ employee_name }}</div>
+
+    <div class="ck-status-block">
+      <div><span class="ck-pill none" id="ck-pill">Loading…</span></div>
+      <div class="ck-duration" id="ck-duration"></div>
+      <div class="ck-since" id="ck-since"></div>
+    </div>
+
+    <button class="ck-btn checkin" id="ck-btn" disabled>
+      <span class="ck-spinner" id="ck-spinner"></span>
+      <span id="ck-btn-label">—</span>
+    </button>
+    <div class="ck-last" id="ck-last"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const API_STATUS  = "/api/method/instabiz.overrides.checkin.get_my_status";
+  const API_CHECKIN = "/api/method/instabiz.overrides.checkin.self_checkin";
+  const TZ          = "Asia/Kolkata";
+
+  let _state = null;
+  let _timer = null;
+
+  // ── Date + greeting ─────────────────────────────────────────────────────────
+  const now  = new Date();
+  const hour = now.getHours();
+  document.getElementById("ck-greeting").textContent =
+    hour < 12 ? "Good morning," : hour < 17 ? "Good afternoon," : "Good evening,";
+  document.getElementById("ck-date").textContent =
+    now.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: TZ });
+
+  // ── CSRF ────────────────────────────────────────────────────────────────────
+  function csrf() {
+    const m = document.cookie.match("(^|;)\\s*X-Frappe-CSRF-Token\\s*=\\s*([^;]+)");
+    return m ? m.pop() : (frappe && frappe.csrf_token ? frappe.csrf_token : "");
+  }
+
+  function api_get(url) {
+    return fetch(url, { headers: { "X-Frappe-CSRF-Token": csrf() } }).then(r => r.json());
+  }
+
+  function api_post(url, data) {
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Frappe-CSRF-Token": csrf() },
+      body: new URLSearchParams(data),
+    }).then(r => r.json());
+  }
+
+  // ── Load status ─────────────────────────────────────────────────────────────
+  function load() {
+    api_get(API_STATUS)
+      .then(r => {
+        if (r.message) {
+          render(r.message);
+        } else {
+          // Parse server error message if available
+          let msg = "Could not load status.";
+          if (r._server_messages) {
+            try { msg = JSON.parse(r._server_messages).map(m => JSON.parse(m).message).join(" "); } catch(e) {}
+          } else if (r.exc) {
+            msg = r.exc.split("\n").pop() || msg;
+          }
+          show_error(msg);
+        }
+      })
+      .catch(e => show_error("Network error: " + e.message));
+  }
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+  function render(s) {
+    _state = s;
+    clearInterval(_timer);
+
+    const pill  = document.getElementById("ck-pill");
+    const since = document.getElementById("ck-since");
+    const dur   = document.getElementById("ck-duration");
+    const btn   = document.getElementById("ck-btn");
+    const label = document.getElementById("ck-btn-label");
+    const last  = document.getElementById("ck-last");
+
+    pill.className = "ck-pill";
+    dur.textContent = "";
+
+    if (s.log_type === "IN") {
+      pill.classList.add("in");
+      pill.textContent = "Checked In";
+      since.textContent = "Since " + fmt_time(s.last_checkin_time);
+      start_timer(s.last_checkin_time);
+    } else if (s.log_type === "OUT" || s.log_type === "DONE") {
+      pill.classList.add("done");
+      pill.textContent = "Completed";
+      since.textContent = "Checked out at " + fmt_time(s.last_checkin_time);
+    } else {
+      pill.classList.add("none");
+      pill.textContent = "Not Checked In";
+      since.textContent = "Tap the button to check in";
+    }
+
+    btn.disabled  = false;
+    btn.className = "ck-btn";
+    if (s.log_type === "IN") {
+      btn.classList.add("checkout");
+      label.textContent = "← Check Out";
+    } else if (s.log_type === "OUT" || s.log_type === "DONE") {
+      btn.classList.add("done-btn");
+      btn.disabled = true;
+      label.textContent = "✓ Done for today";
+    } else {
+      btn.classList.add("checkin");
+      label.textContent = "→ Check In";
+    }
+
+    last.textContent = s.last_checkin_time ? "Last: " + fmt_time(s.last_checkin_time) : "";
+  }
+
+  // ── Live timer ──────────────────────────────────────────────────────────────
+  function start_timer(since_str) {
+    const from = new Date(since_str).getTime();
+    function tick() {
+      const secs = Math.floor((Date.now() - from) / 1000);
+      const h = Math.floor(secs / 3600);
+      const m = Math.floor((secs % 3600) / 60);
+      const s = secs % 60;
+      document.getElementById("ck-duration").textContent =
+        (h ? h + "h " : "") + m + "m " + String(s).padStart(2, "0") + "s";
+    }
+    tick();
+    _timer = setInterval(tick, 1000);
+  }
+
+  // ── Checkin ─────────────────────────────────────────────────────────────────
+  document.getElementById("ck-btn").addEventListener("click", function () {
+    if (!_state) return;
+    const log_type = _state.log_type === "IN" ? "OUT" : "IN";
+    set_loading(true);
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        pos => do_checkin(log_type, pos.coords.latitude, pos.coords.longitude),
+        ()   => do_checkin(log_type),
+        { timeout: 5000 }
+      );
+    } else {
+      do_checkin(log_type);
+    }
+  });
+
+  function do_checkin(log_type, lat, lng) {
+    const data = { log_type };
+    if (lat) { data.latitude = lat; data.longitude = lng; }
+    api_post(API_CHECKIN, data)
+      .then(r => { set_loading(false); if (!r.exc) load(); else show_error("Check-in failed."); })
+      .catch(() => { set_loading(false); show_error("Network error."); });
+  }
+
+  function set_loading(on) {
+    const btn     = document.getElementById("ck-btn");
+    const spinner = document.getElementById("ck-spinner");
+    const label   = document.getElementById("ck-btn-label");
+    btn.disabled          = on;
+    spinner.style.display = on ? "block" : "none";
+    if (on) label.textContent = "";
+  }
+
+  function show_error(msg) {
+    document.getElementById("ck-since").textContent = msg;
+    document.getElementById("ck-pill").className = "ck-pill none";
+    document.getElementById("ck-pill").textContent = "Error";
+  }
+
+  // ── Time format: IST, 12-hr AM/PM ───────────────────────────────────────────
+  function fmt_time(str) {
+    if (!str) return "";
+    return new Date(str).toLocaleTimeString("en-IN", {
+      hour: "numeric", minute: "2-digit",
+      hour12: true, timeZone: TZ,
+    });
+  }
+
+  // ── Init ────────────────────────────────────────────────────────────────────
+  load();
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/checkin/sw.js");
+  }
+})();
+</script>
+{% endif %}
+
+{% endblock %}
+
+{% block navbar %}{% endblock %}
+{% block footer %}{% endblock %}

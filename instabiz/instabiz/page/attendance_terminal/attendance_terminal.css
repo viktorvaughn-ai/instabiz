@@ -1,78 +1,11 @@
 /* ── Attendance Terminal ────────────────────────────────────────────────────── */
 
-.at-wrap { font-size: 13px; }
-
-/* Table card */
-.at-table {
-	border: 1px solid var(--border-color, #d1d8dd);
-	border-radius: var(--ib-radius, 6px);
-	overflow: hidden;
-	margin: 12px 15px 0;
-	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
-}
-
-/* Shared row structure */
-.at-row,
-.at-header-row {
-	display: flex;
-	align-items: center;
-	padding: 0 15px;
-}
-
-.at-header-row {
-	min-height: 40px;
-	background: var(--subtle-fg, #f8f9fa);
-	border-bottom: 1px solid var(--border-color, #d1d8dd);
-	font-size: 12px;
-	font-weight: 600;
-	color: var(--text-muted, #8d99a6);
-}
-
-.at-row {
-	min-height: 46px;
-	border-bottom: 1px solid var(--border-color, #d1d8dd);
-	transition: background 0.1s;
-}
-.at-row:hover      { background: var(--highlight-color, #f8f9fa); }
-.at-row:last-child { border-bottom: 0; }
-
-/* ── Columns ─────────────────────────────────────────────────────────────── */
-.at-c-chk  { width: 36px; flex-shrink: 0; }
-.at-c-chk input { margin: 0; cursor: pointer; }
-
-.at-c-name { flex: 2; min-width: 0; padding-right: 16px; }
-.at-c-dept { flex: 1; flex-shrink: 0; padding-right: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.at-c-role { flex: 1; flex-shrink: 0; padding-right: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.at-c-stat { width: 80px; flex-shrink: 0; }
-.at-c-time { width: 80px; flex-shrink: 0; padding-right: 8px; font-size: 11px; text-align: center; }
-.at-c-act  { width: 116px; flex-shrink: 0; display: flex; gap: 6px; justify-content: flex-end; }
-
-/* Name cell */
-.emp-name { font-weight: 600; color: var(--text-color, #1f272e); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.emp-id   { font-size: 11px; color: var(--text-muted, #8d99a6); margin-top: 1px; }
-
-/* Muted data columns */
-.at-row .at-c-dept,
-.at-row .at-c-role,
-.at-row .at-c-time { color: var(--text-muted, #8d99a6); }
-
-/* Header extras */
-.at-hdr-count    { font-size: 12px; font-weight: 400; color: var(--text-muted, #8d99a6); white-space: nowrap; }
-.at-hdr-sel-text { font-size: 12px; font-weight: 400; color: var(--text-muted, #8d99a6); }
-
-/* ── Buttons ─────────────────────────────────────────────────────────────── */
+/* Action buttons */
 .at-btn {
-	width: 30px;
-	height: 26px;
-	padding: 0;
-	font-size: 14px;
-	font-weight: 700;
-	border-radius: var(--ib-radius, 6px);
-	cursor: pointer;
-	flex-shrink: 0;
-	display: flex;
-	align-items: center;
-	justify-content: center;
+	width: 30px; height: 26px; padding: 0;
+	border-radius: var(--border-radius, 6px);
+	cursor: pointer; flex-shrink: 0;
+	display: flex; align-items: center; justify-content: center;
 	transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .at-btn:disabled { opacity: 0.22; cursor: default; }
@@ -81,7 +14,6 @@
 	background: var(--ib-primary, #d97757);
 	border: 1.5px solid var(--ib-primary, #d97757);
 	color: #fff;
-	box-shadow: 0 1px 3px rgba(217, 119, 87, 0.2);
 }
 .at-btn-in:hover:not(:disabled) {
 	background: var(--ib-primary-dark, #c0622f);
@@ -90,8 +22,8 @@
 
 .at-btn-out {
 	background: #fff;
-	border: 1.5px solid var(--ib-tint-border, #f1e0d6);
-	color: var(--ib-text, #2c1a0e);
+	border: 1.5px solid var(--border-color, #d1d8dd);
+	color: var(--text-color, #1f272e);
 }
 .at-btn-out:hover:not(:disabled) {
 	background: var(--ib-tint-mid, #f7ede7);
@@ -107,57 +39,4 @@
 .at-btn-absent:hover:not(:disabled) {
 	background: #fff5f5;
 	border-color: #c53030;
-}
-
-/* ── Footer pagination ───────────────────────────────────────────────────── */
-.at-footer {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	padding: 9px 15px;
-	border-top: 1px solid var(--border-color, #d1d8dd);
-}
-
-.at-len {
-	cursor: pointer;
-	padding: 3px 10px;
-	font-size: 12px;
-	font-weight: 500;
-	border-radius: var(--ib-radius, 6px);
-	border: 1.5px solid var(--border-color, #d1d8dd);
-	color: var(--text-muted, #8d99a6);
-	background: #fff;
-	transition: border-color 0.15s, color 0.15s, background 0.15s;
-	user-select: none;
-}
-.at-len:hover  { border-color: var(--ib-primary, #d97757); color: var(--ib-primary, #d97757); background: var(--ib-tint-mid, #f7ede7); }
-.at-len.active { border-color: var(--ib-primary, #d97757); background: var(--ib-primary, #d97757); color: #fff; font-weight: 600; }
-
-/* ── Empty state ─────────────────────────────────────────────────────────── */
-.at-empty { padding: 48px; text-align: center; color: var(--text-muted, #8d99a6); font-size: 13px; }
-
-/* ── Mobile ──────────────────────────────────────────────────────────────── */
-@media (max-width: 768px) {
-	.at-table { margin: 8px 8px 0; }
-
-	.at-c-dept,
-	.at-c-role,
-	.at-c-time { display: none; }
-
-	.at-header-row { padding: 0 10px; }
-	.at-c-chk { width: 28px; }
-
-	.at-row {
-		padding: 10px;
-		flex-wrap: wrap;
-		min-height: auto;
-		gap: 6px;
-	}
-	.at-row .at-c-chk  { width: 28px; align-self: center; }
-	.at-row .at-c-name { flex: 1; min-width: 0; padding-right: 0; }
-	.at-row .at-c-stat { width: auto; align-self: center; }
-	.at-row .at-c-act  { width: 100%; padding-left: 28px; justify-content: flex-start; gap: 8px; }
-
-	.at-btn { width: 38px; height: 32px; font-size: 16px; }
-	.at-footer { padding: 8px 10px; }
 }

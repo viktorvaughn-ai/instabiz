@@ -56,10 +56,10 @@ def recalculate_items(doc):
 
         if uom == "SQMT":
             if width_mm and length_mtr and qty_pkg and total_pkg:
-                item.qty = round((width_mm / 1000) * length_mtr * qty_pkg * total_pkg, 3)
+                item.qty = (width_mm / 1000) * length_mtr * qty_pkg * total_pkg
         else:
             if qty_pkg and total_pkg:
-                item.qty = round(qty_pkg * total_pkg, 3)
+                item.qty = qty_pkg * total_pkg
 
         item.amount = round((item.get("qty") or 0) * rate, 2)
 

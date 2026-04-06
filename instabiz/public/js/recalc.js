@@ -17,10 +17,10 @@ function ib_calc_qty(row) {
     const p = flt(row.qty_pkg),  t = flt(row.total_pkg);
     if (ib_is_sqmt(row.uom)) {
         if (!w || !l || !p || !t) return null;
-        return flt((w / 1000) * l * p * t, 3);
+        return flt((w / 1000) * l * p * t);
     }
     if (!p || !t) return null;
-    return flt(p * t, 3);
+    return flt(p * t);
 }
 
 function ib_debounce(fn, ms) {
@@ -40,7 +40,7 @@ async function ib_recalc_row(frm, cdt, cdn, from_dim) {
     try {
         if (from_dim) {
             const new_qty = ib_calc_qty(row);
-            if (new_qty !== null && flt(new_qty, 3) !== flt(row.qty, 3))
+            if (new_qty !== null && flt(new_qty) !== flt(row.qty))
                 await frappe.model.set_value(cdt, cdn, "qty", new_qty);
         }
         const r      = locals[cdt][cdn];
