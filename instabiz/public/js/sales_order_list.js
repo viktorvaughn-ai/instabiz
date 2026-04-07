@@ -9,12 +9,7 @@ Object.assign(frappe.listview_settings["Sales Order"], {
     add_fields: ["custom_sales_person"],
 
     onload(listview) {
-        // Force-hide sidebar immediately (no transition)
-        $('.layout-side-section').css({
-            'display': 'none',
-            'transition': 'none'
-        });
-        $('.layout-main-section').css('margin-left', '0');
+        ib_hide_sidebar();
     },
 });
 
@@ -46,10 +41,6 @@ frappe.router.on("change", function () {
             return doc.owner === frappe.session.user ? "You" : (value || "");
         };
 
-        // Ensure sidebar stays hidden after render
-        $('.layout-side-section').css('display', 'none');
-        $('.layout-main-section').css('margin-left', '0');
-
-        if (cur_list) cur_list.render();
+        if (cur_list) cur_list.refresh();
     }, 500);
 });

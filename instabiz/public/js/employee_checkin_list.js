@@ -196,12 +196,7 @@
             };
             listview.set_primary_action();
 
-		// Force-hide sidebar immediately (no transition)
-        $('.layout-side-section').css({
-            'display': 'none',
-            'transition': 'none'
-        });
-        $('.layout-main-section').css('margin-left', '0');
+		ib_hide_sidebar();
         },
 
         refresh: function (listview) {

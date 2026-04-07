@@ -17,10 +17,10 @@ function ib_calc_qty(row) {
     const p = flt(row.qty_pkg),  t = flt(row.total_pkg);
     if (ib_is_sqmt(row.uom)) {
         if (!w || !l || !p || !t) return null;
-        return flt((w / 1000) * l * p * t);
+        return flt((w / 1000) * l * p * t, 2);
     }
     if (!p || !t) return null;
-    return flt(p * t);
+    return flt(p * t, 2);
 }
 
 function ib_debounce(fn, ms) {

@@ -39,7 +39,7 @@ class CustomSalesOrder(SalesOrder):
 
     def validate(self):
         if not self.custom_location or self.custom_location == "Select":
-            frappe.throw("Please select a Location before saving.")
+            frappe.throw(frappe._("Please select a Location before saving."))
         _set_sales_person(self)
         _sync_sales_team(self)
         recalculate_items(self)
@@ -83,23 +83,27 @@ def reopen_sales_order(name):
             )
         )
 
-    # Reset to Draft so the document is editable; on_submit will handle
-    # reserved qty and Quotation status update when re-submitted
-    frappe.db.set_value("Sales Order", name, "docstatus", 0)
-    # Reset all child table rows — they carry docstatus=2 after cancellation
-    # which makes them read-only even when the parent is back to Draft
-    frappe.db.sql("UPDATE `tabSales Order Item` SET docstatus=0 WHERE parent=%s", name)
-    frappe.db.sql("UPDATE `tabSales Taxes and Charges` SET docstatus=0 WHERE parent=%s AND parenttype='Sales Order'", name)
-    doc.reload()
+    try:
+        # Reset to Draft so the document is editable; on_submit will handle
+        # reserved qty and Quotation status update when re-submitted
+        frappe.db.set_value("Sales Order", name, "docstatus", 0)
+        # Reset all child table rows — they carry docstatus=2 after cancellation
+        # which makes them read-only even when the parent is back to Draft
+        frappe.db.sql("UPDATE `tabSales Order Item` SET docstatus=0 WHERE parent=%s", name)
+        frappe.db.sql("UPDATE `tabSales Taxes and Charges` SET docstatus=0 WHERE parent=%s AND parenttype='Sales Order'", name)
+        doc.reload()
 
-    # Revert linked Quotation status to Pending (SO is now Draft, not submitted)
-    # Skip Quotations that are themselves cancelled
-    for quotation_name in set(d.prevdoc_docname for d in doc.get("items") if d.prevdoc_docname):
-        if frappe.db.get_value("Quotation", quotation_name, "docstatus") != 2:
-            frappe.get_doc("Quotation", quotation_name).set_status(update=True)
+        # Revert linked Quotation status to Pending (SO is now Draft, not submitted)
+        # Skip Quotations that are themselves cancelled
+        for quotation_name in set(d.prevdoc_docname for d in doc.get("items") if d.prevdoc_docname):
+            if frappe.db.get_value("Quotation", quotation_name, "docstatus") != 2:
+                frappe.get_doc("Quotation", quotation_name).set_status(update=True)
 
-    # Recalculate SO status (→ "Draft")
-    doc.set_status(update=True)
+        # Recalculate SO status (→ "Draft")
+        doc.set_status(update=True)
+    except Exception:
+        frappe.db.rollback()
+        raise
 
     doc.add_comment("Edit", frappe._("Reopened by {0}").format(frappe.session.user))
     frappe.msgprint(

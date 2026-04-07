@@ -20,6 +20,7 @@ override_doctype_class = {
     "Sales Order":   "instabiz.overrides.sales_order.CustomSalesOrder",
     "Delivery Note": "instabiz.overrides.delivery_note.CustomDeliveryNote",
     "Sales Invoice": "instabiz.overrides.sales_invoice.CustomSalesInvoice",
+    "Customer":      "instabiz.overrides.customer.CustomCustomer",
 }
 
 # ── Server-side doc events ────────────────────────────────────────────────────
@@ -53,9 +54,7 @@ override_whitelisted_methods = {
     "erpnext.stock.doctype.delivery_note.delivery_note.make_sales_invoice":
         "instabiz.overrides.delivery_note.custom_make_sales_invoice",
 
-    # GSTIN lookup — replace India Compliance's paid API with free gstincheck.co.in
-    "india_compliance.gst_india.utils.gstin_info.get_gstin_info":
-        "instabiz.overrides.gstin.get_gstin_info",
+
 }
 
 # ── Frontend assets ───────────────────────────────────────────────────────────
@@ -63,8 +62,7 @@ app_include_css = ["/assets/instabiz/css/instabiz.css"]
 app_include_js  = [
     "https://cdn.jsdelivr.net/npm/iconify-icon@2.1.0/dist/iconify-icon.min.js",  # Iconify icons (CDN)
     "/assets/instabiz/js/pincode.js",               # shared pincode autofill utility
-    "/assets/instabiz/js/gstin.js",                 # GSTIN autofill (IC bypass)
-    "/assets/instabiz/js/recalc.js",                # dimension → qty → amount helpers
+"/assets/instabiz/js/recalc.js",                # dimension → qty → amount helpers
     "/assets/instabiz/js/form.js",                  # form handlers (depends on recalc.js)
     "/assets/instabiz/js/quotation_list.js",        # Quotation list view
     "/assets/instabiz/js/sales_order_list.js",      # Sales Order list view
@@ -77,6 +75,9 @@ doctype_list_js = {
 }
 
 doctype_js = {
-    "Lead":    "public/js/lead.js",
-    "Address": "public/js/address.js",
+    "Lead":         "public/js/lead.js",
+    "Address":      "public/js/address.js",
+    "Customer":     "public/js/customer.js",
+    "Quotation":    "public/js/ib_sales_common.js",
+    "Sales Order":  "public/js/ib_sales_common.js",
 }

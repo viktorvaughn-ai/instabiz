@@ -5,6 +5,30 @@
  * Depends on: recalc.js
  */
 
+/**
+ * ib_hide_sidebar()
+ * Collapse the Frappe list-view filter sidebar so the content area fills the
+ * full width. Safe to call anywhere — the route guard ensures it never hides
+ * the module navigation sidebar on app/module home pages.
+ */
+function ib_hide_sidebar() {
+    const route = frappe.get_route();
+    if (!route || route[0] !== "List") return;   // never fire on /app or /app/crm etc.
+    $('.layout-side-section').css({ display: 'none', transition: 'none' });
+    $('.layout-main-section').css('margin-left', '0');
+}
+
+// On every list-view navigation: hide the filter sidebar AND refresh the list
+// so newly created docs appear immediately (Frappe page-cache would otherwise
+// show stale data from the previous visit).
+frappe.router.on("change", function () {
+    ib_hide_sidebar();
+    const route = frappe.get_route();
+    if (route && route[0] === "List" && cur_list) {
+        cur_list.refresh();
+    }
+});
+
 const IB_DOCTYPES        = ["Quotation", "Sales Order", "Delivery Note", "Sales Invoice"];
 const IB_REOPEN_DOCTYPES = ["Quotation", "Sales Order"];
 const IB_DEBOUNCE        = 300;
@@ -17,6 +41,12 @@ IB_DOCTYPES.forEach(function (doctype) {
             if (uom_df) { uom_df.fetch_from = ""; uom_df.fetch_enabled = 0; }
 
             frm.set_query("item_code", "items", () => ({ page_length: 50 }));
+
+            // Draft doc — remove the Cancel option ERPNext adds to the Actions menu
+            if (frm.doc.docstatus === 0) {
+                frm.remove_custom_button(__("Cancel"));
+                if (frm.page.btn_secondary) frm.page.btn_secondary.hide();
+            }
 
             // Reopen button — cancelled Quotation / Sales Order only
             if (

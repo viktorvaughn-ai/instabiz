@@ -110,4 +110,7 @@ def map_address_contact_fields(source_doc, target_doc):
                 target_doc.shipping_address_name
             )
     except Exception:
-        pass
+        frappe.log_error(
+            title="Address display rebuild failed",
+            message=frappe.get_traceback(),
+        )

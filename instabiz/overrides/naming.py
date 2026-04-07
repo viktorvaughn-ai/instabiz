@@ -23,7 +23,13 @@ def get_warehouse_code(doc):
         if key in location or location in key:
             return code
 
-    return "XX"
+    valid = ", ".join(LOCATION_CODE_MAP.keys())
+    frappe.throw(
+        frappe._(
+            "Unknown location {0!r}. Please set a valid Location on this document. "
+            "Valid locations: {1}"
+        ).format(doc.get("custom_location") or "(empty)", valid)
+    )
 
 
 def get_next_dn_si_number(warehouse_code):

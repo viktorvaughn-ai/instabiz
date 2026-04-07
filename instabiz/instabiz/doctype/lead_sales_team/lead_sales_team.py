@@ -5,6 +5,8 @@ from frappe.model.document import Document
 
 class LeadSalesTeam(Document):
     def validate(self):
+        if not self.members:
+            frappe.throw(_("At least one member is required in the team."))
         self._validate_no_duplicate_members()
         self._validate_no_duplicate_territories()
 

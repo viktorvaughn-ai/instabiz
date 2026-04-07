@@ -1,6 +1,15 @@
 frappe.listview_settings["Lead"] = Object.assign(
 	frappe.listview_settings["Lead"] || {},
 	{
+		add_fields: ["custom_lead_owner_name"],
+
+		formatters: {
+			lead_owner: function (value, field, doc) {
+				if (!value) return "";
+				return frappe.utils.escape_html(doc.custom_lead_owner_name || value);
+			},
+		},
+
 		get_indicator: function (doc) {
 			const map = {
 				"Cold Lead":   ["Cold Lead",   "grey"],
@@ -68,6 +77,7 @@ frappe.listview_settings["Lead"] = Object.assign(
 				});
 				d.show();
 			});
+		        ib_hide_sidebar();
 		},
 	}
 );

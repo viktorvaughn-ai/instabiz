@@ -16,26 +16,10 @@
     --ib-radius:        6px;
 }
 
-/* ─── GSTIN fetch loading indicator ── */
-.ib-gstin-loading {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--ib-primary);
-    font-size: 12px;
-}
-.ib-gstin-spinner {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border: 2px solid var(--ib-tint-border);
-    border-top-color: var(--ib-primary);
-    border-radius: 50%;
-    animation: ib-spin 0.6s linear infinite;
-    flex-shrink: 0;
-}
-@keyframes ib-spin {
-    to { transform: rotate(360deg); }
+
+/* Hide IC's "Autofill not supported in sandbox mode" hint below GSTIN field */
+.frappe-control[data-fieldname="_gstin"] .help-box.small.text-muted {
+    display: none !important;
 }
 
 /* Hide extra filter option */
@@ -48,6 +32,28 @@
 .list-row-like {
     display: none !important;
 }
+
+/* Hide _assign avatars from all list view rows */
+.frappe-list .list-row .avatar.filterable[data-filter^="_assign"] {
+    display: none !important;
+}
+
+/* ─── Status indicator pills ── */
+.frappe-list .list-row .indicator-pill {
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    padding: 2px 10px;
+    border-radius: 20px;
+}
+.frappe-list .list-row .indicator-pill.grey       { background: #e5e7eb; color: #374151; }
+.frappe-list .list-row .indicator-pill.orange      { background: #fde5d3; color: #9a3412; }
+.frappe-list .list-row .indicator-pill.yellow      { background: #fef9c3; color: #854d0e; }
+.frappe-list .list-row .indicator-pill.blue        { background: #dbeafe; color: #1e40af; }
+.frappe-list .list-row .indicator-pill.light-blue  { background: #e0f2fe; color: #0369a1; }
+.frappe-list .list-row .indicator-pill.purple      { background: #ede9fe; color: #5b21b6; }
+.frappe-list .list-row .indicator-pill.green       { background: #dcfce7; color: #166534; }
+.frappe-list .list-row .indicator-pill.red         { background: #fee2e2; color: #991b1b; }
 
 
 

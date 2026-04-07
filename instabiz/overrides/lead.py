@@ -15,7 +15,10 @@ def assign_lead_owner(doc, method=None):
     # On update, skip if territory hasn't changed
     if method != "after_insert":
         before = doc.get_doc_before_save()
-        if before and before.territory == doc.territory:
+        if not before:
+            # on_update fired immediately after insert — after_insert already handled it
+            return
+        if before.territory == doc.territory:
             return
 
     _do_assign(doc)
@@ -39,24 +42,35 @@ def _do_assign(doc):
     if not rows:
         return
 
-    team = frappe.get_doc("Lead Sales Team", rows[0].name)
+    team_name = rows[0].name
 
-    if not team.members:
-        return
+    # Acquire a per-team advisory lock to prevent concurrent leads from
+    # reading the same rr_index before either has written the next value.
+    lock_key = f"ib_rr_{team_name}"
+    frappe.db.sql("SELECT GET_LOCK(%s, 10)", lock_key)
+    try:
+        team = frappe.get_doc("Lead Sales Team", team_name)
 
-    idx      = (team.rr_index or 0) % len(team.members)
-    member   = team.members[idx]
-    next_idx = (idx + 1) % len(team.members)
+        if not team.members:
+            return
 
-    full_name = frappe.db.get_value("User", member.user, "full_name") or member.user
+        idx      = (team.rr_index or 0) % len(team.members)
+        member   = team.members[idx]
+        next_idx = (idx + 1) % len(team.members)
 
-    frappe.db.set_value("Lead Sales Team", team.name, "rr_index", next_idx)
-    frappe.db.set_value("Lead", doc.name, {
-        "lead_owner":             member.user,
-        "custom_lead_owner_name": full_name,
-    })
-    doc.lead_owner             = member.user
-    doc.custom_lead_owner_name = full_name
+        full_name = frappe.db.get_value("User", member.user, "full_name") or member.user
+
+        frappe.db.set_value("Lead Sales Team", team.name, "rr_index", next_idx)
+        frappe.db.set_value("Lead", doc.name, {
+            "lead_owner":             member.user,
+            "custom_lead_owner_name": full_name,
+        }, update_modified=False)
+        doc.lead_owner             = member.user
+        doc.custom_lead_owner_name = full_name
+
+        doc.add_comment("Edit", _("Lead auto-assigned to {0} via round-robin").format(full_name))
+    finally:
+        frappe.db.sql("SELECT RELEASE_LOCK(%s)", lock_key)
 
 
 @frappe.whitelist()
@@ -100,10 +114,28 @@ def transfer_leads(leads, to_user):
 
     full_name = frappe.db.get_value("User", to_user, "full_name") or to_user
 
-    for lead_name in leads:
-        frappe.db.set_value("Lead", lead_name, {
-            "lead_owner":             to_user,
-            "custom_lead_owner_name": full_name,
-        })
+    # Batch UPDATE — single query instead of one per lead
+    placeholders = ", ".join(["%s"] * len(leads))
+    frappe.db.sql(
+        f"UPDATE `tabLead` SET lead_owner = %s, custom_lead_owner_name = %s"
+        f" WHERE name IN ({placeholders})",
+        [to_user, full_name] + list(leads),
+    )
+
+    # Batch INSERT all audit comments in one round-trip
+    now     = frappe.utils.now()
+    actor   = frappe.session.user
+    content = _("Lead transferred to {0}").format(full_name)
+    rows    = [
+        (frappe.generate_hash(length=10), lead_name, content, actor, now, now, actor)
+        for lead_name in leads
+    ]
+    frappe.db.sql(
+        "INSERT INTO `tabComment`"
+        " (name, comment_type, reference_doctype, reference_name, content,"
+        "  owner, creation, modified, modified_by, docstatus, published, seen)"
+        " VALUES " + ", ".join(["(%s, 'Info', 'Lead', %s, %s, %s, %s, %s, %s, 0, 0, 0)"] * len(rows)),
+        [v for row in rows for v in row],
+    )
 
     return {"transferred": len(leads), "to": full_name}

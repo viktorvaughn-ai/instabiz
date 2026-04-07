@@ -118,7 +118,7 @@ class CustomQuotation(Quotation):
 
     def validate(self):
         if not self.custom_location or self.custom_location == "Select":
-            frappe.throw("Please select a Location before saving.")
+            frappe.throw(frappe._("Please select a Location before saving."))
         _set_sales_person(self)
         _sync_sales_team(self)
         recalculate_items(self)
@@ -151,13 +151,17 @@ def reopen_quotation(name):
     if doc.docstatus != 2:
         frappe.throw(frappe._("Only a cancelled Quotation can be reopened."))
 
-    frappe.db.set_value("Quotation", name, "docstatus", 0)
-    # Reset all child table rows — they carry docstatus=2 after cancellation
-    # which makes them read-only even when the parent is back to Draft
-    frappe.db.sql("UPDATE `tabQuotation Item` SET docstatus=0 WHERE parent=%s", name)
-    frappe.db.sql("UPDATE `tabSales Taxes and Charges` SET docstatus=0 WHERE parent=%s AND parenttype='Quotation'", name)
-    doc.reload()
-    doc.set_status(update=True)
+    try:
+        frappe.db.set_value("Quotation", name, "docstatus", 0)
+        # Reset all child table rows — they carry docstatus=2 after cancellation
+        # which makes them read-only even when the parent is back to Draft
+        frappe.db.sql("UPDATE `tabQuotation Item` SET docstatus=0 WHERE parent=%s", name)
+        frappe.db.sql("UPDATE `tabSales Taxes and Charges` SET docstatus=0 WHERE parent=%s AND parenttype='Quotation'", name)
+        doc.reload()
+        doc.set_status(update=True)
+    except Exception:
+        frappe.db.rollback()
+        raise
 
     doc.add_comment("Edit", frappe._("Reopened by {0}").format(frappe.session.user))
     frappe.msgprint(
