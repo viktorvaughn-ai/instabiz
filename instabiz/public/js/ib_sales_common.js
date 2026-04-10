@@ -9,6 +9,7 @@ function ib_set_item_query(frm, customer_field) {
 		return {
 			query: "instabiz.overrides.item.item_query",
 			filters: { customer: frm.doc[customer_field] || "" },
+			page_length: 30,
 		};
 	});
 }

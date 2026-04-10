@@ -53,6 +53,19 @@ def self_checkin(log_type, latitude=None, longitude=None):
 		frappe.throw(_("Invalid log_type"))
 
 	employee = _get_employee_for_user()
+
+	# Prevent consecutive duplicate log types (IN→IN or OUT→OUT)
+	last = frappe.db.sql(
+		"SELECT log_type FROM `tabEmployee Checkin`"
+		" WHERE employee = %s AND DATE(time) = %s"
+		" ORDER BY time DESC LIMIT 1",
+		(employee.name, today()),
+		as_dict=True,
+	)
+	if last and last[0].log_type == log_type:
+		label = _("in") if log_type == "IN" else _("out")
+		frappe.throw(_("You are already checked {0}.").format(label))
+
 	shift    = frappe.db.get_value("Employee", employee.name, "default_shift")
 
 	doc = frappe.get_doc({

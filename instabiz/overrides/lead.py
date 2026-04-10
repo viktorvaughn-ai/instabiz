@@ -3,6 +3,55 @@ from frappe import _
 import urllib.request
 import json as _json
 
+# Roles that can see ALL leads regardless of assignment
+_PRIVILEGED_ROLES = {"System Manager", "Sales Manager"}
+
+
+def _is_privileged(user):
+    # Primary check: does the user have any of the privileged roles directly?
+    if _PRIVILEGED_ROLES & set(frappe.get_roles(user)):
+        return True
+    # Fallback: check role profile name — covers cases where the Role
+    # Profile "Sales Manager" was not configured to propagate the "Sales Manager"
+    # role to the user's Has Role table
+    profile = frappe.db.get_value("User", user, "role_profile_name") or ""
+    return profile in _PRIVILEGED_ROLES
+
+
+def get_permission_query_conditions(user):
+    """Limit Lead list to rows owned by or assigned to the current user.
+
+    lead_owner is authoritative when set; owner is the fallback for leads
+    that pre-date the round-robin assignment feature (lead_owner = NULL/'').
+    """
+    if not user:
+        user = frappe.session.user
+    if _is_privileged(user):
+        return "1=1"
+    u = frappe.db.escape(user)
+    return (
+        f"(`tabLead`.`lead_owner` = {u}"
+        f" OR ((`tabLead`.`lead_owner` IS NULL OR `tabLead`.`lead_owner` = '')"
+        f" AND `tabLead`.`owner` = {u}))"
+    )
+
+
+def has_permission(doc, ptype, user):
+    """Allow access to a Lead only if the user owns or is assigned to it."""
+    if not user:
+        user = frappe.session.user
+    if _is_privileged(user):
+        return True
+    # Allow create and new unsaved docs — lead_owner not set yet
+    if ptype == "create" or not doc.name:
+        return True
+    assigned = doc.lead_owner
+    if assigned:
+        # lead_owner is set — use it exclusively (respects transfer/reassignment)
+        return assigned == user
+    # lead_owner is blank (pre-dates round-robin) — fall back to owner
+    return doc.owner == user
+
 
 def assign_lead_owner(doc, method=None):
     """

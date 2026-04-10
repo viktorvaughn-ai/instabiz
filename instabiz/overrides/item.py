@@ -46,6 +46,32 @@ def item_query(doctype, txt, searchfield, start, page_len, filters, as_dict=Fals
 
     page_len = min(int(page_len), 500)
 
+    # ── Multi-token search ────────────────────────────────────────────────────
+    # Split the search text into whitespace-separated tokens so that typing
+    # "blue 1200" finds items containing both "blue" AND "1200" anywhere in
+    # any of the searched fields — order of words doesn't matter.
+    # Each token produces one AND block; a single token behaves like before.
+    tokens = [t.strip() for t in txt.split() if t.strip()] or [""]
+
+    token_sql_parts = []
+    token_params    = {}
+    for i, token in enumerate(tokens):
+        key = f"tok{i}"
+        token_params[key] = f"%{token}%" if token else "%"
+        token_sql_parts.append(
+            f"(tabItem.name            LIKE %({key})s"
+            f" OR tabItem.item_name    LIKE %({key})s"
+            f" OR tabItem.item_code    LIKE %({key})s"
+            f" OR tabItem.item_group   LIKE %({key})s"
+            f" OR tabItem.color        LIKE %({key})s"
+            f" OR tabItem.custom_liner LIKE %({key})s"
+            f" OR tabItem.name IN ("
+            f"     SELECT parent FROM `tabItem Barcode` WHERE barcode LIKE %({key})s"
+            f" ))"
+        )
+
+    search_condition = "\n            AND ".join(token_sql_parts)
+
     return frappe.db.sql(
         """
         SELECT
@@ -64,17 +90,7 @@ def item_query(doctype, txt, searchfield, start, page_len, filters, as_dict=Fals
                 tabItem.end_of_life > %(today)s
                 OR IFNULL(tabItem.end_of_life, '0000-00-00') = '0000-00-00'
             )
-            AND (
-                tabItem.name            LIKE %(txt)s
-                OR tabItem.item_name    LIKE %(txt)s
-                OR tabItem.item_code    LIKE %(txt)s
-                OR tabItem.item_group   LIKE %(txt)s
-                OR tabItem.color        LIKE %(txt)s
-                OR tabItem.custom_liner LIKE %(txt)s
-                OR tabItem.name IN (
-                    SELECT parent FROM `tabItem Barcode` WHERE barcode LIKE %(txt)s
-                )
-            )
+            AND {search_condition}
             {fcond} {mcond}
         ORDER BY
             IF(LOCATE(%(_txt)s, tabItem.name),        LOCATE(%(_txt)s, tabItem.name),        99999),
@@ -84,15 +100,16 @@ def item_query(doctype, txt, searchfield, start, page_len, filters, as_dict=Fals
             tabItem.item_name
         LIMIT %(start)s, %(page_len)s
         """.format(
+            search_condition=search_condition,
             fcond=get_filters_cond(doctype, filters, conditions).replace("%", "%%"),
             mcond=get_match_cond(doctype).replace("%", "%%"),
         ),
         {
             "today":    nowdate(),
-            "txt":      "%%%s%%" % txt,
             "_txt":     txt.replace("%", ""),
             "start":    start,
             "page_len": page_len,
+            **token_params,
         },
         as_dict=as_dict,
     )

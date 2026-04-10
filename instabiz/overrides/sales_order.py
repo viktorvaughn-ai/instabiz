@@ -18,15 +18,33 @@ from instabiz.overrides.quotation import _sync_sales_team
 
 
 def _set_sales_person(doc):
-    """Auto-populate custom_sales_person from the document creator's first name."""
+    """Auto-populate custom_sales_person (display) and custom_sales_person_user (email).
+
+    Uses frappe.session.user (not doc.owner) so that the actual logged-in user
+    is credited even when doc.owner resolves to 'Administrator' (e.g. shared
+    admin credentials or system-generated docs).
+    The guard conditions ensure already-set values (e.g. carried from a mapper)
+    are never overwritten.
+    """
+    if not doc.get("custom_sales_person_user"):
+        doc.custom_sales_person_user = frappe.session.user
     if not doc.get("custom_sales_person"):
-        full_name = frappe.db.get_value("User", doc.owner, "first_name")
-        if full_name:
-            doc.custom_sales_person = full_name
+        first_name = frappe.db.get_value("User", doc.custom_sales_person_user, "first_name")
+        if first_name:
+            doc.custom_sales_person = first_name
 
 
 def recalculate_sales_order(doc, method=None):
     recalculate_items(doc)
+
+
+_SO_STATUS_MAP = {
+    "To Deliver and Bill": "Pending",
+    "To Deliver":          "Pending",
+    "To Bill":             "Dispatched",
+    "Completed":           "Confirmed",
+    "Closed":              "Confirmed",
+}
 
 
 class CustomSalesOrder(SalesOrder):
@@ -44,6 +62,25 @@ class CustomSalesOrder(SalesOrder):
         _sync_sales_team(self)
         recalculate_items(self)
         super().validate()  # revert Quotation to Open on cancel
+
+    def set_status(self, update=False, status=None, update_modified=True):
+        super().set_status(update=update, status=status, update_modified=update_modified)
+        if self.status in _SO_STATUS_MAP:
+            self.status = _SO_STATUS_MAP[self.status]
+            if update:
+                self.db_set("status", self.status, update_modified=update_modified)
+
+    def _validate_selects(self):
+        # Frappe validates Select field values against their options list.
+        # Our set_status() remaps ERPNext's internal statuses (e.g. "To Deliver
+        # and Bill") to our custom labels ("Pending") before _validate_selects
+        # runs. Temporarily restore a safe ERPNext value so the check passes,
+        # then put our remapped value back.
+        remapped = self.status
+        if remapped in _SO_STATUS_MAP.values():
+            self.status = "Draft"
+        super()._validate_selects()
+        self.status = remapped
 
 
 @frappe.whitelist()
@@ -143,21 +180,25 @@ def custom_make_delivery_note(source_name, target_doc=None):
                 "validation": {"docstatus": ["=", 1]},
                 "postprocess": postprocess_parent,
                 "field_map": {
-                    "name":                  "against_sales_order",
-                    "customer":              "customer",
-                    "customer_name":         "customer_name",
-                    "customer_address":      "customer_address",
-                    "shipping_address_name": "shipping_address_name",
-                    "contact_person":        "contact_person",
-                    "contact_display":       "contact_display",
-                    "territory":             "territory",
-                    "customer_group":        "customer_group",
-                    "currency":              "currency",
-                    "selling_price_list":    "selling_price_list",
-                    "price_list_currency":   "price_list_currency",
-                    "plc_conversion_rate":   "plc_conversion_rate",
-                    "conversion_rate":       "conversion_rate",
-                    "custom_location":       "custom_location",                    
+                    "name":                      "against_sales_order",
+                    "customer":                  "customer",
+                    "customer_name":             "customer_name",
+                    "customer_address":          "customer_address",
+                    "shipping_address_name":     "shipping_address_name",
+                    "contact_person":            "contact_person",
+                    "contact_display":           "contact_display",
+                    "territory":                 "territory",
+                    "customer_group":            "customer_group",
+                    "currency":                  "currency",
+                    "selling_price_list":        "selling_price_list",
+                    "price_list_currency":       "price_list_currency",
+                    "plc_conversion_rate":       "plc_conversion_rate",
+                    "conversion_rate":           "conversion_rate",
+                    "custom_location":           "custom_location",
+                    # Carry sales person so the DN stays credited to the SO's
+                    # sales person, not whoever clicks "Make Delivery Note"
+                    "custom_sales_person":       "custom_sales_person",
+                    "custom_sales_person_user":  "custom_sales_person_user",
                 },
             },
             "Sales Order Item": {

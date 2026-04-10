@@ -1,5 +1,6 @@
 """instabiz.overrides.utils"""
 import frappe
+from frappe import _
 
 
 # ── Dimension fields carried across all transaction child rows ────────────────
@@ -21,7 +22,7 @@ DIMENSION_FIELDS = [
 ]
 
 # ── Parent-level fields carried across document chain ─────────────────────────
-PARENT_FIELDS = ["transport", "transport_gst", "booking_for"]
+PARENT_FIELDS = ["custom_transport", "transport_gst", "booking_for"]
 
 # ── Customer + address fields shared across all mapper postprocess functions ──
 ADDRESS_CONTACT_FIELDS = [
@@ -84,6 +85,80 @@ def map_parent_fields(source_doc, target_doc):
         value = source_doc.get(field)
         if value is not None:
             target_doc.set(field, value)
+
+
+def transfer_documents(doctype, owner_field, names, to_user,
+                       owner_set_value=None,
+                       display_name_field=None,
+                       handover_ref=None):
+    """
+    Batch-reassign ownership of `names` in `doctype` to `to_user`.
+
+    owner_set_value     : exact value to write into owner_field. When None,
+                          to_user (email) is used. Pass this when owner_field
+                          is a Data field storing e.g. User.first_name rather
+                          than the user's email address (e.g. custom_sales_person).
+    display_name_field  : optional second field updated with the new user's
+                          full_name (e.g. custom_lead_owner_name on Lead).
+    handover_ref        : Employee Exit Handover name stamped on audit comments.
+
+    Returns the count of documents updated.
+    """
+    if not names:
+        return 0
+
+    if isinstance(names, str):
+        import json as _json
+        names = _json.loads(names)
+
+    names = list(names)
+
+    if not frappe.db.exists("User", to_user):
+        frappe.throw(_("User {0} not found").format(to_user))
+
+    full_name   = frappe.db.get_value("User", to_user, "full_name") or to_user
+    field_value = owner_set_value if owner_set_value is not None else to_user
+
+    # ── Batch UPDATE ──────────────────────────────────────────────────────────
+    set_parts  = [f"`{owner_field}` = %s"]
+    set_values = [field_value]
+
+    if display_name_field:
+        set_parts.append(f"`{display_name_field}` = %s")
+        set_values.append(full_name)
+
+    placeholders = ", ".join(["%s"] * len(names))
+    frappe.db.sql(
+        f"UPDATE `tab{doctype}` SET {', '.join(set_parts)} WHERE `name` IN ({placeholders})",
+        set_values + names,
+    )
+
+    # ── Batch audit comments ──────────────────────────────────────────────────
+    now   = frappe.utils.now()
+    actor = frappe.session.user
+
+    if handover_ref:
+        content = _(
+            "Reassigned from {0} to {1} as part of exit handover {2}"
+        ).format(actor, full_name, handover_ref)
+    else:
+        content = _("Ownership transferred to {0}").format(full_name)
+
+    rows = [
+        (frappe.generate_hash(length=10), doctype, name, content, actor, now, now, actor)
+        for name in names
+    ]
+    frappe.db.sql(
+        "INSERT INTO `tabComment`"
+        " (name, comment_type, reference_doctype, reference_name,"
+        "  content, owner, creation, modified, modified_by, docstatus, published, seen)"
+        " VALUES " + ", ".join(
+            ["(%s, 'Info', %s, %s, %s, %s, %s, %s, %s, 0, 0, 0)"] * len(rows)
+        ),
+        [v for row in rows for v in row],
+    )
+
+    return len(names)
 
 
 def map_address_contact_fields(source_doc, target_doc):

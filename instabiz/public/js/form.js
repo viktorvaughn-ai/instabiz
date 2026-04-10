@@ -1,54 +1,57 @@
 /**
  * form.js
- * Form-level handlers for all IB transaction doctypes:
- * refresh, reopen button, item field triggers.
+ * Form-level handlers for all IB transaction doctypes.
+ * Optimized for Frappe v15 to prevent UI rounding jitters on blur.
  * Depends on: recalc.js
  */
 
 /**
  * ib_hide_sidebar()
- * Collapse the Frappe list-view filter sidebar so the content area fills the
- * full width. Safe to call anywhere — the route guard ensures it never hides
- * the module navigation sidebar on app/module home pages.
+ * Collapse the Frappe list-view filter sidebar.
  */
 function ib_hide_sidebar() {
     const route = frappe.get_route();
-    if (!route || route[0] !== "List") return;   // never fire on /app or /app/crm etc.
+    if (!route || route[0] !== "List") return;
     $('.layout-side-section').css({ display: 'none', transition: 'none' });
     $('.layout-main-section').css('margin-left', '0');
 }
 
-// On every list-view navigation: hide the filter sidebar AND refresh the list
-// so newly created docs appear immediately (Frappe page-cache would otherwise
-// show stale data from the previous visit).
+// Global router listener
 frappe.router.on("change", function () {
     ib_hide_sidebar();
-    const route = frappe.get_route();
-    if (route && route[0] === "List" && cur_list) {
-        cur_list.refresh();
-    }
 });
 
 const IB_DOCTYPES        = ["Quotation", "Sales Order", "Delivery Note", "Sales Invoice"];
 const IB_REOPEN_DOCTYPES = ["Quotation", "Sales Order"];
-const IB_DEBOUNCE        = 300;
+const IB_DEBOUNCE        = 500; // Increased to 500ms for stable decimal input
 
 IB_DOCTYPES.forEach(function (doctype) {
     frappe.ui.form.on(doctype, {
         refresh(frm) {
-            // Prevent UOM from being auto-fetched from item master
+            // Disable auto-fetch for UOM to maintain manual selection control
             const uom_df = frappe.meta.get_docfield(`${doctype} Item`, "uom");
-            if (uom_df) { uom_df.fetch_from = ""; uom_df.fetch_enabled = 0; }
+            if (uom_df) {
+                uom_df.fetch_from = "";
+                uom_df.fetch_enabled = 0;
+            }
 
             frm.set_query("item_code", "items", () => ({ page_length: 50 }));
 
-            // Draft doc — remove the Cancel option ERPNext adds to the Actions menu
+            // Clicking the row index number opens the row dialog (same as pencil icon)
+            const $grid = frm.fields_dict.items.grid.wrapper;
+            $grid.off("click.ib_row_open").on("click.ib_row_open", ".grid-row .row-index", function () {
+                const docname = $(this).closest(".grid-row").attr("data-name");
+                const grid_row = frm.fields_dict.items.grid.grid_rows_by_docname[docname];
+                if (grid_row) grid_row.toggle_view(true);
+            });
+
+            // UI cleanup for Draft documents
             if (frm.doc.docstatus === 0) {
                 frm.remove_custom_button(__("Cancel"));
                 if (frm.page.btn_secondary) frm.page.btn_secondary.hide();
             }
 
-            // Reopen button — cancelled Quotation / Sales Order only
+            // Custom Reopen logic for Cancelled documents
             if (
                 frm.doc.docstatus === 2 &&
                 IB_REOPEN_DOCTYPES.includes(doctype) &&
@@ -65,7 +68,9 @@ IB_DOCTYPES.forEach(function (doctype) {
                                 args: { name: frm.doc.name },
                                 freeze: true,
                                 freeze_message: __("Reopening…"),
-                                callback: function (r) { if (!r.exc) window.location.reload(); },
+                                callback: function (r) { 
+                                    if (!r.exc) window.location.reload(); 
+                                },
                             });
                         }
                     );
@@ -78,24 +83,64 @@ IB_DOCTYPES.forEach(function (doctype) {
         after_cancel: (frm) => frm.refresh(),
     });
 
+    // Child Table Triggers
     frappe.ui.form.on(`${doctype} Item`, {
         item_code(frm, cdt, cdn) {
+            // Reset UOM once on item change without double-triggering refreshes
             frappe.model.set_value(cdt, cdn, "uom", "");
+            
+            // Allow Frappe to finish fetching item defaults before we recalc
             setTimeout(async () => {
-                await frappe.model.set_value(cdt, cdn, "uom", "");
                 await ib_recalc_row(frm, cdt, cdn, true);
-                frm.refresh_field("items");
-            }, 1200);
+            }, 600);
         },
 
+        // Dimension triggers - Recalculate Qty then Amount
         uom:        ib_debounce(async (frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, true),  IB_DEBOUNCE),
         width_mm:   ib_debounce(async (frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, true),  IB_DEBOUNCE),
         length_mtr: ib_debounce(async (frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, true),  IB_DEBOUNCE),
         qty_pkg:    ib_debounce(async (frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, true),  IB_DEBOUNCE),
         total_pkg:  ib_debounce(async (frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, true),  IB_DEBOUNCE),
+        
+        // Direct value triggers - Recalculate Amount only
         qty:        ib_debounce(async (frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, false), IB_DEBOUNCE),
         rate:       ib_debounce(async (frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, false), IB_DEBOUNCE),
 
         items_remove: (frm) => frm.refresh_field("items"),
     });
 });
+
+// ── List-view: Guard to prevent accidental bulk-cancellation of drafts ────────
+(function () {
+    frappe.router.on("change", function () {
+        var route = frappe.get_route();
+        if (!route || route[0] !== "List" || !IB_DOCTYPES.includes(route[1])) return;
+
+        setTimeout(function () {
+            if (!cur_list) return;
+            $(cur_list.wrapper)
+                .off("change.ib_cancel_guard")
+                .on(
+                    "change.ib_cancel_guard",
+                    ".list-row-checkbox, .list-header-subject input[type='checkbox']",
+                    function () {
+                        setTimeout(function () {
+                            if (!cur_list) return;
+                            var checked = cur_list.get_checked_items();
+                            if (!checked.length) return;
+                            
+                            // Only allow bulk cancel if all selected rows are Submitted (1)
+                            var all_submitted = checked.every(function (r) {
+                                return r.docstatus == 1;
+                            });
+                            
+                            cur_list.page.actions_btn_group
+                                .find("a[data-label='Cancel']")
+                                .closest("li")
+                                .toggle(all_submitted);
+                        }, 60);
+                    }
+                );
+        }, 400);
+    });
+}());

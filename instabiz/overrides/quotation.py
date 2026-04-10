@@ -64,11 +64,20 @@ def _set_default_terms(doc):
             doc.terms = terms_text
 
 def _set_sales_person(doc):
-    """Auto-populate custom_sales_person from the document creator's first name."""
+    """Auto-populate custom_sales_person (display) and custom_sales_person_user (email).
+
+    Uses frappe.session.user (not doc.owner) so that the actual logged-in user
+    is credited even when doc.owner resolves to 'Administrator' (e.g. shared
+    admin credentials or system-generated docs).
+    The guard conditions ensure already-set values (e.g. carried from a mapper)
+    are never overwritten.
+    """
+    if not doc.get("custom_sales_person_user"):
+        doc.custom_sales_person_user = frappe.session.user
     if not doc.get("custom_sales_person"):
-        full_name = frappe.db.get_value("User", doc.owner, "first_name")
-        if full_name:
-            doc.custom_sales_person = full_name
+        first_name = frappe.db.get_value("User", doc.custom_sales_person_user, "first_name")
+        if first_name:
+            doc.custom_sales_person = first_name
 
 
 def _sync_sales_team(doc):
@@ -201,23 +210,27 @@ def custom_make_sales_order(source_name, target_doc=None):
                 "validation": {"docstatus": ["=", 1]},
                 "postprocess": postprocess_parent,
                 "field_map": {
-                    "name":                  "quotation",
-                    "party_name":            "customer",
-                    "customer_name":         "customer_name",
-                    "customer_address":      "customer_address",
-                    "shipping_address_name": "shipping_address_name",
-                    "contact_person":        "contact_person",
-                    "contact_display":       "contact_display",
-                    "territory":             "territory",
-                    "customer_group":        "customer_group",
-                    "currency":              "currency",
-                    "selling_price_list":    "selling_price_list",
-                    "price_list_currency":   "price_list_currency",
-                    "plc_conversion_rate":   "plc_conversion_rate",
-                    "conversion_rate":       "conversion_rate",
-                    "transaction_date":      "transaction_date",
-                    "custom_location":       "custom_location",
-                    "custom_reference_po":   "custom_reference_po",
+                    "name":                      "quotation",
+                    "party_name":                "customer",
+                    "customer_name":             "customer_name",
+                    "customer_address":          "customer_address",
+                    "shipping_address_name":     "shipping_address_name",
+                    "contact_person":            "contact_person",
+                    "contact_display":           "contact_display",
+                    "territory":                 "territory",
+                    "customer_group":            "customer_group",
+                    "currency":                  "currency",
+                    "selling_price_list":        "selling_price_list",
+                    "price_list_currency":       "price_list_currency",
+                    "plc_conversion_rate":       "plc_conversion_rate",
+                    "conversion_rate":           "conversion_rate",
+                    "transaction_date":          "transaction_date",
+                    "custom_location":           "custom_location",
+                    "custom_reference_po":       "custom_reference_po",
+                    # Carry sales person so the SO stays credited to whoever
+                    # created the Quotation, not whoever clicks "Make SO"
+                    "custom_sales_person":       "custom_sales_person",
+                    "custom_sales_person_user":  "custom_sales_person_user",
                 },
             },
             "Quotation Item": {
