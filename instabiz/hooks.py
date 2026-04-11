@@ -3,7 +3,7 @@ scheduler_events = {
     "daily": [
         # Runs on relieving_date — creates handover doc, notifies HR Managers
         "instabiz.overrides.employee_exit.run_exit_handover_daily",
-        # Runs on relieving_date + 1 — disables the ERP user account
+        # Runs on relieving_date + 1 — disables the ERP user account (only for employees marked "Left")
         "instabiz.overrides.employee_exit.run_user_disable_daily",
     ],
 }
@@ -82,7 +82,7 @@ fixtures = [
     "Custom Field",
     {
         "dt": "Property Setter",
-        "filters": [["doc_type", "in", ["Quotation", "Sales Order", "Lead"]]]
+        "filters": [["doc_type", "in", ["Quotation", "Sales Order", "Lead", "Delivery Note"]]]
     },
 ]
 # ── Class overrides ───────────────────────────────────────────────────────────
@@ -165,8 +165,10 @@ app_include_js  = [
 doctype_list_js = {
     "Employee Checkin": "public/js/employee_checkin_list.js",
     "Lead":             "public/js/lead_list.js",
-    "Quotation":   "public/js/quotation_list.js",
-    "Sales Order": "public/js/sales_order_list.js",
+    "Quotation":        "public/js/quotation_list.js",
+    "Sales Order":      "public/js/sales_order_list.js",
+    "Delivery Note":    "public/js/delivery_note_list.js",
+    "Sales Invoice":    "public/js/sales_invoice_list.js",
 }
 
 doctype_js = {

@@ -33,11 +33,12 @@ def run_exit_handover_daily():
     """
     employees = frappe.get_all(
         "Employee",
-        filters={
-            "relieving_date": today(),
-            "status":         "Active",
-            "user_id":        ["is", "set"],
-        },
+        filters=[
+            ["relieving_date", "is", "set"],
+            ["relieving_date", "=", today()],
+            ["status", "=", "Active"],
+            ["user_id", "is", "set"],
+        ],
         fields=["name", "employee_name", "user_id", "relieving_date"],
     )
 
@@ -64,11 +65,12 @@ def run_user_disable_daily():
 
     employees = frappe.get_all(
         "Employee",
-        filters={
-            "relieving_date": ["<=", yesterday],
-            "status":         "Active",
-            "user_id":        ["is", "set"],
-        },
+        filters=[
+            ["relieving_date", "is", "set"],
+            ["relieving_date", "<=", yesterday],
+            ["status", "=", "Left"],
+            ["user_id", "is", "set"],
+        ],
         fields=["name", "employee_name", "user_id", "relieving_date"],
     )
 

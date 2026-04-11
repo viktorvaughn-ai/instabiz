@@ -402,6 +402,7 @@
     "label": "Transport",
     "fieldtype": "Data",
     "insert_after": "ib_extra_section",
+    "hidden": 1,
     "print_hide": 0,
     "permlevel": 0
   },
@@ -447,6 +448,7 @@
     "label": "Transport",
     "fieldtype": "Data",
     "insert_after": "ib_extra_section",
+    "hidden": 1,
     "print_hide": 0,
     "permlevel": 0
   },
@@ -492,6 +494,7 @@
     "label": "Transport",
     "fieldtype": "Data",
     "insert_after": "ib_extra_section",
+    "hidden": 1,
     "print_hide": 0,
     "permlevel": 0
   },
@@ -537,6 +540,7 @@
     "label": "Transport",
     "fieldtype": "Data",
     "insert_after": "ib_extra_section",
+    "hidden": 1,
     "print_hide": 0,
     "permlevel": 0
   },
