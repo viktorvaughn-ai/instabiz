@@ -68,7 +68,6 @@ def run_user_disable_daily():
         filters=[
             ["relieving_date", "is", "set"],
             ["relieving_date", "<=", yesterday],
-            ["status", "=", "Left"],
             ["user_id", "is", "set"],
         ],
         fields=["name", "employee_name", "user_id", "relieving_date"],
@@ -244,7 +243,9 @@ def _notify_hr_managers(doc, item_count, subject=None):
             message = {
                 "message":   subject,
                 "title":     _("Employee Exit Handover"),
-                "indicator": "orange" if item_count else "green",
+                # Green when called after reassignment (subject passed explicitly),
+                # orange when called on initial EEH creation (action needed).
+                "indicator": "green" if subject else ("orange" if item_count else "green"),
                 "alert":     1,
             },
             user         = user,

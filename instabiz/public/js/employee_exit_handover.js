@@ -23,6 +23,16 @@ frappe.ui.form.on("Employee Exit Handover", {
         frm.fields_dict.items.grid.df.cannot_delete_rows = 1;
         frm.fields_dict.items.grid.refresh();
 
+        // Restrict reassign_to to enabled, non-system users only
+        frm.set_query("reassign_to", "items", function () {
+            return {
+                filters: {
+                    enabled: 1,
+                    name: ["not in", ["Administrator", "Guest"]],
+                },
+            };
+        });
+
         if (frm.is_new()) return;
 
         var can_act = (

@@ -23,6 +23,11 @@ class EmployeeExitHandover(Document):
 
         Returns {"reassigned": <int>} — count of documents updated.
         """
+        if frappe.session.user != "Administrator" and not any(
+            r in frappe.get_roles() for r in ("HR Manager", "System Manager")
+        ):
+            frappe.throw(_("Only HR Managers can execute reassignment."), frappe.PermissionError)
+
         if self.status == "Completed":
             frappe.throw(_("This handover is already completed."))
 

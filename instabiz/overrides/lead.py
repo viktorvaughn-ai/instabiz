@@ -3,19 +3,7 @@ from frappe import _
 import urllib.request
 import json as _json
 
-# Roles that can see ALL leads regardless of assignment
-_PRIVILEGED_ROLES = {"System Manager", "Sales Manager"}
-
-
-def _is_privileged(user):
-    # Primary check: does the user have any of the privileged roles directly?
-    if _PRIVILEGED_ROLES & set(frappe.get_roles(user)):
-        return True
-    # Fallback: check role profile name — covers cases where the Role
-    # Profile "Sales Manager" was not configured to propagate the "Sales Manager"
-    # role to the user's Has Role table
-    profile = frappe.db.get_value("User", user, "role_profile_name") or ""
-    return profile in _PRIVILEGED_ROLES
+from instabiz.overrides.permissions import _is_privileged
 
 
 def get_permission_query_conditions(user):
@@ -47,18 +35,21 @@ def has_permission(doc, ptype, user):
         return True
     assigned = doc.lead_owner
     if assigned:
-        # lead_owner is set — use it exclusively (respects transfer/reassignment)
         return assigned == user
-    # lead_owner is blank (pre-dates round-robin) — fall back to owner
     return doc.owner == user
 
 
 def assign_lead_owner(doc, method=None):
-    """
-    Assign lead_owner via round-robin based on the lead's territory.
+    """Assign lead_owner via round-robin based on the lead's territory.
+
     Called on after_insert and on_update (only when territory changes).
+    Never overwrites a lead that already has a manually assigned lead_owner.
     """
     if not doc.territory:
+        return
+
+    # Never overwrite a manually assigned lead_owner
+    if doc.lead_owner:
         return
 
     # On update, skip if territory hasn't changed
@@ -93,8 +84,6 @@ def _do_assign(doc):
 
     team_name = rows[0].name
 
-    # Acquire a per-team advisory lock to prevent concurrent leads from
-    # reading the same rr_index before either has written the next value.
     lock_key = f"ib_rr_{team_name}"
     frappe.db.sql("SELECT GET_LOCK(%s, 10)", lock_key)
     try:
@@ -140,7 +129,6 @@ def get_pincode_info(pincode):
     district = po.get("District", "")
     city     = po.get("Division", "") or district
 
-    # Match territory by state name
     territory = frappe.db.get_value("Territory", state) or None
 
     return {
@@ -153,25 +141,35 @@ def get_pincode_info(pincode):
 
 @frappe.whitelist()
 def transfer_leads(leads, to_user):
-    """Bulk transfer lead ownership to a given user."""
+    """Bulk transfer lead ownership to a given user.
+
+    Restricted to Sales Manager and System Manager only.
+    """
+    if frappe.session.user != "Administrator" and not any(
+        r in frappe.get_roles() for r in ("Sales Manager", "System Manager")
+    ):
+        frappe.throw(_("Only Sales Managers can transfer leads."), frappe.PermissionError)
+
     if isinstance(leads, str):
-        import json
-        leads = json.loads(leads)
+        leads = _json.loads(leads)
+
+    leads = list(leads)
+
+    if not leads:
+        return {"transferred": 0, "to": to_user}
 
     if not frappe.db.exists("User", to_user):
         frappe.throw(_("User {0} not found").format(to_user))
 
     full_name = frappe.db.get_value("User", to_user, "full_name") or to_user
 
-    # Batch UPDATE — single query instead of one per lead
     placeholders = ", ".join(["%s"] * len(leads))
     frappe.db.sql(
         f"UPDATE `tabLead` SET lead_owner = %s, custom_lead_owner_name = %s"
         f" WHERE name IN ({placeholders})",
-        [to_user, full_name] + list(leads),
+        [to_user, full_name] + leads,
     )
 
-    # Batch INSERT all audit comments in one round-trip
     now     = frappe.utils.now()
     actor   = frappe.session.user
     content = _("Lead transferred to {0}").format(full_name)
