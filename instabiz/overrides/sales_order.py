@@ -14,6 +14,7 @@ from instabiz.overrides.utils import (
     map_parent_fields,
     map_address_contact_fields,
     COMMON_PARENT_FIELD_MAP,
+    COMMON_CHILD_FIELD_MAP,
 )
 from instabiz.overrides.naming import autoname_sales_order
 
@@ -132,9 +133,7 @@ def custom_make_delivery_note(source_name, target_doc=None):
                 "postprocess": item_postprocess,
                 "condition": lambda row: row.qty != 0,
                 "field_map": {
-                    "custom_branding":  "custom_branding",
-                    "custom_marking":   "custom_marking",
-                    "custom_thickness": "custom_thickness",
+                    **COMMON_CHILD_FIELD_MAP,
                 },
             },
             "Sales Taxes and Charges": {

@@ -58,6 +58,11 @@ COMMON_PARENT_FIELD_MAP = {
     "custom_sales_person_user": "custom_sales_person_user",
 }
 
+COMMON_CHILD_FIELD_MAP = {
+    "custom_branding":  "custom_branding",
+    "custom_marking":   "custom_marking",
+    "custom_thickness": "custom_thickness",
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Sales person helpers
