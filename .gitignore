@@ -4,5 +4,6 @@
 *.swp
 tags
 node_modules
+scripts
 __pycache__
 scripts
