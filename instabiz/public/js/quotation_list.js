@@ -48,23 +48,6 @@ frappe.listview_settings["Quotation"] = {
 
     // ✅ onload is the correct place for one-time UI additions
     onload(listview) {
-        listview.page.add_field({
-            fieldtype: "Link",
-            fieldname: "party_name",
-            options:   "Customer",
-            label:     "Customer",
-            change() {
-                const val = this.get_value();
-                if (val) {
-                    listview.filter_area.add([
-                        [listview.doctype, "party_name", "=", val],
-                    ]);
-                } else {
-                    listview.filter_area.remove(listview.doctype, "party_name");
-                }
-            },
-        });
-
         ib_hide_sidebar();
     },
 };
