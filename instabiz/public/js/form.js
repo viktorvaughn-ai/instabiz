@@ -78,6 +78,7 @@ IB_DOCTYPES.forEach(function (doctype) {
             }
         },
 
+
         after_save:   (frm) => frm.refresh(),
         on_submit:    (frm) => frm.refresh(),
         after_cancel: (frm) => frm.refresh(),
@@ -108,6 +109,45 @@ IB_DOCTYPES.forEach(function (doctype) {
 
         items_remove: (frm) => frm.refresh_field("items"),
     });
+});
+
+// ── Quotation: Sale Type → clear taxes when Export ───────────────────────────
+
+frappe.ui.form.on("Quotation", {
+    custom_sale_type(frm) {
+        if (frm.doc.custom_sale_type === "Export") {
+            setTimeout(() => {
+                frm.doc.taxes_and_charges = "";
+                frm.refresh_field("taxes_and_charges");
+                frm.clear_table("taxes");
+                frm.refresh_field("taxes");
+            }, 100);
+        } else {
+            frappe.db.get_value(
+                "Sales Taxes and Charges Template",
+                { is_default: 1, company: frm.doc.company },
+                "name"
+            ).then(r => {
+                const tpl_name = r && r.message && r.message.name;
+                if (!tpl_name) return;
+                frappe.db.get_doc("Sales Taxes and Charges Template", tpl_name)
+                    .then(template => {
+                        frm.doc.taxes_and_charges = tpl_name;
+                        frm.refresh_field("taxes_and_charges");
+                        frm.clear_table("taxes");
+                        (template.taxes || []).forEach(row => {
+                            const child = frm.add_child("taxes");
+                            child.charge_type            = row.charge_type;
+                            child.account_head           = row.account_head;
+                            child.description            = row.description;
+                            child.rate                   = row.rate;
+                            child.included_in_print_rate = row.included_in_print_rate;
+                        });
+                        frm.refresh_field("taxes");
+                    });
+            });
+        }
+    },
 });
 
 // ── List-view: Guard to prevent accidental bulk-cancellation of drafts ────────

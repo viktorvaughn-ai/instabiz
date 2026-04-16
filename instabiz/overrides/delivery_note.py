@@ -7,6 +7,7 @@ from instabiz.overrides.utils import (
     IbStatusMixin,
     recalculate_items,
     set_sales_person,
+    sync_sales_team,
     item_postprocess,
     map_parent_fields,
     map_address_contact_fields,
@@ -33,6 +34,7 @@ class CustomDeliveryNote(IbStatusMixin, DeliveryNote):
 
     def validate(self):
         set_sales_person(self)
+        sync_sales_team(self)
         recalculate_items(self)
         super().validate()
 

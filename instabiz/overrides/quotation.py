@@ -31,7 +31,7 @@ def recalculate_quotation(doc, method=None):
 
 def _set_default_taxes(doc):
     """Auto-apply the default Sales Taxes and Charges template on new documents only."""
-    if not doc.is_new() or doc.get("taxes"):
+    if not doc.is_new() or doc.get("taxes") or doc.get("custom_sale_type") == "Export":
         return
     tax_template = frappe.db.get_value(
         "Sales Taxes and Charges Template",
@@ -81,13 +81,15 @@ class CustomQuotation(IbStatusMixin, Quotation):
         autoname_quotation(self)
 
     def before_insert(self):
-        _set_default_taxes(self)
         _set_default_terms(self)
         set_sales_person(self)
 
     def validate(self):
         if not self.custom_location or self.custom_location == "Select":
             frappe.throw(_("Please select a Location before saving."))
+        if self.get("custom_sale_type") == "Export":
+            self.taxes_and_charges = None
+            self.set("taxes", [])
         set_sales_person(self)
         sync_sales_team(self)
         recalculate_items(self)

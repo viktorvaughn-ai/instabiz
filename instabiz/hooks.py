@@ -155,8 +155,9 @@ app_include_css = ["/assets/instabiz/css/instabiz.css"]
 app_include_js  = [
     "https://cdn.jsdelivr.net/npm/iconify-icon@2.1.0/dist/iconify-icon.min.js",  # Iconify icons (CDN)
     "/assets/instabiz/js/pincode.js",               # shared pincode autofill utility
-"/assets/instabiz/js/recalc.js",                # dimension → qty → amount helpers
+    "/assets/instabiz/js/recalc.js",                # dimension → qty → amount helpers
     "/assets/instabiz/js/form.js",                  # form handlers (depends on recalc.js)
+    # ib_stock_dashboard.js is loaded by Frappe's page engine (not global)
     # "/assets/instabiz/js/quotation_list.js",        # Quotation list view
     # "/assets/instabiz/js/sales_order_list.js",      # Sales Order list view
 ]

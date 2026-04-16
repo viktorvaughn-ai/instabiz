@@ -97,7 +97,9 @@ def sync_sales_team(doc):
     if not sp_value:
         return
 
-    sp_name = frappe.db.get_value("Sales Person", {"sales_person_name": sp_value}, "name")
+    sp_name, commission_rate = frappe.db.get_value(
+        "Sales Person", {"sales_person_name": sp_value}, ["name", "commission_rate"]
+    ) or (None, None)
     if not sp_name:
         return
 
@@ -108,6 +110,7 @@ def sync_sales_team(doc):
     doc.append("sales_team", {
         "sales_person": sp_name,
         "allocated_percentage": 100,
+        "commission_rate": commission_rate or 0,
     })
 
 
