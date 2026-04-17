@@ -5,6 +5,41 @@
  * Everything else left to Frappe defaults.
  */
 
+/* ── Navbar: notification bell ripple when unseen ── */
+@keyframes ib-ripple {
+    0%   { transform: translate(-50%, -50%) scale(0.3); opacity: 0.5; }
+    60%  { opacity: 0.25; }
+    100% { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+}
+
+.dropdown-notifications .notifications-unseen {
+    position: relative;
+}
+
+.dropdown-notifications .notifications-unseen::before,
+.dropdown-notifications .notifications-unseen::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1.5px solid var(--text-color);
+    opacity: 0;
+    pointer-events: none;
+    animation: ib-ripple 2s ease-out infinite;
+}
+
+.dropdown-notifications .notifications-unseen::after {
+    animation-delay: 0.9s;
+}
+
+
+.dropdown-notifications .notifications-unseen svg {
+    stroke-width: 2.5px;
+}
+
 /* ─── CSS variables ── */
 :root {
     --ib-primary:       #d97757;
@@ -223,6 +258,7 @@ button[data-label="Submit"] {
     display: flex;
     gap: var(--margin-md);
     align-items: stretch;
+    min-height: 88px;  /* reserve space before data loads — prevents CLS */
 }
 
 .ib-sd-cards .ib-sd-card {
@@ -233,14 +269,13 @@ button[data-label="Submit"] {
     background: var(--card-bg);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius-lg);
-    border-top: 3px solid var(--border-color);
+    border-top: 1px solid var(--border-color);
     padding: var(--padding-lg) var(--padding-xl);
     transition: box-shadow 0.15s;
 }
 
 .ib-sd-card:hover {
     box-shadow: var(--shadow-sm);
-    border-top-color: var(--ib-primary);
 }
 
 .ib-sd-card--active {
@@ -253,7 +288,7 @@ button[data-label="Submit"] {
     color: var(--ib-primary) !important;
 }
 
-/* ── Action buttons (Refresh + Export) ── */
+/* ── Action buttons ── */
 .ib-sd-actions {
     align-self: stretch;
     display: flex;
@@ -261,12 +296,14 @@ button[data-label="Submit"] {
     gap: 8px;
     margin-left: auto;
     justify-content: center;
+    width: 144px;
 }
 
 .ib-sd-action-btn {
     white-space: nowrap;
-    padding: 0 14px;
+    padding: 6px 16px;
     height: 34px;
+    width: 100%;
     background: var(--card-bg);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius-md);
@@ -274,11 +311,11 @@ button[data-label="Submit"] {
     font-weight: 500;
     color: var(--text-color);
     cursor: pointer;
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: center;
     gap: 6px;
-    width: 128px;
+    box-sizing: border-box;
     transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
@@ -293,7 +330,6 @@ button[data-label="Submit"] {
 }
 
 .ib-sd-card--accent {
-    border-top-color: var(--ib-primary);
 }
 
 .ib-sd-card-value {
@@ -310,9 +346,6 @@ button[data-label="Submit"] {
 /* When another card is active, tone down the accent card */
 .ib-sd-cards:has(.ib-sd-card--active) .ib-sd-card--accent:not(.ib-sd-card--active) .ib-sd-card-value {
     color: var(--heading-color);
-}
-.ib-sd-cards:has(.ib-sd-card--active) .ib-sd-card--accent:not(.ib-sd-card--active) {
-    border-top-color: var(--border-color);
 }
 
 .ib-sd-card-label {
@@ -600,6 +633,134 @@ button[data-label="Submit"] {
     text-decoration: underline;
 }
 
+/* ── Clickable rows ── */
+.ib-sd-table tbody tr.ib-sd-row {
+    cursor: pointer;
+}
+.ib-sd-table tbody tr.ib-row-active td {
+    background: var(--ib-tint-mid) !important;
+}
+
+/* ── Live badge — extends .ib-sd-action-btn with green tint ── */
+.ib-sd-live-badge {
+    color: var(--green-600) !important;
+    border-color: var(--green-200, #bbf7d0) !important;
+    transition: background 0.3s, color 0.3s, border-color 0.3s;
+}
+
+.ib-sd-live-badge:hover {
+    border-color: var(--green-400, #4ade80) !important;
+    color: var(--green-700, #15803d) !important;
+}
+
+.ib-sd-live-badge--flash {
+    background: var(--green-50, #f0fdf4) !important;
+    border-color: var(--green-400, #4ade80) !important;
+    color: var(--green-700, #15803d) !important;
+}
+
+/* ── Warehouse breakdown popover ── */
+.ib-sd-breakdown {
+    position: fixed;
+    z-index: 9999;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-lg);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    min-width: 380px;
+    overflow: hidden;
+    font-size: var(--text-sm);
+}
+
+.ib-breakdown-hdr {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--margin-sm);
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--subtle-fg);
+}
+
+.ib-breakdown-name {
+    font-weight: 600;
+    font-size: var(--text-sm);
+    color: var(--heading-color);
+    line-height: 1.3;
+}
+
+.ib-breakdown-code {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.ib-breakdown-close {
+    background: none;
+    border: none;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 0 2px;
+    flex-shrink: 0;
+    margin-top: -1px;
+}
+.ib-breakdown-close:hover { color: var(--ib-primary); }
+
+.ib-breakdown-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.ib-breakdown-table th {
+    padding: 5px 12px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    text-align: right;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--border-color);
+}
+.ib-breakdown-table th:first-child { text-align: left; }
+
+.ib-breakdown-table tbody td {
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-color);
+}
+.ib-breakdown-table tbody tr:last-child td { border-bottom: none; }
+
+.ib-breakdown-table tfoot td {
+    padding: 7px 12px;
+    font-weight: 600;
+    border-top: 2px solid var(--border-color);
+    background: var(--subtle-fg);
+}
+
+.ib-bd-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.ib-bd-reserved { color: var(--text-muted); }
+
+/* ── Search term highlight ── */
+mark.ib-search-hl {
+    background: var(--yellow-200, #fef08a);
+    color: var(--yellow-900, #713f12);
+    border-radius: 2px;
+    padding: 0 1px;
+    font-style: normal;
+    font-weight: 600;
+}
+[data-theme="dark"] mark.ib-search-hl {
+    background: rgba(234, 179, 8, 0.3);
+    color: var(--yellow-300, #fde047);
+}
+
 /* Search match highlight in pagination info */
 .ib-sd-pg-info strong {
     color: var(--ib-primary);
@@ -624,4 +785,139 @@ button[data-label="Submit"] {
         flex-direction: row;
         justify-content: flex-end;
     }
+}
+
+/* ── Over-reserved (danger) card ── */
+.ib-sd-card--danger .ib-sd-card-value {
+    color: var(--red-500);
+}
+.ib-sd-card--danger.ib-sd-card--active {
+    border-color: var(--red-400) !important;
+    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.18);
+}
+
+/* ── Last refresh timestamp ── */
+.ib-sd-refresh-time {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+    white-space: nowrap;
+    margin-top: 2px;
+}
+
+/* ── Live delta row flash ── */
+@keyframes ib-delta-up {
+    0%   { background: var(--green-100, #dcfce7); }
+    100% { background: transparent; }
+}
+@keyframes ib-delta-down {
+    0%   { background: var(--red-100, #fee2e2); }
+    100% { background: transparent; }
+}
+
+.ib-sd-table tbody tr.ib-row-delta-up td {
+    animation: ib-delta-up 2.2s ease-out forwards;
+}
+.ib-sd-table tbody tr.ib-row-delta-down td {
+    animation: ib-delta-down 2.2s ease-out forwards;
+}
+
+/* ── Soft refresh — dim existing rows ── */
+.ib-tbody-dimmed {
+    opacity: 0.4;
+    pointer-events: none;
+    transition: opacity 0.15s;
+}
+
+/* ── Filter chips ── */
+.ib-sd-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    padding: 0 2px;
+}
+
+.ib-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px 3px 10px;
+    background: var(--ib-tint-mid);
+    border: 1px solid var(--ib-tint-border);
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ib-text);
+    white-space: nowrap;
+}
+.ib-chip--uom      { background: var(--blue-50);   border-color: var(--blue-100);   color: var(--blue-700);   }
+.ib-chip--wh       { background: var(--purple-50); border-color: var(--purple-100); color: var(--purple-700); }
+.ib-chip--search   { background: var(--ib-tint-mid); border-color: var(--ib-primary); color: var(--ib-primary); }
+.ib-chip--zero     { background: var(--gray-50);   border-color: var(--gray-200);   color: var(--gray-700);   }
+.ib-chip--stock    { background: var(--green-50);  border-color: var(--green-100);  color: var(--green-700);  }
+.ib-chip--negative { background: var(--red-50);    border-color: var(--red-100);    color: var(--red-700);    }
+.ib-chip--hide     { background: var(--yellow-50); border-color: var(--yellow-200); color: var(--yellow-800); }
+
+.ib-chip-x {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    color: var(--text-muted);
+    padding: 0 1px;
+    display: inline-flex;
+    align-items: center;
+    transition: color 0.1s;
+}
+.ib-chip-x:hover { color: var(--red-500); }
+
+/* ── Low stock row highlight ── */
+.ib-sd-table tbody tr.ib-row-low-stock td {
+    background: var(--yellow-50, #fefce8);
+}
+.ib-sd-table tbody tr.ib-row-low-stock:hover td {
+    background: var(--yellow-100, #fef9c3);
+}
+.ib-sd-table tbody tr.ib-row-low-stock td:first-child {
+    border-left: 3px solid var(--yellow-400, #facc15);
+    padding-left: 11px;
+}
+
+[data-theme="dark"] .ib-sd-table tbody tr.ib-row-low-stock td {
+    background: rgba(234, 179, 8, 0.08);
+}
+[data-theme="dark"] .ib-sd-table tbody tr.ib-row-low-stock:hover td {
+    background: rgba(234, 179, 8, 0.14);
+}
+
+/* ── Popover improvements ── */
+.ib-breakdown-spec {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 3px;
+}
+
+.ib-breakdown-low-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    background: var(--yellow-100, #fef9c3);
+    color: var(--yellow-700, #a16207);
+    border: 1px solid var(--yellow-300, #fde047);
+    vertical-align: middle;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.ib-breakdown-reorder {
+    padding: 6px 12px 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+    border-top: 1px solid var(--border-color);
+    background: var(--subtle-fg);
 }

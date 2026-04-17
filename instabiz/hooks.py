@@ -111,6 +111,25 @@ doc_events = {
         "after_insert": "instabiz.overrides.lead.assign_lead_owner",
         "on_update":    "instabiz.overrides.lead.assign_lead_owner",
     },
+    "Comment": {
+        "after_insert": "instabiz.overrides.comment.notify_owner_on_comment",
+    },
+    "Sales Order": {
+        "on_submit": "instabiz.overrides.stock_events.publish_stock_update",
+        "on_cancel": "instabiz.overrides.stock_events.publish_stock_update",
+    },
+    "Delivery Note": {
+        "on_submit": "instabiz.overrides.stock_events.publish_stock_update",
+        "on_cancel": "instabiz.overrides.stock_events.publish_stock_update",
+    },
+    "Stock Entry": {
+        "on_submit": "instabiz.overrides.stock_events.publish_stock_update",
+        "on_cancel": "instabiz.overrides.stock_events.publish_stock_update",
+    },
+    "Stock Reconciliation": {
+        "on_submit": "instabiz.overrides.stock_events.publish_stock_update",
+        "on_cancel": "instabiz.overrides.stock_events.publish_stock_update",
+    },
 }
 
 # ── Row-level permission restrictions ────────────────────────────────────────
