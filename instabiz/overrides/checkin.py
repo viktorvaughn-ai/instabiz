@@ -121,7 +121,9 @@ def get_daily_attendance(date=None, department=None, search=None, limit=20, offs
 		return {"data": [], "total": 0}
 
 	emp_names = [e.name for e in all_employees]
-	rows = frappe.db.sql(
+
+	# Employee Checkin logs (used for today / recent dates with device data)
+	checkin_rows = frappe.db.sql(
 		"""
 		SELECT employee, log_type, time
 		FROM `tabEmployee Checkin`
@@ -134,8 +136,22 @@ def get_daily_attendance(date=None, department=None, search=None, limit=20, offs
 	)
 
 	logs_by_emp = {}
-	for r in rows:
+	for r in checkin_rows:
 		logs_by_emp.setdefault(r.employee, []).append(r)
+
+	# Submitted Attendance records (covers backfilled / processed months)
+	att_rows = frappe.db.sql(
+		"""
+		SELECT employee, status, in_time, out_time, working_hours
+		FROM `tabAttendance`
+		WHERE employee IN %(employees)s
+		  AND attendance_date = %(date)s
+		  AND docstatus = 1
+		""",
+		{"employees": emp_names, "date": date},
+		as_dict=True,
+	)
+	att_by_emp = {r.employee: r for r in att_rows}
 
 	total = len(all_employees)
 	paged = all_employees[offset: offset + limit]
@@ -165,8 +181,30 @@ def get_daily_attendance(date=None, department=None, search=None, limit=20, offs
 			status     = "IN"
 			work_hours = None
 		else:
-			status     = "Absent"
-			work_hours = None
+			# No checkin logs — fall back to submitted Attendance record
+			att = att_by_emp.get(emp.name)
+			if att:
+				if att.status == "Present":
+					status     = "Present"
+					in_time    = att.in_time
+					out_time   = att.out_time
+					if att.working_hours:
+						h, rem = divmod(int(float(att.working_hours) * 3600), 3600)
+						m      = rem // 60
+						work_hours = f"{h}h {m}m" if h else f"{m}m"
+					else:
+						work_hours = None
+				elif att.status == "Half Day":
+					status     = "Half Day"
+					in_time    = att.in_time
+					out_time   = att.out_time
+					work_hours = None
+				else:
+					status     = "Absent"
+					work_hours = None
+			else:
+				status     = "Absent"
+				work_hours = None
 
 		data.append({
 			"employee":      emp.name,
@@ -180,7 +218,33 @@ def get_daily_attendance(date=None, department=None, search=None, limit=20, offs
 			"last_in":       str(last_in)  if last_in  else None,
 		})
 
-	return {"data": data, "total": total}
+	# Summary counts across ALL employees (not just the current page)
+	# An employee is "present" if they have checkin logs OR a non-Absent submitted attendance
+	def _is_present(e):
+		if logs_by_emp.get(e.name):
+			return True
+		att = att_by_emp.get(e.name)
+		return att and att.status in ("Present", "Half Day")
+
+	present  = sum(1 for e in all_employees if _is_present(e))
+	absent   = sum(1 for e in all_employees if not _is_present(e))
+	still_in = 0
+	for e in all_employees:
+		logs = logs_by_emp.get(e.name, [])
+		has_in  = any(l.log_type == "IN"  for l in logs)
+		has_out = any(l.log_type == "OUT" for l in logs)
+		if has_in and not has_out:
+			still_in += 1
+
+	return {
+		"data":  data,
+		"total": total,
+		"summary": {
+			"present":  present,
+			"absent":   absent,
+			"still_in": still_in,
+		},
+	}
 
 
 def _get_employee_for_user():

@@ -1,44 +1,48 @@
 // ── Constants ──────────────────────────────────────────────────────────────────
 const API = {
-	get_employees: "instabiz.overrides.attendance_terminal.get_employees_with_status",
-	create_checkin: "instabiz.overrides.attendance_terminal.create_checkin",
-	mark_absent:    "instabiz.overrides.attendance_terminal.mark_absent",
+	get_employees:      "instabiz.overrides.attendance_terminal.get_employees_with_status",
+	create_checkin:     "instabiz.overrides.attendance_terminal.create_checkin",
+	mark_absent:        "instabiz.overrides.attendance_terminal.mark_absent",
+	get_terminal_ctx:   "instabiz.overrides.attendance_terminal.get_terminal_context",
 };
 
 const STATUS = {
-	IN:   { label: "In",     color: "green" },
-	OUT:  { label: "Out",    color: "blue"  },
-	DONE: { label: "Out",    color: "blue"  },
+	IN:   { label: "In",  color: "green" },
+	OUT:  { label: "Out", color: "blue"  },
+	DONE: { label: "Out", color: "blue"  },
 };
 
 const TZ = "Asia/Kolkata";
 
 // ── Templates ──────────────────────────────────────────────────────────────────
 const ROW_TEMPLATE = `
-<tr data-employee="{%= emp.name %}" style="border-bottom:1px solid var(--border-color,#d1d8dd);">
-	<td style="padding:10px 12px;width:36px;">
+<tr class="at-row" data-employee="{%= emp.name %}">
+	<td class="at-col-check">
 		<input type="checkbox" class="at-row-check" data-name="{%= emp.name %}">
 	</td>
-	<td style="padding:10px 12px;">
-		<div style="font-weight:600;">{%= frappe.utils.escape_html(emp.employee_name) %}</div>
-		<div style="font-size:11px;color:#888;margin-top:2px;">{%= frappe.utils.escape_html(emp.name) %}</div>
+	<td class="at-col-emp">
+		<div class="at-emp-name">{%= frappe.utils.escape_html(emp.employee_name) %}</div>
+		<div class="at-emp-id">{%= frappe.utils.escape_html(emp.name) %}</div>
+		<div class="at-emp-meta-mobile">
+			{%= frappe.utils.escape_html([emp.department, emp.designation].filter(Boolean).join(" · ")) %}
+		</div>
 	</td>
-	<td class="at-c-dept" style="padding:10px 12px;font-size:12px;color:var(--text-muted,#8d99a6);">{%= frappe.utils.escape_html(emp.department || "·") %}</td>
-	<td class="at-c-role" style="padding:10px 12px;font-size:12px;color:var(--text-muted,#8d99a6);">{%= frappe.utils.escape_html(emp.designation || "·") %}</td>
-	<td class="at-c-stat" style="padding:10px 12px;">
-		<span class="indicator-pill {%= status.color %}" style="font-size:11px;">{%= __(status.label) %}</span>
+	<td class="at-col-dept">{%= frappe.utils.escape_html(emp.department || "·") %}</td>
+	<td class="at-col-role">{%= frappe.utils.escape_html(emp.designation || "·") %}</td>
+	<td class="at-col-stat">
+		<span class="indicator-pill {%= status.color %}">{%= __(status.label) %}</span>
 	</td>
-	<td class="at-c-time" style="padding:10px 12px;font-size:12px;color:var(--text-muted,#8d99a6);line-height:1.6;">{%= last_in %}</td>
-	<td style="padding:10px 12px;">
-		<div style="display:flex;gap:6px;justify-content:flex-end;">
-			<button class="at-btn at-btn-in"     title="Check In"    {%= (is_in || is_done) ? "disabled" : "" %}>
-				<iconify-icon icon="mdi:login-variant"  width="14"></iconify-icon>
+	<td class="at-col-time">{%= last_in %}</td>
+	<td class="at-col-actions">
+		<div class="at-actions">
+			<button class="at-btn at-btn-in"     title="${__("Check In")}"    {%= (is_in || is_done) ? "disabled" : "" %}>
+				<iconify-icon icon="mdi:login-variant"  width="16"></iconify-icon>
 			</button>
-			<button class="at-btn at-btn-out"    title="Check Out"   {%= !is_in ? "disabled" : "" %}>
-				<iconify-icon icon="mdi:logout-variant" width="14"></iconify-icon>
+			<button class="at-btn at-btn-out"    title="${__("Check Out")}"   {%= !is_in ? "disabled" : "" %}>
+				<iconify-icon icon="mdi:logout-variant" width="16"></iconify-icon>
 			</button>
-			<button class="at-btn at-btn-absent" title="Mark Absent" {%= is_done ? "disabled" : "" %}>
-				<iconify-icon icon="mdi:close"          width="14"></iconify-icon>
+			<button class="at-btn at-btn-absent" title="${__("Mark Absent")}" {%= is_done ? "disabled" : "" %}>
+				<iconify-icon icon="mdi:close"          width="16"></iconify-icon>
 			</button>
 		</div>
 	</td>
@@ -50,7 +54,7 @@ function fmt_datetime(str) {
 	const d    = new Date(str);
 	const date = d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", timeZone: TZ });
 	const time = d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: TZ });
-	return `<span style="font-size:10px;color:#aaa;">${date}</span><br>${time}`;
+	return `<span class="at-time-date">${date}</span><br>${time}`;
 }
 
 function make_row(emp) {
@@ -59,10 +63,7 @@ function make_row(emp) {
 	const status  = STATUS[emp.last_log_type] || { label: "Absent", color: "red" };
 
 	return frappe.render(ROW_TEMPLATE, {
-		emp,
-		status,
-		is_in,
-		is_done,
+		emp, status, is_in, is_done,
 		last_in: fmt_datetime(emp.last_checkin_time),
 	});
 }
@@ -70,99 +71,115 @@ function make_row(emp) {
 // ── Page entry point ───────────────────────────────────────────────────────────
 frappe.pages["attendance-terminal"].on_page_load = function (wrapper) {
 	const page  = frappe.ui.make_app_page({ parent: wrapper, title: __("Attendance Terminal"), single_column: true });
-	const state = { all_data: [], total: 0, page_len: 20, offset: 0 };
+	const state = { all_data: [], total: 0, privileged: false };
 
-	page.$title_area.find(".flex").first().append(`
-		<input type="date" class="form-control at-date"
-			style="height:26px;font-size:12px;width:140px;margin-left:10px;padding:2px 8px;"
-			value="${frappe.datetime.get_today()}">`);
+	page.$title_area.find(".flex").first().append(
+		`<input type="date" class="form-control at-date" value="${frappe.datetime.get_today()}">`
+	);
 
 	const $wrap = build_markup(page, state);
 
 	setup_events($wrap, state, page);
 	setup_actions(page, state, $wrap);
 
-	page.add_inner_button(__("Refresh"), () => load(state, $wrap, page, false));
+	page.add_inner_button(__("Refresh"), () => load(state, $wrap, page));
 
-	load(state, $wrap, page, false);
+	frappe.call({
+		method: API.get_terminal_ctx,
+		callback: ({ message: ctx }) => {
+			state.privileged = !!(ctx && ctx.privileged);
+			if (!state.privileged) {
+				// Lock category based on user's own department (office or factory)
+				const cat = (ctx && ctx.category) || "office";
+				$wrap.find(".at-category-wrap").hide();
+				$wrap.find(`.at-category[value='${cat}']`).prop("checked", true);
+				// Non-privileged users always see today only — lock the date picker
+				page.$title_area.find(".at-date").prop("readonly", true).css("pointer-events", "none");
+			}
+			load(state, $wrap, page, false);
+		},
+	});
 
 	frappe.realtime.doctype_subscribe("Employee Checkin");
 	frappe.realtime.off("list_update");
 	frappe.realtime.on("list_update", (data) => {
-		if (data.doctype === "Employee Checkin") load(state, $wrap, page, false);
+		if (data.doctype === "Employee Checkin") load(state, $wrap, page);
 	});
 };
 
 // ── Markup (built once) ────────────────────────────────────────────────────────
 function build_markup(page, state) {
-	const paging_btns = [20, 100, 500, 2500].map(v =>
-		`<button type="button" class="btn btn-default btn-sm btn-paging${v === state.page_len ? " btn-info" : ""}" data-value="${v}">${v}</button>`
-	).join("");
-
 	return $(`
-		<div style="padding:12px 15px 20px;">
-			<div style="border:1px solid var(--border-color,#d1d8dd);border-radius:var(--border-radius,6px);overflow:hidden;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+		<div class="at-wrap">
+			<div class="at-card">
 
-				<div style="display:flex;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border-color,#d1d8dd);background:var(--subtle-fg,#f8f9fa);flex-wrap:wrap;">
-					<input type="text"   class="form-control at-search" placeholder="${__("Search employee…")}" style="height:28px;font-size:12px;width:200px;">
-					<input type="text"   class="form-control at-dept"   placeholder="${__("Department")}"       style="height:28px;font-size:12px;width:160px;">
-					<select class="form-control at-status" style="height:28px;font-size:12px;width:130px;">
+				<div class="at-filter-bar">
+					<input type="text"   class="form-control at-search" placeholder="${__("Search employee…")}">
+					<input type="text"   class="form-control at-dept"   placeholder="${__("Department")}">
+					<select class="form-control at-status">
 						<option value="">${__("All Status")}</option>
 						<option value="In">${__("In")}</option>
 						<option value="Out">${__("Out")}</option>
 						<option value="Absent">${__("Absent")}</option>
 					</select>
+					<div class="at-category-wrap btn-group">
+						<label class="btn btn-default btn-sm at-cat-label">
+							<input type="radio" class="at-category" name="at-category" value="" checked> ${__("All")}
+						</label>
+						<label class="btn btn-default btn-sm at-cat-label">
+							<input type="radio" class="at-category" name="at-category" value="office"> ${__("Office")}
+						</label>
+						<label class="btn btn-default btn-sm at-cat-label">
+							<input type="radio" class="at-category" name="at-category" value="factory"> ${__("Factory")}
+						</label>
+					</div>
 				</div>
 
-				<table style="width:100%;border-collapse:collapse;font-size:13px;">
-					<thead>
-						<tr id="at-hdr-normal" style="background:var(--subtle-fg,#f8f9fa);border-bottom:2px solid var(--border-color,#d1d8dd);">
-							<th style="padding:10px 12px;width:36px;"><input type="checkbox" class="list-check-all"></th>
-							<th style="padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;text-align:left;">${__("Employee")}</th>
-							<th style="padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;text-align:left;">${__("Department")}</th>
-							<th style="padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;text-align:left;">${__("Role")}</th>
-							<th style="padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;text-align:left;">${__("Status")}</th>
-							<th style="padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;text-align:left;">${__("Last In")}</th>
-							<th style="padding:10px 12px;text-align:right;"><span class="at-hdr-count" style="font-size:12px;font-weight:400;color:var(--text-muted,#8d99a6);"></span></th>
-						</tr>
-						<tr id="at-hdr-sel" style="display:none;background:var(--subtle-fg,#f8f9fa);border-bottom:2px solid var(--border-color,#d1d8dd);">
-							<th style="padding:10px 12px;width:36px;"><input type="checkbox" class="list-check-all"></th>
-							<th colspan="6" class="list-header-meta" style="padding:10px 12px;font-size:12px;font-weight:400;color:var(--text-muted,#8d99a6);text-align:left;"></th>
-						</tr>
-					</thead>
-					<tbody class="at-rows"></tbody>
-				</table>
+				<div class="at-table-scroll">
+					<table class="at-table">
+						<thead>
+							<tr id="at-hdr-normal" class="at-hdr">
+								<th class="at-col-check"><input type="checkbox" class="list-check-all"></th>
+								<th class="at-th">${__("Employee")}</th>
+								<th class="at-th at-col-desktop">${__("Department")}</th>
+								<th class="at-th at-col-desktop">${__("Role")}</th>
+								<th class="at-th">${__("Status")}</th>
+								<th class="at-th">${__("Last In")}</th>
+								<th class="at-th at-th-right"><span class="at-hdr-count"></span></th>
+							</tr>
+							<tr id="at-hdr-sel" class="at-hdr" style="display:none;">
+								<th class="at-col-check"><input type="checkbox" class="list-check-all"></th>
+								<th colspan="6" class="list-header-meta at-th"></th>
+							</tr>
+						</thead>
+						<tbody class="at-rows"></tbody>
+					</table>
+				</div>
 			</div>
 
-			<div class="list-paging-area level" style="margin-top:10px;">
-				<div class="level-left"><div class="btn-group">${paging_btns}</div></div>
-				<div class="level-right" style="display:flex;align-items:center;gap:10px;">
-					<span class="at-page-info" style="font-size:12px;color:var(--text-muted,#8d99a6);"></span>
-					<button class="btn btn-default btn-sm btn-more" style="display:none;">${__("Load More")}</button>
-				</div>
+			<div class="at-footer">
+				<span class="at-page-info"></span>
 			</div>
 		</div>
 	`).appendTo(page.main);
 }
 
 // ── Load & render ──────────────────────────────────────────────────────────────
-function load(state, $wrap, page, append) {
-	if (!append) {
-		state.all_data = [];
-		state.offset   = 0;
-		$wrap.find(".at-rows").html(
-			`<tr><td colspan="7" style="text-align:center;color:var(--text-muted,#8d99a6);padding:30px 0;">${__("Loading…")}</td></tr>`
-		);
-		page.hide_actions_menu();
-	}
+function load(state, $wrap, page) {
+	state.all_data = [];
+	$wrap.find(".at-rows").html(
+		`<tr><td colspan="7" class="at-loading">${__("Loading…")}</td></tr>`
+	);
+	page.hide_actions_menu();
 
 	const args = {
-		limit:      state.page_len,
-		offset:     state.offset,
-		date:       $wrap.closest("[data-page-route]").find(".at-date").val() || frappe.datetime.get_today(),
-		search:     $wrap.find(".at-search").val().trim()     || null,
-		department: $wrap.find(".at-dept").val().trim()       || null,
-		status:     $wrap.find(".at-status").val()            || null,
+		limit:             9999,
+		offset:            0,
+		date:              $wrap.closest("[data-page-route]").find(".at-date").val() || frappe.datetime.get_today(),
+		search:            $wrap.find(".at-search").val().trim()             || null,
+		department:        $wrap.find(".at-dept").val().trim()               || null,
+		status:            $wrap.find(".at-status").val()                    || null,
+		employee_category: $wrap.find(".at-category:checked").val()         || null,
 	};
 
 	frappe.call({
@@ -170,27 +187,23 @@ function load(state, $wrap, page, append) {
 		args,
 		callback: ({ message: res = { data: [], total: 0 } }) => {
 			state.total    = res.total;
-			state.all_data = state.all_data.concat(res.data);
-			render(state, $wrap, res.data, append, page);
+			state.all_data = res.data;
+			render(state, $wrap, res.data, page);
 		},
 	});
 }
 
-function render(state, $wrap, new_data, append, page) {
-	const $rows   = $wrap.find(".at-rows");
-	const showing = state.all_data.length;
+function render(state, $wrap, new_data, page) {
+	const $rows = $wrap.find(".at-rows");
+	$rows.empty();
+	$wrap.find(".list-check-all").prop("checked", false);
+	$wrap.find("#at-hdr-normal").show();
+	$wrap.find("#at-hdr-sel").hide();
 
-	if (!append) {
-		$rows.empty();
-		$wrap.find(".list-check-all").prop("checked", false);
-		$wrap.find("#at-hdr-normal").show();
-		$wrap.find("#at-hdr-sel").hide();
-	}
-
-	update_pagination(state, $wrap);
+	update_count(state, $wrap);
 
 	if (!state.total) {
-		$rows.html(`<tr><td colspan="7" style="text-align:center;color:var(--text-muted,#8d99a6);padding:50px 0;">${__("No employees found.")}</td></tr>`);
+		$rows.html(`<tr><td colspan="7" class="at-loading">${__("No employees found.")}</td></tr>`);
 		return;
 	}
 
@@ -215,10 +228,12 @@ function do_checkin(emp, log_type, $row, state, $wrap) {
 		callback: ({ exc }) => {
 			if (exc) { restore_buttons(emp, $row); return; }
 			emp.last_log_type = log_type;
-			$row.find(".at-c-time").html(fmt_datetime(frappe.datetime.now_datetime()));
+			$row.find(".at-col-time").html(fmt_datetime(frappe.datetime.now_datetime()));
 			update_row_ui($row, log_type);
 			frappe.show_alert({
-				message:   log_type === "IN" ? __("{0} checked in", [emp.employee_name]) : __("{0} checked out", [emp.employee_name]),
+				message:   log_type === "IN"
+					? __("{0} checked in", [emp.employee_name])
+					: __("{0} checked out", [emp.employee_name]),
 				indicator: "green",
 			});
 		},
@@ -236,7 +251,7 @@ function do_mark_absent(emp, $row, state, $wrap, page) {
 				$row.fadeOut(200, function () { $(this).remove(); });
 				state.total--;
 				state.all_data = state.all_data.filter(e => e.name !== emp.name);
-				update_pagination(state, $wrap);
+				update_count(state, $wrap);
 				frappe.show_alert({ message: __("{0} marked Absent", [emp.employee_name]), indicator: "red" });
 			},
 		});
@@ -274,13 +289,13 @@ function bulk_action(log_type, state, $wrap, page) {
 							state.all_data = state.all_data.filter(e => e.name !== name);
 						} else {
 							emp.last_log_type = log_type;
-							$row.find(".at-c-time").html(fmt_datetime(frappe.datetime.now_datetime()));
+							$row.find(".at-col-time").html(fmt_datetime(frappe.datetime.now_datetime()));
 							update_row_ui($row, log_type);
 						}
 					}
 					if (--pending === 0) {
 						frappe.show_alert({ message: __("Done"), indicator: "green" });
-						update_pagination(state, $wrap);
+						update_count(state, $wrap);
 						refresh_selection($wrap, page);
 					}
 				},
@@ -293,12 +308,16 @@ function bulk_action(log_type, state, $wrap, page) {
 function setup_events($wrap, state, page) {
 	let search_t, dept_t;
 
-	$wrap.find(".at-search").on("input", () => { clearTimeout(search_t); search_t = setTimeout(() => load(state, $wrap, page, false), 400); });
-	$wrap.find(".at-dept").on("input",   () => { clearTimeout(dept_t);   dept_t   = setTimeout(() => load(state, $wrap, page, false), 500); });
-	$wrap.find(".at-status").on("change", () => load(state, $wrap, page, false));
+	$wrap.find(".at-search").on("input", () => { clearTimeout(search_t); search_t = setTimeout(() => load(state, $wrap, page), 400); });
+	$wrap.find(".at-dept").on("input",   () => { clearTimeout(dept_t);   dept_t   = setTimeout(() => load(state, $wrap, page), 500); });
+	$wrap.find(".at-status").on("change", () => load(state, $wrap, page));
+	$wrap.on("change", ".at-category", () => {
+		$wrap.find(".at-cat-label").removeClass("btn-primary").addClass("btn-default");
+		$wrap.find(".at-category:checked").closest(".at-cat-label").removeClass("btn-default").addClass("btn-primary");
+		load(state, $wrap, page);
+	});
 
-	// Date in title area — need to watch via document since it's outside $wrap
-	$(document).on("change", ".at-date", () => load(state, $wrap, page, false));
+	$(document).on("change", ".at-date", () => load(state, $wrap, page));
 
 	$wrap.on("change", "input[type=checkbox]", function () {
 		if ($(this).hasClass("list-check-all")) {
@@ -309,19 +328,6 @@ function setup_events($wrap, state, page) {
 		refresh_selection($wrap, page);
 	});
 
-	$wrap.on("click", ".btn-paging", function () {
-		const len = parseInt($(this).data("value"));
-		if (len === state.page_len) return;
-		state.page_len = len;
-		$wrap.find(".btn-paging").removeClass("btn-info");
-		$(this).addClass("btn-info");
-		load(state, $wrap, page, false);
-	});
-
-	$wrap.on("click", ".btn-more", () => {
-		state.offset += state.page_len;
-		load(state, $wrap, page, true);
-	});
 }
 
 // ── UI helpers ─────────────────────────────────────────────────────────────────
@@ -340,12 +346,10 @@ function restore_buttons(emp, $row) {
 	$row.find(".at-btn-absent").prop("disabled", emp.last_log_type === "DONE");
 }
 
-function update_pagination(state, $wrap) {
-	const { total, all_data } = state;
-	const showing = all_data.length;
+function update_count(state, $wrap) {
+	const { total } = state;
 	$wrap.find(".at-hdr-count").text(total ? `${total} employees` : "");
-	$wrap.find(".at-page-info").text(total ? `${total} employee${total !== 1 ? "s" : ""} · showing ${showing}` : "");
-	$wrap.find(".btn-more").toggle(showing < total);
+	$wrap.find(".at-page-info").text(total ? `${total} employee${total !== 1 ? "s" : ""}` : "");
 }
 
 function refresh_selection($wrap, page) {

@@ -1,0 +1,667 @@
+frappe.pages["ib-stock-ledger"].on_page_load = function (wrapper) {
+	frappe.ui.make_app_page({
+		parent:        wrapper,
+		title:         __("IB Stock Ledger"),
+		single_column: true,
+	});
+	wrapper.ledger = new IbStockLedger(wrapper);
+};
+
+frappe.pages["ib-stock-ledger"].on_page_show = function (wrapper) {
+	if (!wrapper.ledger) return;
+	const opts = frappe.route_options || {};
+	if (opts.item_code) {
+		wrapper.ledger._prefill_item = opts.item_code;
+		frappe.route_options = null;
+	}
+	wrapper.ledger._restore_filters();
+	wrapper.ledger.refresh();
+	wrapper.ledger._live.start();
+};
+
+frappe.pages["ib-stock-ledger"].on_page_hide = function (wrapper) {
+	if (!wrapper.ledger) return;
+	wrapper.ledger._live.stop();
+	wrapper.ledger._auto.stop();
+	clearTimeout(wrapper.ledger._search_debounce);
+	$(document).off("keydown.ib-stock-ledger");
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+const _COLS = [
+	{ key: "posting_datetime",      label: "Date",    sortable: true  },
+	{ key: "item_code",             label: "Item",    sortable: true  },
+	{ key: null,                    label: "WH",      sortable: false },
+	{ key: "qty_in",                label: "In",      sortable: true,  num: true },
+	{ key: "qty_out",               label: "Out",     sortable: true,  num: true },
+	{ key: "qty_after_transaction", label: "Balance", sortable: true,  num: true },
+	{ key: "party",                 label: "Party",   sortable: true  },
+	{ key: "voucher_no",            label: "Voucher", sortable: false },
+	{ key: "rate",                  label: "Rate",    sortable: true,  num: true },
+];
+
+const _DEFAULT_FROM = () => frappe.datetime.add_days(frappe.datetime.get_today(), -30);
+const _DEFAULT_TO   = () => frappe.datetime.get_today();
+
+class IbStockLedger {
+	constructor(wrapper) {
+		this.wrapper          = wrapper;
+		this.page             = wrapper.page;
+		this._data            = [];
+		this._filtered_data   = [];
+		this._total           = 0;
+		this._summary         = {};
+		this._page            = 1;
+		this._page_size       = 50;
+		this._loading         = false;
+		this._restoring       = false;
+		this._prefill_item    = null;
+		this._last_refresh    = null;
+		this._sort            = { col: null, asc: true };
+		this._search_tokens   = [];
+		this._search_chips    = [];
+		this._search_debounce = null;
+		this._STORAGE_KEY     = "ib_sl_v3";
+
+		this._live = IBStock.make_live("ib-stock-ledger", () => {
+			this.refresh({ soft: true });
+			this._flash_live();
+		});
+		this._auto = IBStock.make_auto_refresh(900, "ib-stock-ledger", () => this.refresh());
+
+		this._setup_filters();
+		this._setup_content();
+		this._setup_keyboard();
+	}
+
+	// ── Filters ──────────────────────────────────────────────────────────────
+
+	_setup_filters() {
+		this.f_item = this.page.add_field({
+			fieldname: "item_code",
+			label:     __("Item"),
+			fieldtype: "Link",
+			options:   "Item",
+			change:    () => { if (!this._restoring) this._reset_and_refresh(); },
+		});
+
+		this.f_warehouse = this.page.add_field({
+			fieldname: "warehouse",
+			label:     __("Warehouse"),
+			fieldtype: "Select",
+			options:   "\nMAHARASHTRA - IB\nCHENNAI - IB\nGUJARAT - IB",
+			change:    () => { if (!this._restoring) this._reset_and_refresh(); },
+		});
+
+		this.f_uom = this.page.add_field({
+			fieldname: "uom",
+			label:     __("UOM"),
+			fieldtype: "Select",
+			options:   "\nSQMT\nPCS\nKG",
+			change:    () => { if (!this._restoring) this._reset_and_refresh(); },
+		});
+
+		this.f_from = this.page.add_field({
+			fieldname: "from_date",
+			label:     __("From"),
+			fieldtype: "Date",
+			default:   _DEFAULT_FROM(),
+			change:    () => { if (!this._restoring) this._reset_and_refresh(); },
+		});
+
+		this.f_to = this.page.add_field({
+			fieldname: "to_date",
+			label:     __("To"),
+			fieldtype: "Date",
+			default:   _DEFAULT_TO(),
+			change:    () => { if (!this._restoring) this._reset_and_refresh(); },
+		});
+
+		this.f_vtype = this.page.add_field({
+			fieldname: "voucher_type",
+			label:     __("Voucher Type"),
+			fieldtype: "Select",
+			options:   "\nDelivery Note\nSales Invoice\nSales Order\nPurchase Receipt\nPurchase Invoice\nPurchase Order\nStock Entry\nStock Reconciliation",
+			change:    () => { if (!this._restoring) this._reset_and_refresh(); },
+		});
+
+		this.f_search = this.page.add_field({
+			fieldname:   "search",
+			label:       __("Search"),
+			fieldtype:   "Data",
+			placeholder: __("item, party, voucher…"),
+		});
+		$(this.f_search.wrapper).css("margin-left", "auto");
+
+		const $inp = $(this.f_search.wrapper).find("input");
+		$inp.on("input", () => {
+			clearTimeout(this._search_debounce);
+			this._search_debounce = setTimeout(() => this._apply_client_filter(), 160);
+		});
+		$inp.on("keydown", (e) => {
+			if (e.key === "Enter") {
+				const val = $inp.val().trim();
+				if (!val) return;
+				e.preventDefault();
+				clearTimeout(this._search_debounce);
+				this._search_chips.push(val);
+				$inp.val("");
+				this._apply_client_filter();
+			} else if (e.key === "Backspace" && $inp.val() === "") {
+				if (this._search_chips.length) {
+					this._search_chips.pop();
+					this._apply_client_filter();
+				}
+			}
+		});
+	}
+
+	// ── Layout ───────────────────────────────────────────────────────────────
+
+	_setup_content() {
+		this.$body = $(this.wrapper).find(".layout-main-section");
+		this.$body.addClass("ib-sl-page");
+
+		const thead_html = _COLS.map(c => {
+			const num  = c.num      ? " ib-sl-th-num" : "";
+			const sort = c.sortable ? ` data-col="${c.key}" class="ib-sl-th-sortable${num}"` : `class="${num}"`;
+			return `<th${sort}>${__(c.label)}<span class="ib-sort-icon"></span></th>`;
+		}).join("");
+
+		this.$content = $(`
+			<div class="ib-sl-wrap">
+				<div class="ib-sl-cards"></div>
+				<div class="ib-sl-chips" style="display:none"></div>
+				<div class="ib-sl-status-bar"></div>
+				<div class="ib-sl-table-wrap">
+					<table class="ib-sl-table">
+						<thead class="ib-sl-thead"><tr>${thead_html}</tr></thead>
+						<tbody class="ib-sl-tbody"></tbody>
+					</table>
+					<div class="ib-sl-empty" style="display:none"></div>
+				</div>
+				<div class="ib-sl-pagination"></div>
+			</div>
+		`).appendTo(this.$body);
+
+		this.$cards    = this.$content.find(".ib-sl-cards");
+		this.$chips    = this.$content.find(".ib-sl-chips");
+		this.$tbody    = this.$content.find(".ib-sl-tbody");
+		this.$empty    = this.$content.find(".ib-sl-empty");
+		this.$status   = this.$content.find(".ib-sl-status-bar");
+		this.$pg       = this.$content.find(".ib-sl-pagination");
+
+		this.$content.find(".ib-sl-th-sortable").on("click", (e) => {
+			const col = $(e.currentTarget).data("col");
+			this._sort.asc = (this._sort.col === col) ? !this._sort.asc : true;
+			this._sort.col = col;
+			this._update_sort_icons();
+			this._apply_client_filter();
+		});
+	}
+
+	_setup_keyboard() {
+		$(document).on("keydown.ib-stock-ledger", (e) => {
+			if (frappe.get_route()[0] !== "ib-stock-ledger") return;
+			const tag = (e.target.tagName || "").toLowerCase();
+			if (tag === "input" || tag === "textarea" || tag === "select") return;
+			if (e.metaKey || e.ctrlKey || e.altKey) return;
+			if (e.key.length !== 1) return;
+			$(this.f_search.wrapper).find("input").first().focus();
+		});
+	}
+
+	// ── Data fetch ────────────────────────────────────────────────────────────
+
+	_reset_and_refresh() {
+		this._data          = [];
+		this._filtered_data = [];
+		this._page          = 1;
+		this._search_chips  = [];
+		$(this.f_search.wrapper).find("input").val("");
+		this.$tbody.empty();
+		this.refresh();
+	}
+
+	refresh({ soft = false } = {}) {
+		if (this._loading) return;
+
+		if (this._prefill_item) {
+			this._restoring = true;
+			this.f_item.set_value(this._prefill_item);
+			this._prefill_item = null;
+			this._restoring    = false;
+		}
+
+		this._save_filters();
+		this._auto.stop();
+		this._auto.start();
+		this._loading = true;
+
+		const offset = (this._page - 1) * this._page_size;
+
+		if (!soft) {
+			this.$tbody.empty();
+			this.$status.html(`
+				<span class="ib-sl-spinner"><div class="ib-sl-spin"></div>${__("Loading…")}</span>
+			`);
+		}
+
+		frappe.call({
+			method: "instabiz.instabiz.page.ib_stock_ledger.ib_stock_ledger.get_ledger",
+			args: {
+				item_code:    this.f_item.get_value()      || null,
+				warehouse:    this.f_warehouse.get_value() || null,
+				from_date:    this.f_from.get_value()      || null,
+				to_date:      this.f_to.get_value()        || null,
+				voucher_type: this.f_vtype.get_value()     || null,
+				uom:          this.f_uom.get_value()       || null,
+				limit:        this._page_size,
+				offset,
+			},
+			callback: (r) => {
+				this._loading      = false;
+				if (!r.message) return;
+				const { data, total, summary } = r.message;
+				this._total        = total;
+				this._summary      = summary || {};
+				this._data         = data;
+				this._last_refresh = new Date();
+				this._render_cards();
+				this._apply_client_filter();
+			},
+			error: () => { this._loading = false; },
+		});
+	}
+
+	// ── Stat cards ────────────────────────────────────────────────────────────
+
+	_render_cards() {
+		const fmt   = n => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+		const ts    = this._last_refresh
+			? this._last_refresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+			: "";
+
+		this.$cards.html(`
+			<div class="ib-sl-card">
+				<div class="ib-sl-card-value">${(this._total || 0).toLocaleString()}</div>
+				<div class="ib-sl-card-label">${__("Total Entries")}</div>
+			</div>
+			<div class="ib-sl-card ib-sl-card--in">
+				<div class="ib-sl-card-value">↑ ${fmt(this._summary.qty_in)}</div>
+				<div class="ib-sl-card-label">${__("Total IN")}</div>
+			</div>
+			<div class="ib-sl-card ib-sl-card--out">
+				<div class="ib-sl-card-value">↓ ${fmt(this._summary.qty_out)}</div>
+				<div class="ib-sl-card-label">${__("Total OUT")}</div>
+			</div>
+			<div class="ib-sl-actions">
+				<button class="ib-sl-action-btn ib-sl-export-btn" title="${__("Export current view as CSV")}">
+					<svg class="icon icon-sm"><use href="#es-line-down"></use></svg>
+					${__("Export CSV")}
+				</button>
+				${ts ? `<span class="ib-sl-refresh-time">${__("Updated")} ${ts}</span>` : ""}
+			</div>
+		`);
+
+		this.$cards.find(".ib-sl-export-btn").on("click", () => this._export_csv());
+		this.$cards.find(".ib-sl-live-badge").on("click", () => this.refresh());
+	}
+
+	_flash_live() {
+		this.$cards.find(".ib-sl-live-badge").addClass("ib-sl-live-badge--flash");
+		setTimeout(() => this.$cards.find(".ib-sl-live-badge").removeClass("ib-sl-live-badge--flash"), 400);
+	}
+
+	// ── Client-side filter + sort + render ────────────────────────────────────
+
+	_apply_client_filter() {
+		const live        = ($(this.f_search.wrapper).find("input").val() || "").trim();
+		const live_tokens = live.toLowerCase().split(/\s+/).filter(Boolean);
+		const chip_tokens = this._search_chips.map(c => c.toLowerCase());
+		this._search_tokens = [...chip_tokens, ...live_tokens];
+
+		let rows = [...this._data];
+
+		if (this._search_tokens.length) {
+			rows = rows.filter(r => {
+				const hay = [
+					r.item_code, r.item_name, r.party, r.voucher_no,
+					r.wh_short, r.vtype_short, r.color, r.custom_thickness,
+				].join(" ").toLowerCase();
+				return this._search_tokens.every(t => hay.includes(t));
+			});
+		}
+
+		rows = IBStock.sort_rows(rows, this._sort.col, this._sort.asc);
+
+		this._filtered_data = rows;
+		this.$tbody.empty();
+		this.$empty.hide();
+
+		if (rows.length) {
+			this._render_rows(rows);
+		} else {
+			this._show_empty();
+		}
+
+		this._render_chips();
+		this._update_status();
+		this._update_sort_icons();
+		this._render_pagination();
+	}
+
+	// ── Rendering ─────────────────────────────────────────────────────────────
+
+	_render_rows(data) {
+		const esc = frappe.utils.escape_html;
+		const hl  = (v) => IBStock.highlight(v, this._search_tokens);
+
+		data.forEach(r => {
+			const direction = r.actual_qty > 0 ? "in" : r.actual_qty < 0 ? "out" : "zero";
+			const spec_html = this._spec_html(r);
+
+			const item_link = `/app/item/${encodeURIComponent(r.item_code)}`;
+			const doc_link  = r.voucher_no
+				? `/app/${(r.voucher_type || "").toLowerCase().replace(/ /g, "-")}/${encodeURIComponent(r.voucher_no)}`
+				: "#";
+
+			const wh_cls = { MH: "ib-sl-wh--mh", CN: "ib-sl-wh--cn", GJ: "ib-sl-wh--gj" }[r.wh_short] || "";
+			const vt_cls = {
+				DN: "ib-sl-vt--dn", SI: "ib-sl-vt--si", SO: "ib-sl-vt--so",
+				PR: "ib-sl-vt--pr", PI: "ib-sl-vt--pi", PO: "ib-sl-vt--po",
+				SE: "ib-sl-vt--se", SR: "ib-sl-vt--sr",
+			}[r.vtype_short] || "";
+
+			const in_html   = r.qty_in  ? `<span class="ib-sl-qty-in">+${frappe.format(r.qty_in,  { fieldtype: "Float" })}</span>` : `<span class="ib-sl-nil">—</span>`;
+			const out_html  = r.qty_out ? `<span class="ib-sl-qty-out">−${frappe.format(r.qty_out, { fieldtype: "Float" })}</span>` : `<span class="ib-sl-nil">—</span>`;
+			const rate_html = r.rate    ? frappe.format(r.rate, { fieldtype: "Currency" }) : `<span class="ib-sl-nil">—</span>`;
+
+			const $tr = $(`
+				<tr class="ib-sl-row ib-sl-row--${direction}">
+					<td class="ib-sl-td-date">${esc(r.posting_dt_str)}</td>
+					<td class="ib-sl-td-item">
+						<a href="${item_link}" class="ib-sl-item-code">${hl(r.item_code)}</a>
+						${spec_html ? `<div class="ib-sl-spec">${spec_html}</div>` : ""}
+					</td>
+					<td><span class="ib-sl-wh-badge ${wh_cls}">${esc(r.wh_short)}</span></td>
+					<td class="ib-sl-td-num">${in_html}</td>
+					<td class="ib-sl-td-num">${out_html}</td>
+					<td class="ib-sl-td-num">
+						<span class="ib-sl-balance">${frappe.format(r.qty_after_transaction, { fieldtype: "Float" })}</span>
+						<span class="ib-sl-uom">${esc(r.stock_uom || "")}</span>
+					</td>
+					<td class="ib-sl-td-party"><span class="ib-sl-party">${hl(r.party || "—")}</span></td>
+					<td class="ib-sl-td-voucher">
+						<span class="ib-sl-vtype-badge ${vt_cls}">${esc(r.vtype_short)}</span>
+						<a href="${doc_link}" class="ib-sl-voucher-no" target="_blank">${hl(r.voucher_no || "")}</a>
+					</td>
+					<td class="ib-sl-td-num">${rate_html}</td>
+				</tr>
+			`);
+			this.$tbody.append($tr);
+		});
+	}
+
+	_spec_html(r) {
+		const esc   = frappe.utils.escape_html;
+		const parts = [];
+		const uom   = r.stock_uom;
+
+		if (uom === "SQMT") {
+			if (r.width_mm)            parts.push(esc(String(r.width_mm)));
+			if (r.length_mtr)          parts.push(esc(String(r.length_mtr)));
+			if (r.custom_thickness)    parts.push(esc(r.custom_thickness));
+			if (r.color)               parts.push(IBStock.color_dots(r.color) + esc(r.color));
+			if (r.custom_liner)        parts.push(esc(r.custom_liner));
+		} else if (uom === "PCS") {
+			if (r.color)               parts.push(IBStock.color_dots(r.color) + esc(r.color));
+		} else if (uom === "KG") {
+			if (r.custom_adhesive_type) parts.push(esc(r.custom_adhesive_type));
+		}
+		return parts.join(' <span class="ib-sl-spec-sep">·</span> ');
+	}
+
+	// ── Filter chips ─────────────────────────────────────────────────────────
+
+	_render_chips() {
+		const esc   = frappe.utils.escape_html;
+		const chips = [];
+
+		const _server_clear = (fn) => () => {
+			this._restoring = true;
+			Promise.resolve(fn()).finally(() => { this._restoring = false; this._reset_and_refresh(); });
+		};
+
+		const item = this.f_item.get_value();
+		if (item) chips.push({ label: item, type: "item",
+			clear: _server_clear(() => this.f_item.set_value("")) });
+
+		const wh = this.f_warehouse.get_value();
+		if (wh) chips.push({ label: wh.split(" - ")[0], type: "wh",
+			clear: _server_clear(() => this.f_warehouse.set_value("")) });
+
+		const uom = this.f_uom.get_value();
+		if (uom) chips.push({ label: uom, type: `uom-${uom.toLowerCase()}`,
+			clear: _server_clear(() => this.f_uom.set_value("")) });
+
+		const vtype = this.f_vtype.get_value();
+		if (vtype) chips.push({ label: vtype, type: "vtype",
+			clear: _server_clear(() => this.f_vtype.set_value("")) });
+
+		// Date range chip — show when non-default
+		const from  = this.f_from.get_value();
+		const to    = this.f_to.get_value();
+		const def_f = _DEFAULT_FROM();
+		const def_t = _DEFAULT_TO();
+		if (from !== def_f || to !== def_t) {
+			chips.push({
+				label: `${from} → ${to}`,
+				type:  "date",
+				clear: _server_clear(() => {
+					this.f_from.set_value(def_f);
+					this.f_to.set_value(def_t);
+				}),
+			});
+		}
+
+		this._search_chips.forEach((chip, idx) => {
+			chips.push({
+				label: `"${chip}"`,
+				type:  "search",
+				clear: () => { this._search_chips.splice(idx, 1); this._apply_client_filter(); },
+			});
+		});
+
+		if (!chips.length) { this.$chips.empty().hide(); return; }
+
+		this.$chips.html(
+			chips.map((c, i) =>
+				`<span class="ib-chip ib-chip--${c.type}" data-idx="${i}">${esc(c.label)}<button class="ib-chip-x" aria-label="${__("Remove")}">×</button></span>`
+			).join("")
+		).show();
+
+		this.$chips.find(".ib-chip").each((i, el) => {
+			$(el).find(".ib-chip-x").on("click", (ev) => { ev.stopPropagation(); chips[i].clear(); });
+		});
+
+		if (chips.length > 1) {
+			this.$chips.append(`<button class="ib-chip-clear-all">${__("Clear all")}</button>`);
+			this.$chips.find(".ib-chip-clear-all").on("click", () => this._clear_all());
+		}
+	}
+
+	// ── Status bar ────────────────────────────────────────────────────────────
+
+	_update_status() {
+		const shown = this._filtered_data.length;
+		const total = this._total;
+
+		const in_rows  = this._filtered_data.filter(r => r.actual_qty > 0).length;
+		const out_rows = this._filtered_data.filter(r => r.actual_qty < 0).length;
+
+		const is_filtered = shown < this._data.length;
+		const count_txt   = is_filtered
+			? `<strong>${shown}</strong> ${__("matches")} <span class="text-muted">(${this._data.length} ${__("on page")})</span>`
+			: `<strong>${shown}</strong> ${__("entries")}`;
+
+		this.$status.html(`
+			<span class="ib-sl-status-text">
+				${count_txt}
+				&nbsp;·&nbsp;
+				<span class="ib-sl-stat-in">↑ ${in_rows} IN</span>
+				&nbsp;
+				<span class="ib-sl-stat-out">↓ ${out_rows} OUT</span>
+			</span>
+		`);
+	}
+
+	// ── Pagination ────────────────────────────────────────────────────────────
+
+	_render_pagination() {
+		const total     = this._total;
+		const ps        = this._page_size;
+		const max_pages = Math.max(Math.ceil(total / ps), 1);
+		const start     = (this._page - 1) * ps + 1;
+		const end       = Math.min(this._page * ps, total);
+		const sizes     = [50, 100, 250];
+
+		if (total === 0) { this.$pg.empty(); return; }
+
+		const count_label = `${start}–${end} ${__("of")} <strong>${total}</strong>`;
+
+		this.$pg.html(`
+			<div class="ib-sl-pg-left">
+				<span class="ib-sl-pg-info">${count_label}</span>
+				<div class="ib-sl-pg-nav">
+					<button class="ib-sl-pg-btn" data-action="prev" ${this._page <= 1 ? "disabled" : ""}>&#8249;</button>
+					<span class="ib-sl-pg-num">${this._page} / ${max_pages}</span>
+					<button class="ib-sl-pg-btn" data-action="next" ${this._page >= max_pages ? "disabled" : ""}>&#8250;</button>
+				</div>
+			</div>
+			<div class="ib-sl-pg-right">
+				<span>${__("Per page")}</span>
+				${sizes.map(s => `
+					<button class="ib-sl-pg-size ${this._page_size === s ? "active" : ""}" data-size="${s}">${s}</button>
+				`).join("")}
+			</div>
+		`);
+
+		this.$pg.find("[data-action='prev']").on("click", () => {
+			this._page--;
+			this._save_filters();
+			this.refresh();
+		});
+		this.$pg.find("[data-action='next']").on("click", () => {
+			this._page++;
+			this._save_filters();
+			this.refresh();
+		});
+		this.$pg.find(".ib-sl-pg-size").on("click", (e) => {
+			this._page_size = parseInt($(e.currentTarget).data("size"));
+			this._page      = 1;
+			this._save_filters();
+			this.refresh();
+		});
+	}
+
+	// ── Sort icons ────────────────────────────────────────────────────────────
+
+	_update_sort_icons() {
+		this.$content.find(".ib-sl-th-sortable").each((_, th) => {
+			const col = $(th).data("col");
+			$(th).find(".ib-sort-icon").text(
+				this._sort.col === col ? (this._sort.asc ? " ↑" : " ↓") : ""
+			);
+			$(th).toggleClass("ib-sl-th-active", this._sort.col === col);
+		});
+	}
+
+	// ── Empty state ───────────────────────────────────────────────────────────
+
+	_show_empty() {
+		const item = this.f_item.get_value();
+		const msg  = this._search_tokens.length
+			? __("No entries match your search")
+			: item
+				? __("No stock movements for {0} in this period", [item])
+				: __("No entries — try a wider date range or remove filters");
+		this.$empty.html(`<div class="ib-sl-empty-msg"><div class="ib-sl-empty-icon">📭</div>${msg}</div>`).show();
+	}
+
+	// ── CSV export ────────────────────────────────────────────────────────────
+
+	_export_csv() {
+		if (!this._filtered_data.length) { frappe.msgprint(__("Nothing to export.")); return; }
+		IBStock.csv_download(
+			`IB_Stock_Ledger_${frappe.datetime.get_today()}.csv`,
+			[
+				__("Date"), __("Item Code"), __("Item Name"),
+				__("Width"), __("Length"), __("Thickness"), __("Color"), __("Liner"),
+				__("Warehouse"), __("In Qty"), __("Out Qty"), __("Balance"),
+				__("UOM"), __("Party"), __("Voucher Type"), __("Voucher No"), __("Rate"),
+			],
+			IBStock.sort_rows(this._filtered_data, this._sort.col, this._sort.asc),
+			r => [
+				r.posting_dt_str, r.item_code, r.item_name,
+				r.width_mm || "", r.length_mtr || "", r.custom_thickness || "",
+				r.color || "", r.custom_liner || "",
+				r.warehouse, r.qty_in || 0, r.qty_out || 0, r.qty_after_transaction,
+				r.stock_uom, r.party || "", r.voucher_type, r.voucher_no, r.rate || 0,
+			]
+		);
+	}
+
+	// ── Filter persistence ────────────────────────────────────────────────────
+
+	_save_filters() {
+		try {
+			localStorage.setItem(this._STORAGE_KEY, JSON.stringify({
+				item_code:    this.f_item.get_value()      || "",
+				warehouse:    this.f_warehouse.get_value() || "",
+				uom:          this.f_uom.get_value()       || "",
+				from_date:    this.f_from.get_value()      || "",
+				to_date:      this.f_to.get_value()        || "",
+				voucher_type: this.f_vtype.get_value()     || "",
+				sort_col:     this._sort.col  || "",
+				sort_asc:     this._sort.asc  ? 1 : 0,
+				page_size:    this._page_size,
+			}));
+		} catch (_) {}
+	}
+
+	_restore_filters() {
+		if (this._prefill_item) return;
+		try {
+			const saved = JSON.parse(localStorage.getItem(this._STORAGE_KEY) || "null");
+			if (!saved) return;
+			this._restoring = true;
+			if (saved.item_code)    this.f_item.set_value(saved.item_code);
+			if (saved.warehouse)    this.f_warehouse.set_value(saved.warehouse);
+			if (saved.uom)          this.f_uom.set_value(saved.uom);
+			if (saved.from_date)    this.f_from.set_value(saved.from_date);
+			if (saved.to_date)      this.f_to.set_value(saved.to_date);
+			if (saved.voucher_type) this.f_vtype.set_value(saved.voucher_type);
+			if (saved.sort_col)     { this._sort.col = saved.sort_col; this._sort.asc = !!saved.sort_asc; }
+			if (saved.page_size)    this._page_size = saved.page_size;
+			this._restoring = false;
+		} catch (_) { this._restoring = false; }
+	}
+
+	_clear_all() {
+		this._restoring = true;
+		this.f_item.set_value("");
+		this.f_warehouse.set_value("");
+		this.f_uom.set_value("");
+		this.f_from.set_value(_DEFAULT_FROM());
+		this.f_to.set_value(_DEFAULT_TO());
+		this.f_vtype.set_value("");
+		this._restoring    = false;
+		this._search_chips = [];
+		this._sort         = { col: null, asc: true };
+		this._page         = 1;
+		$(this.f_search.wrapper).find("input").val("");
+		this._reset_and_refresh();
+	}
+}

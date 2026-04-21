@@ -11,8 +11,13 @@ frappe.pages["ib-stock-dashboard"].on_page_show = function (wrapper) {
 	if (!wrapper.dashboard) return;
 	wrapper.dashboard._restore_filters();
 	wrapper.dashboard.refresh();
-	wrapper.dashboard._start_live();
-	wrapper.dashboard._start_auto_refresh();
+	wrapper.dashboard._live.start();
+};
+
+frappe.pages["ib-stock-dashboard"].on_page_hide = function (wrapper) {
+	if (!wrapper.dashboard) return;
+	wrapper.dashboard._live.stop();
+	wrapper.dashboard._auto.stop();
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -28,17 +33,20 @@ class IBStockDashboard {
 		this._active_card   = null;
 		this._page          = 1;
 		this._page_size     = 20;
+		this._ncols         = 6;
 		this._restoring     = false;
-		this._auto_timer    = null;
-		this._auto_secs     = 900;
-		this._AUTO_SECS     = 900;
-		this._$breakdown    = null;
+		this._last_refresh  = null;
+		this._search_debounce = null;
+		this._search_tokens = [];
+		this._search_chips  = [];
 		this._STORAGE_KEY   = "ib_sd_v1";
-		this._live_debounce    = null;
-		this._live_active      = false;
-		this._last_refresh     = null;
-		this._search_debounce  = null;
-		this._search_tokens    = [];
+
+		this._live = IBStock.make_live("ib-stock-dashboard", () => {
+			this.refresh({ soft: true });
+			this._flash_live();
+		});
+		this._auto = IBStock.make_auto_refresh(900, "ib-stock-dashboard", () => this.refresh());
+
 		this._setup_filters();
 		this._setup_content();
 		this._setup_keyboard();
@@ -70,9 +78,7 @@ class IBStockDashboard {
 			default:   0,
 			change:    () => {
 				if (this._restoring) return;
-				this._active_card = null;
-				this._sync_cards();
-				this.refresh();
+				this._apply_search();
 			},
 		});
 
@@ -80,17 +86,36 @@ class IBStockDashboard {
 
 		this.f_search = this.page.add_field({
 			fieldname:   "search",
-			label:       __("Type / to focus search"),
+			label:       __("Search"),
 			fieldtype:   "Data",
-			placeholder: __("item name, code, spec… (or press /)"),
+			placeholder: __("name, code, colour, size…"),
 		});
 		$(this.f_search.wrapper).css("margin-left", "auto");
 
-		// Native input event — fires on every keystroke, debounced
-		$(this.f_search.wrapper).find("input").on("input", () => {
+		const $inp = $(this.f_search.wrapper).find("input");
+
+		$inp.on("input", () => {
 			if (this._restoring) return;
 			clearTimeout(this._search_debounce);
 			this._search_debounce = setTimeout(() => this._apply_search(), 160);
+		});
+
+		$inp.on("keydown", (e) => {
+			if (this._restoring) return;
+			if (e.key === "Enter") {
+				const val = $inp.val().trim();
+				if (!val) return;
+				e.preventDefault();
+				clearTimeout(this._search_debounce);
+				this._search_chips.push(val);
+				$inp.val("");
+				this._apply_search();
+			} else if (e.key === "Backspace" && $inp.val() === "") {
+				if (this._search_chips.length) {
+					this._search_chips.pop();
+					this._apply_search();
+				}
+			}
 		});
 	}
 
@@ -123,15 +148,18 @@ class IBStockDashboard {
 	_setup_keyboard() {
 		$(document).on("keydown.ib-stock-dashboard", (e) => {
 			if (frappe.get_route()[0] !== "ib-stock-dashboard") return;
-			const tag = (e.target.tagName || "").toLowerCase();
-			if (tag === "input" || tag === "textarea") return;
 
-			if (e.key === "/") {
-				e.preventDefault();
-				$(this.f_search.wrapper).find("input").first().focus().select();
-			} else if (e.key === "Escape" && this._$breakdown) {
+			if (e.key === "Escape" && this._$breakdown) {
 				this._close_breakdown();
+				return;
 			}
+
+			const tag = (e.target.tagName || "").toLowerCase();
+			if (tag === "input" || tag === "textarea" || tag === "select") return;
+			if (e.metaKey || e.ctrlKey || e.altKey) return;
+			if (e.key.length !== 1) return;
+
+			$(this.f_search.wrapper).find("input").first().focus();
 		});
 	}
 
@@ -140,13 +168,14 @@ class IBStockDashboard {
 	_save_filters() {
 		try {
 			localStorage.setItem(this._STORAGE_KEY, JSON.stringify({
-	
-				uom:         this.f_uom.get_value()        || "",
-				warehouse:   this.f_warehouse.get_value()  || "",
-				hide_zero:   this.f_hide_zero.get_value()  ? 1 : 0,
-				sort_col:    this._sort.col  || "",
-				sort_asc:    this._sort.asc  ? 1 : 0,
-				page_size:   this._page_size,
+				uom:          this.f_uom.get_value()          || "",
+				warehouse:    this.f_warehouse.get_value()    || "",
+				hide_zero:    this.f_hide_zero.get_value()    ? 1 : 0,
+				search:       $(this.f_search.wrapper).find("input").val() || "",
+				search_chips: this._search_chips,
+				sort_col:     this._sort.col  || "",
+				sort_asc:     this._sort.asc  ? 1 : 0,
+				page_size:    this._page_size,
 			}));
 		} catch (_) {}
 	}
@@ -156,9 +185,11 @@ class IBStockDashboard {
 			const saved = JSON.parse(localStorage.getItem(this._STORAGE_KEY) || "null");
 			if (!saved) return;
 			this._restoring = true;
-			if (saved.uom)        this.f_uom.set_value(saved.uom);
-			if (saved.warehouse)  this.f_warehouse.set_value(saved.warehouse);
+			if (saved.uom)         this.f_uom.set_value(saved.uom);
+			if (saved.warehouse)   this.f_warehouse.set_value(saved.warehouse);
 			this.f_hide_zero.set_input(saved.hide_zero || 0);
+			if (saved.search)      $(this.f_search.wrapper).find("input").val(saved.search);
+			if (Array.isArray(saved.search_chips)) this._search_chips = saved.search_chips;
 			if (saved.sort_col) {
 				this._sort.col = saved.sort_col;
 				this._sort.asc = !!saved.sort_asc;
@@ -170,29 +201,7 @@ class IBStockDashboard {
 		}
 	}
 
-	// ── Auto-refresh ──────────────────────────────────────────────────────────
-
-	_start_auto_refresh() {
-		this._stop_auto_refresh();
-		if (this._auto_secs <= 0 || this._auto_secs > this._AUTO_SECS) {
-			this._auto_secs = this._AUTO_SECS;
-		}
-		this._auto_timer = setInterval(() => {
-			if (document.hidden || frappe.get_route()[0] !== "ib-stock-dashboard") return;
-			this._auto_secs--;
-			if (this._auto_secs <= 0) {
-				this._auto_secs = this._AUTO_SECS;
-				this.refresh();
-			}
-		}, 1000);
-	}
-
-	_stop_auto_refresh() {
-		if (this._auto_timer) {
-			clearInterval(this._auto_timer);
-			this._auto_timer = null;
-		}
-	}
+	// ── Live badge ────────────────────────────────────────────────────────────
 
 	_flash_live() {
 		const $badge = this.$content.find(".ib-sd-live-badge");
@@ -200,91 +209,21 @@ class IBStockDashboard {
 		setTimeout(() => $badge.removeClass("ib-sd-live-badge--flash"), 1200);
 	}
 
-	_flash_delta_rows(prev) {
-		const changes = [];
-
-		// Diff ALL data — treat items absent from prev (were zero/hidden) as { stock:0, available:0 }
-		this._data.forEach(cur => {
-			const p         = prev[cur.item_code] || { stock: 0, available: 0 };
-			const availDiff = Number(cur.total_available) - p.available;
-			if (availDiff === 0 && Number(cur.total_stock) === p.stock) return;
-			changes.push({
-				name:    cur.item_name || cur.item_code,
-				before:  p.available,
-				after:   Number(cur.total_available),
-				diff:    availDiff,
-				is_zero: Number(cur.total_available) === 0,
-			});
-		});
-
-		// Flash only rows currently rendered in the DOM
-		this.$content.find("tbody tr.ib-sd-row").each((_, tr) => {
-			const $tr       = $(tr);
-			const item_code = $tr.data("item-code");
-			const p         = prev[item_code] || { stock: 0, available: 0 };
-			const cur       = this._data.find(r => r.item_code === item_code);
-			if (!cur) return;
-			const availDiff = Number(cur.total_available) - p.available;
-			if (availDiff === 0 && Number(cur.total_stock) === p.stock) return;
-			const cls = availDiff >= 0 ? "ib-row-delta-up" : "ib-row-delta-down";
-			$tr.addClass(cls);
-			setTimeout(() => $tr.removeClass(cls), 2200);
-		});
-
-	}
-
-	// ── Live WebSocket updates ────────────────────────────────────────────────
-
-	_start_live() {
-		if (!this._live_active) {
-			frappe.realtime.doctype_subscribe("Bin");
-			this._live_active = true;
-		}
-		frappe.realtime.off("ib_stock_update");
-		frappe.realtime.on("ib_stock_update", () => {
-			if (frappe.get_route()[0] !== "ib-stock-dashboard") return;
-			clearTimeout(this._live_debounce);
-			this._live_debounce = setTimeout(() => {
-				this.refresh({ soft: true });
-				this._flash_live();
-			}, 1500);
-		});
-	}
-
-	_stop_live() {
-		frappe.realtime.off("ib_stock_update");
-		if (this._live_active) {
-			frappe.realtime.doctype_unsubscribe("Bin");
-			this._live_active = false;
-		}
-		clearTimeout(this._live_debounce);
-	}
-
 	// ── Data fetch ────────────────────────────────────────────────────────────
 
 	refresh({ soft = false } = {}) {
-		this._page      = 1;
-		this._auto_secs = this._AUTO_SECS;
+		this._page = 1;
+		this._auto.stop();
+		this._auto.start();
 		this._close_breakdown();
 		this._save_filters();
-
-		// Snapshot stock levels before soft refresh so we can flash changed rows after
-		const prev = (soft && this._data.length)
-			? Object.fromEntries(this._data.map(r => [r.item_code, {
-				stock:     Number(r.total_stock),
-				available: Number(r.total_available),
-			}]))
-			: null;
-
 		this._set_loading(soft);
 
 		frappe.call({
 			method: "instabiz.instabiz.page.ib_stock_dashboard.ib_stock_dashboard.get_stock_data",
 			args: {
-				uom:             this.f_uom.get_value()        || null,
-				warehouse:       this.f_warehouse.get_value()  || null,
-				hide_zero_stock: this._get_hide_zero(),
-				show_zero_only:  this._active_card === "zero" ? 1 : 0,
+				uom:       this.f_uom.get_value()       || null,
+				warehouse: this.f_warehouse.get_value() || null,
 			},
 			callback: (r) => {
 				this.$content.find("tbody").removeClass("ib-tbody-dimmed");
@@ -293,26 +232,17 @@ class IBStockDashboard {
 				this._data         = r.message.data;
 				this._summary      = r.message.summary;
 				this._render_cards(r.message.summary);
-				this._apply_search();  // applies card filter + search tokens + renders
-				if (prev) this._flash_delta_rows(prev);
+				this._apply_search();
 			},
 			error: () => {
 				this.$content.find("tbody").removeClass("ib-tbody-dimmed");
-				const n = this._columns().length;
 				this.$content.find("tbody").html(
-					`<tr><td colspan="${n}" class="ib-sd-loading" style="color:var(--red-500)">
+					`<tr><td colspan="${this._ncols}" class="ib-sd-loading" style="color:var(--red-500)">
 						${__("Failed to load. Open console for details.")}
 					</td></tr>`
 				);
 			},
 		});
-	}
-
-	_get_hide_zero() {
-		if (this._active_card === "zero")     return 0;
-		if (this._active_card === "stock")    return 1;
-		if (this._active_card === "negative") return 0;
-		return this.f_hide_zero.get_value() ? 1 : 0;
 	}
 
 	_set_loading(soft = false) {
@@ -321,13 +251,11 @@ class IBStockDashboard {
 		this.$content.find(".ib-sd-pagination").empty();
 
 		if (soft) {
-			// Keep existing rows visible but dimmed during background refresh
 			this.$content.find("tbody").addClass("ib-tbody-dimmed");
 		} else {
-			const n = this._columns().length;
 			this.$content.find("tbody").html(`
 				<tr>
-					<td colspan="${n}" class="ib-sd-loading">
+					<td colspan="${this._ncols}" class="ib-sd-loading">
 						<span class="ib-sd-spinner">
 							<span></span><span></span><span></span>
 						</span>
@@ -341,10 +269,11 @@ class IBStockDashboard {
 
 	_render_cards(s) {
 		const cards = [
-			{ id: "all",      label: __("Total Items"),   value: s.total,    accent: true  },
-			{ id: "stock",    label: __("In Stock"),      value: s.in_stock                },
-			{ id: "zero",     label: __("Zero Stock"),    value: s.zero                    },
-			{ id: "negative", label: __("Over-reserved"), value: s.negative, danger: true  },
+			{ id: "all",      label: __("Total Items"),   value: s.total,     accent: true  },
+			{ id: "stock",    label: __("In Stock"),      value: s.in_stock                 },
+			{ id: "low",      label: __("Low Stock"),     value: s.low_stock, warn: true    },
+			{ id: "zero",     label: __("Zero Stock"),    value: s.zero                     },
+			{ id: "negative", label: __("Over-reserved"), value: s.negative,  danger: true  },
 		];
 
 		const ts = this._last_refresh
@@ -354,9 +283,11 @@ class IBStockDashboard {
 		const $cards = this.$content.find(".ib-sd-cards");
 		$cards.html(cards.map(c => {
 			const is_active  = this._active_card === c.id;
+			const is_warn    = c.warn   && c.value > 0;
 			const is_danger  = c.danger && c.value > 0;
 			let cls = "ib-sd-card";
 			if (c.accent)   cls += " ib-sd-card--accent";
+			if (is_warn)    cls += " ib-sd-card--warn";
 			if (is_danger)  cls += " ib-sd-card--danger";
 			if (is_active)  cls += " ib-sd-card--active";
 			return `
@@ -395,19 +326,23 @@ class IBStockDashboard {
 
 	_on_card_click(id) {
 		if (id === "all") {
-			this._active_card = null;
-			this._restoring = true;
+			this._active_card  = null;
+			this._search_chips = [];
+			this._restoring    = true;
 			this.f_uom.set_value("");
 			this.f_warehouse.set_value("");
 			this.f_hide_zero.set_input(0);
 			this.f_search.set_value("");
+			$(this.f_search.wrapper).find("input").val("");
 			this._restoring = false;
 			this._filtered_data = [];
+			this._sync_cards();
+			this.refresh();
 		} else {
 			this._active_card = (this._active_card === id) ? null : id;
+			this._sync_cards();
+			this._apply_search();
 		}
-		this._sync_cards();
-		this.refresh();
 	}
 
 	// ── Active filter chips ───────────────────────────────────────────────────
@@ -417,7 +352,7 @@ class IBStockDashboard {
 		const esc    = frappe.utils.escape_html;
 		const chips  = [];
 
-		const _clear = (fn) => () => {
+		const _clear_server = (fn) => () => {
 			this._restoring = true;
 			Promise.resolve(fn()).finally(() => {
 				this._restoring = false;
@@ -426,20 +361,32 @@ class IBStockDashboard {
 		};
 
 		const uom = this.f_uom.get_value();
-		if (uom) chips.push({ label: uom, type: "uom", clear: _clear(() => this.f_uom.set_value("")) });
+		if (uom) chips.push({ label: uom, type: `uom-${uom.toLowerCase()}`, clear: _clear_server(() => this.f_uom.set_value("")) });
 
 		const wh = this.f_warehouse.get_value();
-		if (wh) chips.push({ label: wh.split(" - ")[0], type: "wh", clear: _clear(() => this.f_warehouse.set_value("")) });
+		if (wh) chips.push({ label: wh.split(" - ")[0], type: "wh", clear: _clear_server(() => this.f_warehouse.set_value("")) });
 
 		if (this.f_hide_zero.get_value()) {
-			chips.push({ label: __("Hide Zero"), type: "hide", clear: _clear(() => this.f_hide_zero.set_input(0)) });
+			chips.push({ label: __("Hide Zero"), type: "hide", clear: () => {
+				this.f_hide_zero.set_input(0);
+				this._apply_search();
+			}});
 		}
 
-		const q = (this.f_search.get_value() || "").trim();
-		if (q) chips.push({ label: `"${q}"`, type: "search", clear: _clear(() => this.f_search.set_value("")) });
+		this._search_chips.forEach((chip, idx) => {
+			chips.push({
+				label: `"${chip}"`,
+				type:  "search",
+				clear: () => {
+					this._search_chips.splice(idx, 1);
+					this._apply_search();
+				},
+			});
+		});
 
 		const card_labels = {
 			stock:    __("In Stock"),
+			low:      __("Low Stock"),
 			zero:     __("Zero Stock"),
 			negative: __("Over-reserved"),
 		};
@@ -447,7 +394,7 @@ class IBStockDashboard {
 			chips.push({
 				label: card_labels[this._active_card],
 				type:  this._active_card,
-				clear: () => { this._active_card = null; this._sync_cards(); this.refresh(); },
+				clear: () => { this._active_card = null; this._sync_cards(); this._apply_search(); },
 			});
 		}
 
@@ -462,6 +409,11 @@ class IBStockDashboard {
 		$chips.find(".ib-chip").each((i, el) => {
 			$(el).find(".ib-chip-x").on("click", (ev) => { ev.stopPropagation(); chips[i].clear(); });
 		});
+
+		if (chips.length > 1) {
+			$chips.append(`<button class="ib-chip-clear-all">${__("Clear all")}</button>`);
+			$chips.find(".ib-chip-clear-all").on("click", () => this._on_card_click("all"));
+		}
 	}
 
 	// ── Table ─────────────────────────────────────────────────────────────────
@@ -481,6 +433,7 @@ class IBStockDashboard {
 
 	_render_table(data) {
 		const cols   = this._columns();
+		this._ncols  = cols.length;
 		const $thead = this.$content.find("thead");
 		const $tbody = this.$content.find("tbody");
 		const $empty = this.$content.find(".ib-sd-empty");
@@ -510,8 +463,26 @@ class IBStockDashboard {
 
 		if (!data || data.length === 0) {
 			$scroll.hide();
-			const q = (this.f_search.get_value() || "").trim();
-			$empty.text(q ? __("No items match your search") : __("No items found")).show();
+			const has_search = this._search_tokens.length > 0;
+			let msg;
+			if (this._active_card === "zero" && !has_search) {
+				msg = __("All items have stock");
+			} else if (this._active_card === "negative" && !has_search) {
+				msg = __("No over-reserved items");
+			} else if (this._active_card === "low" && !has_search) {
+				msg = __("No low stock items");
+			} else if (has_search) {
+				const terms = [
+					...this._search_chips,
+					($(this.f_search.wrapper).find("input").val() || "").trim(),
+				].filter(Boolean);
+				msg = terms.length
+					? `${__("No matches for")} "${terms.join('", "')}"`
+					: __("No items match your search");
+			} else {
+				msg = __("No items found for these filters");
+			}
+			$empty.text(msg).show();
 			this.$content.find(".ib-sd-pagination").empty();
 			return;
 		}
@@ -519,37 +490,28 @@ class IBStockDashboard {
 		$empty.hide();
 		$scroll.show();
 
-		let rows = [...data];
-		if (this._sort.col) {
-			rows.sort((a, b) => {
-				const va = a[this._sort.col], vb = b[this._sort.col];
-				if (typeof va === "number") return this._sort.asc ? va - vb : vb - va;
-				return this._sort.asc
-					? String(va).localeCompare(String(vb))
-					: String(vb).localeCompare(String(va));
-			});
-		}
+		const rows = IBStock.sort_rows(data, this._sort.col, this._sort.asc);
 
 		const total     = rows.length;
 		const ps        = this._page_size;
 		const max_pages = Math.ceil(total / ps);
 		if (this._page > max_pages) this._page = max_pages || 1;
-		const start = (this._page - 1) * ps;
-		const end   = Math.min(start + ps, total);
-		rows = rows.slice(start, end);
+		const start   = (this._page - 1) * ps;
+		const end     = Math.min(start + ps, total);
+		const page_rows = rows.slice(start, end);
 		this._render_pagination(total, start, end, max_pages);
 
 		const esc = frappe.utils.escape_html;
 
-		$tbody.html(rows.map(row => {
+		$tbody.html(page_rows.map(row => {
 			const low_cls = row.low_stock ? " ib-row-low-stock" : "";
 			return `
 				<tr class="ib-sd-row${low_cls}" data-item-code="${esc(row.item_code || "")}"
 					title="${__("Click to see warehouse breakdown")}">
-					<td class="ib-col-name">${this._highlight(row.item_name, this._search_tokens)}</td>
+					<td class="ib-col-name">${IBStock.highlight(row.item_name, this._search_tokens)}</td>
 					<td class="ib-col-code">
 						<a href="/app/item/${encodeURIComponent(row.item_code)}" target="_blank">
-							${this._highlight(row.item_code, this._search_tokens)}
+							${IBStock.highlight(row.item_code, this._search_tokens)}
 						</a>
 					</td>
 					<td class="ib-col-spec">${this._spec_cell(row)}</td>
@@ -573,32 +535,37 @@ class IBStockDashboard {
 		});
 	}
 
-	_highlight(raw, tokens) {
-		let text = frappe.utils.escape_html(raw || "");
-		if (!tokens || !tokens.length) return text;
-		tokens.forEach(t => {
-			const re = new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
-			text = text.replace(re, m => `<mark class="ib-search-hl">${m}</mark>`);
-		});
-		return text;
-	}
-
 	_apply_search() {
-		const query  = ($(this.f_search.wrapper).find("input").val() || "").trim();
-		const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
-		this._search_tokens = tokens;
+		this._save_filters();
+		const live        = ($(this.f_search.wrapper).find("input").val() || "").trim();
+		const live_tokens = live.toLowerCase().split(/\s+/).filter(Boolean);
+		const chip_tokens = this._search_chips.map(c => c.toLowerCase());
+		const all_tokens  = [...chip_tokens, ...live_tokens];
+		this._search_tokens = all_tokens;
 
-		// Base: apply card-level filter first
 		let base = this._data;
-		if (this._active_card === "negative") {
-			base = this._data.filter(r => Number(r.total_available) < 0);
+		if      (this._active_card === "stock")    base = base.filter(r => Number(r.total_stock) > 0);
+		else if (this._active_card === "zero")     base = base.filter(r => Number(r.total_stock) === 0);
+		else if (this._active_card === "negative") base = base.filter(r => Number(r.total_available) < 0);
+		else if (this._active_card === "low")      base = base.filter(r => r.low_stock);
+
+		if (this.f_hide_zero.get_value() && this._active_card !== "zero") {
+			base = base.filter(r => Number(r.total_stock) !== 0);
 		}
 
-		this._filtered_data = tokens.length
+		this._filtered_data = all_tokens.length
 			? base.filter(row => {
-				const hay = [row.item_name || "", row.item_code || "", row.specification || ""]
-					.join(" ").toLowerCase();
-				return tokens.every(t => hay.includes(t));
+				const hay = [
+					row.item_name      || "",
+					row.item_code      || "",
+					row.specification  || "",
+					row.spec_color     || "",
+					row.spec_liner     || "",
+					row.spec_thickness || "",
+					row.spec_adhesive  || "",
+					row.spec_sqmt ? String(row.spec_sqmt) : "",
+				].join(" ").toLowerCase();
+				return all_tokens.every(t => hay.includes(t));
 			})
 			: base;
 
@@ -654,51 +621,86 @@ class IBStockDashboard {
 	_show_breakdown(row, e) {
 		this._close_breakdown();
 
-		const esc = frappe.utils.escape_html;
+		const esc         = frappe.utils.escape_html;
+		const total_stock = Number(row.total_stock   || 0);
+		const total_avail = Number(row.total_available || 0);
+
 		const whs = [
-			{ label: "Maharashtra", stock: row.maharashtra || 0, res: row.mh_reserved || 0 },
-			{ label: "Chennai",     stock: row.chennai     || 0, res: row.cn_reserved || 0 },
-			{ label: "Gujarat",     stock: row.gujarat     || 0, res: row.gj_reserved || 0 },
+			{ label: "Maharashtra", stock: Number(row.maharashtra || 0), res: Number(row.mh_reserved || 0), reorder: Number(row.mh_reorder_level || 0) },
+			{ label: "Chennai",     stock: Number(row.chennai     || 0), res: Number(row.cn_reserved  || 0), reorder: Number(row.cn_reorder_level || 0) },
+			{ label: "Gujarat",     stock: Number(row.gujarat     || 0), res: Number(row.gj_reserved  || 0), reorder: Number(row.gj_reorder_level || 0) },
 		];
+		const total_res     = whs.reduce((s, w) => s + w.res, 0);
+		const total_reorder = whs.reduce((s, w) => s + w.reorder, 0);
+		const max_stock     = Math.max(...whs.map(w => w.stock), 1);
+
+		let status, status_cls;
+		if (total_stock === 0)    { status = __("No Stock");      status_cls = "ib-status--none";   }
+		else if (total_avail < 0) { status = __("Over-reserved"); status_cls = "ib-status--danger"; }
+		else if (row.low_stock)   { status = __("Low Stock");     status_cls = "ib-status--warn";   }
+		else                      { status = __("Healthy");        status_cls = "ib-status--good";   }
 
 		const rows_html = whs.map(w => {
-			const avail = Number(w.stock) - Number(w.res);
-			const cls   = avail < 0 ? "ib-qty-negative" : avail > 0 ? "ib-qty-positive" : "ib-qty-zero";
+			const avail     = w.stock - w.res;
+			const avail_cls = avail < 0 ? "ib-qty-negative" : avail > 0 ? "ib-qty-positive" : "ib-qty-zero";
+			const bar_pct   = Math.round(w.stock / max_stock * 100);
+			const res_pct   = w.stock > 0 ? Math.round(w.res / w.stock * 100) : 0;
+			const res_label = w.res > 0
+				? `${w.res.toLocaleString()} <span class="ib-bd-pct">(${res_pct}%)</span>`
+				: `<span class="ib-bd-zero">—</span>`;
+			const reorder_label = w.reorder > 0
+				? w.reorder.toLocaleString()
+				: `<span class="ib-bd-zero">—</span>`;
 			return `<tr>
-				<td>${w.label}</td>
-				<td class="ib-bd-num">${Number(w.stock).toLocaleString()}</td>
-				<td class="ib-bd-num ib-bd-reserved">${Number(w.res).toLocaleString()}</td>
-				<td class="ib-bd-num"><span class="${cls}">${avail.toLocaleString()}</span></td>
+				<td class="ib-bd-loc">${w.label}</td>
+				<td class="ib-bd-num">
+					${w.stock.toLocaleString()}
+					<div class="ib-bd-bar">
+						<div class="ib-bd-bar-stock" style="width:${bar_pct}%">
+							<div class="ib-bd-bar-res" style="width:${res_pct}%"></div>
+						</div>
+					</div>
+				</td>
+				<td class="ib-bd-num ib-bd-reserved">${res_label}</td>
+				<td class="ib-bd-num ib-bd-reorder">${reorder_label}</td>
+				<td class="ib-bd-num"><span class="${avail_cls}">${avail.toLocaleString()}</span></td>
 			</tr>`;
 		}).join("");
 
-		const total_res = whs.reduce((s, w) => s + Number(w.res), 0);
-		const avail_cls = Number(row.total_available) < 0 ? "ib-qty-negative"
-			: Number(row.total_available) > 0 ? "ib-qty-positive" : "ib-qty-zero";
+		const avail_cls     = total_avail < 0 ? "ib-qty-negative" : total_avail > 0 ? "ib-qty-positive" : "ib-qty-zero";
+		const tot_res_pct   = total_stock > 0 ? Math.round(total_res / total_stock * 100) : 0;
+		const tot_res_label = total_res > 0
+			? `${total_res.toLocaleString()} <span class="ib-bd-pct">(${tot_res_pct}%)</span>`
+			: `<span class="ib-bd-zero">—</span>`;
+		const tot_reorder_label = total_reorder > 0
+			? total_reorder.toLocaleString()
+			: `<span class="ib-bd-zero">—</span>`;
 
-		const low_badge = row.low_stock
-			? `<span class="ib-breakdown-low-badge">${__("Low Stock")}</span>`
-			: "";
-		const reorder_footer = row.reorder_level
-			? `<div class="ib-breakdown-reorder">${__("Reorder level")}: ${Number(row.reorder_level).toLocaleString()}</div>`
-			: "";
+		const saved_tokens  = this._search_tokens;
+		this._search_tokens = [];
+		const spec_html     = this._spec_cell(row);
+		this._search_tokens = saved_tokens;
+		const has_spec      = row.spec_dimension || row.spec_thickness || row.spec_color || row.spec_liner;
 
 		const $pop = $(`
 			<div class="ib-sd-breakdown">
 				<div class="ib-breakdown-hdr">
-					<div>
-						<div class="ib-breakdown-name">${esc(row.item_name || "")}${low_badge}</div>
-						<div class="ib-breakdown-code">${esc(row.item_code || "")}</div>
-						${row.specification ? `<div class="ib-breakdown-spec">${esc(row.specification)}</div>` : ""}
+					<div class="ib-breakdown-meta">
+						<div class="ib-breakdown-name">${esc(row.item_name || "")}</div>
+						<a class="ib-breakdown-code" href="/app/item/${encodeURIComponent(row.item_code || "")}" target="_blank">${esc(row.item_code || "")}</a>
+						${has_spec ? `<div class="ib-breakdown-tags">${spec_html}</div>` : ""}
+						<span class="ib-breakdown-uom">${esc(row.uom || "")}</span>
 					</div>
 					<button class="ib-breakdown-close" title="${__("Close")}">×</button>
 				</div>
+				<div class="ib-breakdown-status ${status_cls}">${status}</div>
 				<table class="ib-breakdown-table">
 					<thead>
 						<tr>
-							<th>${__("Location")}</th>
+							<th>${__("Warehouse")}</th>
 							<th>${__("Stock")}</th>
 							<th>${__("Reserved")}</th>
+							<th>${__("Reorder")}</th>
 							<th>${__("Available")}</th>
 						</tr>
 					</thead>
@@ -706,62 +708,74 @@ class IBStockDashboard {
 					<tfoot>
 						<tr>
 							<td>${__("Total")}</td>
-							<td class="ib-bd-num">${Number(row.total_stock || 0).toLocaleString()}</td>
-							<td class="ib-bd-num ib-bd-reserved">${total_res.toLocaleString()}</td>
-							<td class="ib-bd-num"><span class="${avail_cls}">${Number(row.total_available || 0).toLocaleString()}</span></td>
+							<td class="ib-bd-num">${total_stock.toLocaleString()}</td>
+							<td class="ib-bd-num ib-bd-reserved">${tot_res_label}</td>
+							<td class="ib-bd-num ib-bd-reorder">${tot_reorder_label}</td>
+							<td class="ib-bd-num"><span class="${avail_cls}">${total_avail.toLocaleString()}</span></td>
 						</tr>
 					</tfoot>
 				</table>
-				${reorder_footer}
+				<div class="ib-breakdown-footer">
+					<a class="ib-breakdown-report-link" href="#"
+						data-item="${frappe.utils.escape_html(row.item_code || "")}">
+						${__("View Stock Ledger")} →
+					</a>
+				</div>
 			</div>
 		`).css({ visibility: "hidden", position: "fixed", left: 0, top: 0 })
 			.appendTo("body");
 
-		const pw = $pop.outerWidth();
-		const ph = $pop.outerHeight();
-		const cx = e.clientX + 14;
-		const cy = e.clientY + 14;
-		$pop.css({
-			visibility: "visible",
-			left: Math.min(cx, window.innerWidth  - pw - 12),
-			top:  Math.min(cy, window.innerHeight - ph - 12),
-		});
+		const $backdrop = $('<div class="ib-breakdown-backdrop"></div>').appendTo("body");
+		$backdrop.on("click", () => this._close_breakdown());
+
+		const pw   = $pop.outerWidth();
+		const ph   = $pop.outerHeight();
+		const left = (window.innerWidth - e.clientX) >= pw + 20
+			? e.clientX + 14
+			: e.clientX - pw - 14;
+		const top  = Math.max(8, Math.min(e.clientY + 14, window.innerHeight - ph - 12));
+		$pop.css({ visibility: "visible", left, top });
 
 		this.$content.find("tbody tr").removeClass("ib-row-active");
 		this.$content.find(`tbody tr[data-item-code="${esc(row.item_code)}"]`).addClass("ib-row-active");
 
 		$pop.find(".ib-breakdown-close").on("click", () => this._close_breakdown());
 
-		setTimeout(() => {
-			$(document).one("click.ib-breakdown", (ev) => {
-				if (!$(ev.target).closest(".ib-sd-breakdown").length) this._close_breakdown();
-			});
-			$(document).one("keydown.ib-breakdown", (ev) => {
-				if (ev.key === "Escape") this._close_breakdown();
-			});
-		}, 0);
+		$pop.find(".ib-breakdown-report-link").on("click", (ev) => {
+			ev.preventDefault();
+			const item_code = $(ev.currentTarget).data("item");
+			this._close_breakdown();
+			frappe.route_options = { item_code };
+			frappe.set_route("ib-stock-ledger");
+		});
 
+		this._$backdrop  = $backdrop;
 		this._$breakdown = $pop;
 	}
 
 	_close_breakdown() {
-		if (this._$breakdown) {
-			this._$breakdown.remove();
-			this._$breakdown = null;
-			$(document).off("click.ib-breakdown keydown.ib-breakdown");
-		}
+		if (this._$backdrop)  { this._$backdrop.remove();  this._$backdrop  = null; }
+		if (this._$breakdown) { this._$breakdown.remove(); this._$breakdown = null; }
 		this.$content && this.$content.find("tbody tr").removeClass("ib-row-active");
 	}
 
 	// ── Spec cell ─────────────────────────────────────────────────────────────
 
 	_spec_cell(row) {
-		const hl    = (v) => this._highlight(v, this._search_tokens);
+		const hl         = (v) => IBStock.highlight(v, this._search_tokens);
+		const color_html = row.spec_color
+			? `${IBStock.color_dots(row.spec_color)}${hl(row.spec_color)}`
+			: null;
+		const dim_text = row.spec_dimension
+			? hl(row.spec_dimension) + (row.spec_sqmt
+				? ` <span class="ib-spec-sqmt">${hl(String(row.spec_sqmt))} SQMT</span>`
+				: "")
+			: null;
 		const parts = [
-			row.spec_dimension ? { cls: "ib-spec-dim",   text: hl(row.spec_dimension) } : null,
+			row.spec_dimension ? { cls: "ib-spec-dim",   text: dim_text              } : null,
 			row.spec_thickness ? { cls: "ib-spec-thick", text: hl(row.spec_thickness) } : null,
-			row.spec_color     ? { cls: "ib-spec-color", text: hl(row.spec_color)     } : null,
-			row.spec_liner     ? { cls: "ib-spec-liner", text: hl(row.spec_liner)     } : null,
+			row.spec_color     ? { cls: "ib-spec-color", text: color_html              } : null,
+			row.spec_liner     ? { cls: "ib-spec-liner", text: hl(row.spec_liner)      } : null,
 		].filter(Boolean);
 
 		if (!parts.length) return `<span class="text-muted">—</span>`;
@@ -781,19 +795,20 @@ class IBStockDashboard {
 		return `<span>${n.toLocaleString()}</span>`;
 	}
 
-	// ── Export CSV (with full warehouse breakdown) ────────────────────────────
+	// ── Export CSV ────────────────────────────────────────────────────────────
 
 	_export_csv() {
-		const rows = this._filtered_data;
-		if (!rows || !rows.length) {
+		if (!this._filtered_data || !this._filtered_data.length) {
 			frappe.msgprint(__("Nothing to export."));
 			return;
 		}
 
-		const wh      = this.f_warehouse.get_value();
-		const esc_csv = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+		const wh = this.f_warehouse.get_value();
 
-		const headers = [__("Item Name"), __("Item Code"), __("Specification"), __("UOM")];
+		const headers = [
+			__("Item Name"), __("Item Code"), __("UOM"),
+			__("Width (mm)"), __("Length (mtr)"), __("Thickness"), __("Color"), __("Liner"),
+		];
 		if (!wh) {
 			headers.push(
 				__("MH Stock"), __("MH Reserved"),
@@ -803,28 +818,32 @@ class IBStockDashboard {
 		}
 		headers.push(__("Total Stock"), __("Total Reserved"), __("Available"));
 
-		const lines = [headers.map(esc_csv).join(",")];
-
-		rows.forEach(row => {
-			const total_res = Number(row.mh_reserved || 0) + Number(row.cn_reserved || 0) + Number(row.gj_reserved || 0);
-			const vals = [row.item_name || "", row.item_code || "", row.specification || "", row.uom || ""];
-			if (!wh) {
-				vals.push(
-					row.maharashtra  ?? 0, row.mh_reserved ?? 0,
-					row.chennai      ?? 0, row.cn_reserved ?? 0,
-					row.gujarat      ?? 0, row.gj_reserved ?? 0,
-				);
+		IBStock.csv_download(
+			`stock_balance_${frappe.datetime.now_date()}.csv`,
+			headers,
+			IBStock.sort_rows(this._filtered_data, this._sort.col, this._sort.asc),
+			row => {
+				const total_res = Number(row.mh_reserved || 0) + Number(row.cn_reserved || 0) + Number(row.gj_reserved || 0);
+				const vals = [
+					row.item_name      || "",
+					row.item_code      || "",
+					row.uom            || "",
+					row.spec_width     || "",
+					row.spec_length    || "",
+					row.spec_thickness || "",
+					row.spec_color     || "",
+					row.spec_liner     || "",
+				];
+				if (!wh) {
+					vals.push(
+						row.maharashtra  ?? 0, row.mh_reserved ?? 0,
+						row.chennai      ?? 0, row.cn_reserved ?? 0,
+						row.gujarat      ?? 0, row.gj_reserved ?? 0,
+					);
+				}
+				vals.push(row.total_stock ?? 0, total_res, row.total_available ?? 0);
+				return vals;
 			}
-			vals.push(row.total_stock ?? 0, total_res, row.total_available ?? 0);
-			lines.push(vals.map(esc_csv).join(","));
-		});
-
-		const blob = new Blob(["\ufeff" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-		const url  = URL.createObjectURL(blob);
-		const a    = document.createElement("a");
-		a.href     = url;
-		a.download = `stock_balance_${frappe.datetime.now_date()}.csv`;
-		a.click();
-		URL.revokeObjectURL(url);
+		);
 	}
 }

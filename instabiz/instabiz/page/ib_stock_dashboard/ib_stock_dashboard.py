@@ -44,7 +44,9 @@ def get_stock_data(item_group=None, uom=None, warehouse=None, hide_zero_stock=1,
 			COALESCE(cn.reserved_qty, 0) AS cn_reserved,
 			COALESCE(gj.actual_qty,   0) AS gujarat,
 			COALESCE(gj.reserved_qty, 0) AS gj_reserved,
-			COALESCE(ir.reorder_level, 0) AS reorder_level
+			COALESCE(ir_mh.warehouse_reorder_level, 0) AS mh_reorder_level,
+			COALESCE(ir_cn.warehouse_reorder_level, 0) AS cn_reorder_level,
+			COALESCE(ir_gj.warehouse_reorder_level, 0) AS gj_reorder_level
 		FROM tabItem i
 		LEFT JOIN tabBin mh ON mh.item_code = i.item_code
 			AND mh.warehouse = 'MAHARASHTRA - IB'
@@ -52,12 +54,12 @@ def get_stock_data(item_group=None, uom=None, warehouse=None, hide_zero_stock=1,
 			AND cn.warehouse = 'CHENNAI - IB'
 		LEFT JOIN tabBin gj ON gj.item_code = i.item_code
 			AND gj.warehouse = 'GUJARAT - IB'
-		LEFT JOIN (
-			SELECT parent, SUM(warehouse_reorder_level) AS reorder_level
-			FROM `tabItem Reorder`
-			WHERE warehouse IN ('MAHARASHTRA - IB', 'CHENNAI - IB', 'GUJARAT - IB')
-			GROUP BY parent
-		) ir ON ir.parent = i.item_code
+		LEFT JOIN `tabItem Reorder` ir_mh
+			ON ir_mh.parent = i.item_code AND ir_mh.warehouse = 'MAHARASHTRA - IB'
+		LEFT JOIN `tabItem Reorder` ir_cn
+			ON ir_cn.parent = i.item_code AND ir_cn.warehouse = 'CHENNAI - IB'
+		LEFT JOIN `tabItem Reorder` ir_gj
+			ON ir_gj.parent = i.item_code AND ir_gj.warehouse = 'GUJARAT - IB'
 		WHERE {where}
 		ORDER BY i.item_group, i.item_name
 		""",
@@ -66,16 +68,21 @@ def get_stock_data(item_group=None, uom=None, warehouse=None, hide_zero_stock=1,
 	)
 
 	data = []
-	total_in_stock = 0
-	total_zero     = 0
-	total_negative = 0
+	total_in_stock  = 0
+	total_zero      = 0
+	total_negative  = 0
+	total_low_stock = 0
 
 	for row in rows:
 		mh  = flt(row.maharashtra)
 		cn  = flt(row.chennai)
 		gj  = flt(row.gujarat)
 		res = flt(row.mh_reserved) + flt(row.cn_reserved) + flt(row.gj_reserved)
-		reorder_level = flt(row.reorder_level)
+
+		mh_reorder    = flt(row.mh_reorder_level)
+		cn_reorder    = flt(row.cn_reorder_level)
+		gj_reorder    = flt(row.gj_reorder_level)
+		reorder_level = mh_reorder + cn_reorder + gj_reorder
 
 		if warehouse:
 			wh_map = {
@@ -98,45 +105,50 @@ def get_stock_data(item_group=None, uom=None, warehouse=None, hide_zero_stock=1,
 		if total_available < 0:
 			total_negative += 1
 
-		if cint(show_zero_only) and total_stock != 0:
-			continue
-		if not cint(show_zero_only) and cint(hide_zero_stock) and total_stock == 0:
-			continue
+		low_stock = bool(reorder_level > 0 and 0 < total_stock <= reorder_level)
+		if low_stock:
+			total_low_stock += 1
 
 		w = _fmt_dim(row.width_mm)
 		l = _fmt_dim(row.length_mtr)
 
-		low_stock = bool(reorder_level > 0 and 0 < total_stock <= reorder_level)
-
 		data.append({
-			"item_name":       row.item_name,
-			"item_code":       row.item_code,
-			"specification":   _build_spec(row),
-			"spec_dimension":  f"{w}mm × {l}mtr" if (w and l) else "",
-			"spec_thickness":  (row.custom_thickness or "").strip(),
-			"spec_color":      (row.color or "").strip(),
-			"spec_liner":      (row.custom_liner or "").strip(),
-			"uom":             row.stock_uom,
-			"maharashtra":     _fmt_qty(mh),
-			"chennai":         _fmt_qty(cn),
-			"gujarat":         _fmt_qty(gj),
-			"mh_reserved":     _fmt_qty(flt(row.mh_reserved)),
-			"cn_reserved":     _fmt_qty(flt(row.cn_reserved)),
-			"gj_reserved":     _fmt_qty(flt(row.gj_reserved)),
-			"total_stock":     _fmt_qty(total_stock),
-			"total_available": _fmt_qty(total_available),
-			"reorder_level":   _fmt_qty(reorder_level),
-			"low_stock":       low_stock,
+			"item_name":        row.item_name,
+			"item_code":        row.item_code,
+			"specification":    _build_spec(row),
+			"spec_dimension":   f"{w}mm × {l}mtr" if (w and l) else "",
+			"spec_sqmt":        _fmt_qty(flt(w) / 1000 * flt(l)) if (w and l) else "",
+			"spec_width":       w or "",
+			"spec_length":      l or "",
+			"spec_thickness":   (row.custom_thickness or "").strip(),
+			"spec_color":       (row.color or "").strip(),
+			"spec_liner":       (row.custom_liner or "").strip(),
+			"spec_adhesive":    (row.custom_adhesive_type or "").strip(),
+			"uom":              row.stock_uom,
+			"maharashtra":      _fmt_qty(mh),
+			"chennai":          _fmt_qty(cn),
+			"gujarat":          _fmt_qty(gj),
+			"mh_reserved":      _fmt_qty(flt(row.mh_reserved)),
+			"cn_reserved":      _fmt_qty(flt(row.cn_reserved)),
+			"gj_reserved":      _fmt_qty(flt(row.gj_reserved)),
+			"mh_reorder_level": _fmt_qty(mh_reorder),
+			"cn_reorder_level": _fmt_qty(cn_reorder),
+			"gj_reorder_level": _fmt_qty(gj_reorder),
+			"total_stock":      _fmt_qty(total_stock),
+			"total_available":  _fmt_qty(total_available),
+			"reorder_level":    _fmt_qty(reorder_level),
+			"low_stock":        low_stock,
 		})
 
 	return {
 		"data": data,
 		"summary": {
-			"total":    len(rows),
-			"in_stock": total_in_stock,
-			"zero":     total_zero,
-			"negative": total_negative,
-			"showing":  len(data),
+			"total":     len(rows),
+			"in_stock":  total_in_stock,
+			"zero":      total_zero,
+			"negative":  total_negative,
+			"low_stock": total_low_stock,
+			"showing":   len(data),
 		},
 	}
 

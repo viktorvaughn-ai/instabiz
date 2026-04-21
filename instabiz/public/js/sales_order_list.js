@@ -43,7 +43,7 @@ frappe.listview_settings["Sales Order"] = {
         },
     },
 
-    onload(listview) {
+    onload(_listview) {
         ib_hide_sidebar();
     },
 };

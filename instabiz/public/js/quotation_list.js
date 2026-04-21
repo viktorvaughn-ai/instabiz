@@ -46,8 +46,7 @@ frappe.listview_settings["Quotation"] = {
         },
     },
 
-    // ✅ onload is the correct place for one-time UI additions
-    onload(listview) {
+    onload(_listview) {
         ib_hide_sidebar();
     },
 };
