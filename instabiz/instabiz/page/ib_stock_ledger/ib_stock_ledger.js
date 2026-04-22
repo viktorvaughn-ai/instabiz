@@ -60,12 +60,14 @@ class IbStockLedger {
 
 		this._setup_filters();
 		this._setup_content();
+		this._setup_presets();
 		this._setup_keyboard();
 	}
 
 	// ── Filters ──────────────────────────────────────────────────────────────
 
 	_setup_filters() {
+		$(this.page.page_form).addClass("ib-page-form");
 		this.f_item = this.page.add_field({
 			fieldname: "item_code",
 			label:     __("Item"),
@@ -164,11 +166,13 @@ class IbStockLedger {
 		this.$content = $(`
 			<div class="ib-sl-wrap">
 				<div class="ib-sl-cards"></div>
+				<div class="ib-sl-presets"></div>
 				<div class="ib-sl-chips" style="display:none"></div>
 				<div class="ib-sl-table-wrap">
 					<table class="ib-sl-table">
 						<thead class="ib-sl-thead"><tr>${thead_html}</tr></thead>
 						<tbody class="ib-sl-tbody"></tbody>
+						<tfoot class="ib-sl-tfoot"></tfoot>
 					</table>
 					<div class="ib-sl-empty" style="display:none"></div>
 				</div>
@@ -177,8 +181,10 @@ class IbStockLedger {
 		`).appendTo(this.$body);
 
 		this.$cards    = this.$content.find(".ib-sl-cards");
+		this.$presets  = this.$content.find(".ib-sl-presets");
 		this.$chips    = this.$content.find(".ib-sl-chips");
 		this.$tbody    = this.$content.find(".ib-sl-tbody");
+		this.$tfoot    = this.$content.find(".ib-sl-tfoot");
 		this.$empty    = this.$content.find(".ib-sl-empty");
 		this.$pg       = this.$content.find(".ib-sl-pagination");
 
@@ -188,6 +194,34 @@ class IbStockLedger {
 			this._sort.col = col;
 			this._update_sort_icons();
 			this._apply_client_filter();
+		});
+	}
+
+	_setup_presets() {
+		const today = frappe.datetime.get_today;
+		const add   = frappe.datetime.add_days;
+		const presets = [
+			{ label: __("Today"),      fn: () => [today(), today()] },
+			{ label: __("This week"),  fn: () => [frappe.datetime.week_start(), today()] },
+			{ label: __("This month"), fn: () => [frappe.datetime.month_start(), today()] },
+			{ label: __("Last 7d"),    fn: () => [add(today(), -6), today()] },
+			{ label: __("Last 30d"),   fn: () => [add(today(), -29), today()] },
+		];
+
+		this.$presets.html(
+			`<div class="ib-sl-preset-bar">` +
+			presets.map((p, i) => `<button class="ib-sl-preset-btn" data-idx="${i}">${p.label}</button>`).join("") +
+			`</div>`
+		);
+
+		this.$presets.find(".ib-sl-preset-btn").on("click", (e) => {
+			const idx = parseInt($(e.currentTarget).data("idx"), 10);
+			const [from, to] = presets[idx].fn();
+			this._restoring = true;
+			this.f_from.set_value(from);
+			this.f_to.set_value(to);
+			this._restoring = false;
+			this._reset_and_refresh();
 		});
 	}
 
@@ -354,6 +388,7 @@ class IbStockLedger {
 		}
 
 		this._render_chips();
+		this._render_tfoot();
 		this._update_sort_icons();
 		this._render_pagination();
 	}
@@ -412,6 +447,21 @@ class IbStockLedger {
 		});
 
 		this.$tbody[0].appendChild(frag);
+	}
+
+	_render_tfoot() {
+		if (!this._filtered_data.length) { this.$tfoot.empty(); return; }
+		const fmt      = n => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+		const in_total = this._filtered_data.reduce((s, r) => s + (r.qty_in  || 0), 0);
+		const out_total= this._filtered_data.reduce((s, r) => s + (r.qty_out || 0), 0);
+		this.$tfoot.html(`
+			<tr class="ib-sl-tfoot-row">
+				<td colspan="3" class="ib-sl-tfoot-label">${__("Page total")}</td>
+				<td class="ib-sl-td-num ib-sl-tfoot-in">+${fmt(in_total)}</td>
+				<td class="ib-sl-td-num ib-sl-tfoot-out">−${fmt(out_total)}</td>
+				<td colspan="4"></td>
+			</tr>
+		`);
 	}
 
 	_spec_html(r) {
@@ -589,24 +639,61 @@ class IbStockLedger {
 	// ── CSV export ────────────────────────────────────────────────────────────
 
 	_export_csv() {
-		if (!this._filtered_data.length) { frappe.msgprint(__("Nothing to export.")); return; }
-		IBStock.csv_download(
-			`IB_Stock_Ledger_${frappe.datetime.get_today()}.csv`,
-			[
-				__("Date"), __("Item Code"), __("Item Name"),
-				__("Width"), __("Length"), __("Thickness"), __("Color"), __("Liner"),
-				__("Warehouse"), __("In Qty"), __("Out Qty"), __("Balance"),
-				__("UOM"), __("Party"), __("Voucher Type"), __("Voucher No"), __("Rate"),
-			],
-			IBStock.sort_rows(this._filtered_data, this._sort.col, this._sort.asc),
-			r => [
-				r.posting_dt_str, r.item_code, r.item_name,
-				r.width_mm || "", r.length_mtr || "", r.custom_thickness || "",
-				r.color || "", r.custom_liner || "",
-				r.warehouse, r.qty_in || 0, r.qty_out || 0, r.qty_after_transaction,
-				r.stock_uom, r.party || "", r.voucher_type, r.voucher_no, r.rate || 0,
-			]
-		);
+		const from_date = this.f_from.get_value();
+		const to_date   = this.f_to.get_value();
+		if (!from_date && !to_date) { frappe.msgprint(__("Select a date range first.")); return; }
+
+		const $btn = this.$cards.find(".ib-sl-export-btn");
+		$btn.prop("disabled", true).text(__("Fetching…"));
+
+		frappe.call({
+			method: "instabiz.instabiz.page.ib_stock_ledger.ib_stock_ledger.get_ledger",
+			args: {
+				item_code:    this.f_item.get_value()      || null,
+				warehouse:    this.f_warehouse.get_value() || null,
+				from_date:    from_date                    || null,
+				to_date:      to_date                      || null,
+				voucher_type: this.f_vtype.get_value()     || null,
+				uom:          this.f_uom.get_value()       || null,
+				limit:        100000,
+				offset:       0,
+			},
+			callback: (r) => {
+				$btn.prop("disabled", false).html(`<svg class="icon icon-sm"><use href="#es-line-down"></use></svg> ${__("Export CSV")}`);
+				if (!r.message || !r.message.data.length) { frappe.msgprint(__("Nothing to export.")); return; }
+
+				const all = r.message.data;
+				const tokens = this._search_tokens;
+				const filtered = tokens.length ? all.filter(row => {
+					const hay = [
+						row.item_code, row.item_name, row.party, row.voucher_no,
+						row.wh_short, row.vtype_short, row.color, row.custom_thickness, row.custom_adhesive_type,
+					].join(" ").toLowerCase();
+					return tokens.every(t => hay.includes(t));
+				}) : all;
+
+				IBStock.csv_download(
+					`IB_Stock_Ledger_${frappe.datetime.get_today()}.csv`,
+					[
+						__("Date"), __("Item Code"), __("Item Name"),
+						__("Width"), __("Length"), __("Thickness"), __("Color"), __("Liner"),
+						__("Warehouse"), __("In Qty"), __("Out Qty"), __("Balance"),
+						__("UOM"), __("Party"), __("Voucher Type"), __("Voucher No"), __("Rate"),
+					],
+					IBStock.sort_rows(filtered, this._sort.col, this._sort.asc),
+					row => [
+						row.posting_dt_str, row.item_code, row.item_name,
+						row.width_mm || "", row.length_mtr || "", row.custom_thickness || "",
+						row.color || "", row.custom_liner || "",
+						row.warehouse, row.qty_in || 0, row.qty_out || 0, row.qty_after_transaction,
+						row.stock_uom, row.party || "", row.voucher_type, row.voucher_no, row.rate || 0,
+					]
+				);
+			},
+			error: () => {
+				$btn.prop("disabled", false).html(`<svg class="icon icon-sm"><use href="#es-line-down"></use></svg> ${__("Export CSV")}`);
+			},
+		});
 	}
 
 	// ── Filter persistence ────────────────────────────────────────────────────

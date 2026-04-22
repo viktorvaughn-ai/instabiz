@@ -1,7 +1,7 @@
 frappe.listview_settings["Lead"] = Object.assign(
 	frappe.listview_settings["Lead"] || {},
 	{
-		add_fields: ["custom_lead_owner_name"],
+		add_fields: ["custom_lead_owner_name", "mobile_no", "phone", "email_id", "source", "custom_status"],
 
 		formatters: {
 			lead_owner: function (value, field, doc) {

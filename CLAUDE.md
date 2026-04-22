@@ -231,7 +231,22 @@ Loaded globally via `app_include_js` in `hooks.py`.
 **Primary color:** `#d97757` (rust/burnt orange)  
 **File:** `instabiz/public/css/instabiz.css`
 
-Key classes:
+### Global vars (`:root`)
+- `--ib-primary` / `--ib-primary-dark` / `--ib-primary-xdark` — orange scale
+- `--ib-brand` / `--ib-brand-strong` — aliases for primary (used by pages + popovers)
+- `--ib-surface` / `--ib-border-soft` — aliases for `var(--card-bg)` / `var(--border-color)` — **must stay on `:root`** so fixed-position popovers (outside `.ib-sd-page`) inherit them
+
+### IB Shared Utilities (use in any new custom page)
+| Class | Purpose |
+|---|---|
+| `.ib-card` | Bordered card container — `card-bg`, `border-color`, `6px` radius |
+| `.ib-action-btn` | Neutral button, orange on hover — same as `.ib-sd-action-btn` / `.ib-sl-action-btn` |
+| `.ib-svg-icon` | SVG icon helper — same as `.ib-sd-svg-icon` / `.ib-sl-svg-icon` |
+| `.ib-refresh-time` | Refresh timestamp — same as `.ib-sd-refresh-time` / `.ib-sl-refresh-time` |
+
+> The existing page-scoped class names (`.ib-sd-*`, `.ib-sl-*`) are in the same multi-selectors — no JS changes needed. New pages use the `.ib-*` names.
+
+### Key classes
 - `.ib-color-dot` / `.ib-color-dot--checker` — color swatches in spec cells
 - `.ib-chip--uom-sqmt/pcs/kg` — UOM chip colors (orange/blue/green)
 - `mark.ib-search-hl` — search term highlight

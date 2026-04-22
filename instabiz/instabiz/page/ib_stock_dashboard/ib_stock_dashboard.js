@@ -55,6 +55,7 @@ class IBStockDashboard {
 	// ── Filters ──────────────────────────────────────────────────────────────
 
 	_setup_filters() {
+		$(this.page.page_form).addClass("ib-page-form");
 		this.f_uom = this.page.add_field({
 			fieldname: "uom",
 			label:     __("UOM"),
@@ -71,26 +72,20 @@ class IBStockDashboard {
 			change:    () => { if (!this._restoring) this.refresh(); },
 		});
 
-		this.f_hide_zero = this.page.add_field({
-			fieldname: "hide_zero_stock",
-			label:     __("Hide Zero Stock"),
-			fieldtype: "Check",
-			default:   0,
-			change:    () => {
-				if (this._restoring) return;
-				this._apply_search();
-			},
-		});
-
-		this.f_hide_zero.set_input(0);
-
 		this.f_search = this.page.add_field({
 			fieldname:   "search",
 			label:       __("Search"),
 			fieldtype:   "Data",
 			placeholder: __("name, code, colour, size…"),
 		});
-		$(this.f_search.wrapper).css("margin-left", "auto");
+
+		const $pf    = $(this.f_search.wrapper).parent();
+		const $group = $('<div class="ib-sl-search-group" style="margin-left:auto"></div>').appendTo($pf);
+		$(this.f_search.wrapper).appendTo($group);
+
+		this.$clear_btn = $(`<button class="btn btn-sm btn-primary ib-sl-clear-btn" title="${__("Clear all filters")}">${__("Clear")}</button>`)
+			.on("click", () => this._clear_all())
+			.appendTo($group);
 
 		const $inp = $(this.f_search.wrapper).find("input");
 
@@ -163,6 +158,21 @@ class IBStockDashboard {
 		});
 	}
 
+	// ── Clear all filters ────────────────────────────────────────────────────
+
+	_clear_all() {
+		this._restoring = true;
+		this.f_uom.set_value("");
+		this.f_warehouse.set_value("");
+		this._restoring    = false;
+		this._search_chips = [];
+		this._sort         = { col: null, asc: true };
+		this._page         = 1;
+		$(this.f_search.wrapper).find("input").val("");
+		try { localStorage.removeItem(this._STORAGE_KEY); } catch (_) {}
+		this.refresh();
+	}
+
 	// ── Filter persistence ────────────────────────────────────────────────────
 
 	_save_filters() {
@@ -170,8 +180,7 @@ class IBStockDashboard {
 			localStorage.setItem(this._STORAGE_KEY, JSON.stringify({
 				uom:          this.f_uom.get_value()          || "",
 				warehouse:    this.f_warehouse.get_value()    || "",
-				hide_zero:    this.f_hide_zero.get_value()    ? 1 : 0,
-				search:       $(this.f_search.wrapper).find("input").val() || "",
+					search:       $(this.f_search.wrapper).find("input").val() || "",
 				search_chips: this._search_chips,
 				sort_col:     this._sort.col  || "",
 				sort_asc:     this._sort.asc  ? 1 : 0,
@@ -187,7 +196,6 @@ class IBStockDashboard {
 			this._restoring = true;
 			if (saved.uom)         this.f_uom.set_value(saved.uom);
 			if (saved.warehouse)   this.f_warehouse.set_value(saved.warehouse);
-			this.f_hide_zero.set_input(saved.hide_zero || 0);
 			if (saved.search)      $(this.f_search.wrapper).find("input").val(saved.search);
 			if (Array.isArray(saved.search_chips)) this._search_chips = saved.search_chips;
 			if (saved.sort_col) {
@@ -341,7 +349,6 @@ class IBStockDashboard {
 			this._restoring    = true;
 			this.f_uom.set_value("");
 			this.f_warehouse.set_value("");
-			this.f_hide_zero.set_input(0);
 			this.f_search.set_value("");
 			$(this.f_search.wrapper).find("input").val("");
 			this._restoring = false;
@@ -375,13 +382,6 @@ class IBStockDashboard {
 
 		const wh = this.f_warehouse.get_value();
 		if (wh) chips.push({ label: wh.split(" - ")[0], type: "wh", clear: _clear_server(() => this.f_warehouse.set_value("")) });
-
-		if (this.f_hide_zero.get_value()) {
-			chips.push({ label: __("Hide Zero"), type: "hide", clear: () => {
-				this.f_hide_zero.set_input(0);
-				this._apply_search();
-			}});
-		}
 
 		this._search_chips.forEach((chip, idx) => {
 			chips.push({
@@ -559,9 +559,6 @@ class IBStockDashboard {
 		else if (this._active_card === "negative") base = base.filter(r => Number(r.total_available) < 0);
 		else if (this._active_card === "low")      base = base.filter(r => r.low_stock);
 
-		if (this.f_hide_zero.get_value() && this._active_card !== "zero") {
-			base = base.filter(r => Number(r.total_stock) !== 0);
-		}
 
 		this._filtered_data = all_tokens.length
 			? base.filter(row => {

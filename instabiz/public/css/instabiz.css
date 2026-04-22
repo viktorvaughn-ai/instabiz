@@ -69,6 +69,12 @@ body, .frappe-app, input, select, textarea, button {
     --ib-tint-border:   #f1e0d6;
     --ib-text:          #2c1a0e;
     --ib-radius:        6px;
+
+    /* Aliases used by custom pages + fixed-position popovers (must be on :root) */
+    --ib-brand:         #d97757;
+    --ib-brand-strong:  #c0622f;
+    --ib-surface:       var(--card-bg);
+    --ib-border-soft:   var(--border-color);
 }
 
 
@@ -254,14 +260,143 @@ button[data-label="Submit"] {
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   IB Page Filter Bar — .ib-page-form added via JS to this.page.page_form
+   Shared across stock dashboard + stock ledger.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ib-page-form {
+    gap: 6px !important;
+    row-gap: 4px !important;
+    padding: 6px 10px 8px !important;
+    border-bottom: 1px solid var(--border-color) !important;
+}
+
+/* Labels */
+.ib-page-form .control-label {
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    color: var(--text-muted) !important;
+    margin-bottom: 3px !important;
+}
+
+/* Inputs + selects — subtle brand border */
+.ib-page-form input.form-control,
+.ib-page-form select.form-control {
+    border: 1px solid rgba(217, 119, 87, 0.28) !important;
+    border-radius: 5px !important;
+    background: var(--card-bg) !important;
+    font-size: 12px !important;
+    height: 28px !important;
+    padding: 0 8px !important;
+    color: var(--text-color) !important;
+    transition: border-color 0.15s, box-shadow 0.15s !important;
+    box-shadow: none !important;
+}
+
+.ib-page-form input.form-control:focus,
+.ib-page-form select.form-control:focus {
+    border-color: rgba(217, 119, 87, 0.65) !important;
+    box-shadow: 0 0 0 3px rgba(217, 119, 87, 0.12) !important;
+    outline: none !important;
+}
+
+
+/* Dark theme */
+[data-theme="dark"] .ib-page-form input.form-control,
+[data-theme="dark"] .ib-page-form select.form-control {
+    border-color: var(--border-color) !important;
+    background: var(--control-bg) !important;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   IB Shared Utilities — design atoms for any custom IB page
+   Use: .ib-card · .ib-action-btn · .ib-svg-icon · .ib-refresh-time
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Bordered card / table-wrap container */
+.ib-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+/* Neutral action button — orange on hover.
+   Multi-selector keeps existing page-specific class names working. */
+.ib-action-btn,
+.ib-sd-action-btn,
+.ib-sl-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 5px 14px;
+    height: 32px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-color);
+    cursor: pointer;
+    white-space: nowrap;
+    box-sizing: border-box;
+    transition: border-color 0.15s, color 0.15s;
+}
+.ib-action-btn:hover,
+.ib-sd-action-btn:hover,
+.ib-sl-action-btn:hover {
+    border-color: var(--ib-primary);
+    color: var(--ib-primary);
+}
+
+/* SVG icon helper */
+.ib-svg-icon,
+.ib-sd-svg-icon,
+.ib-sl-svg-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+.ib-svg-icon svg,
+.ib-sd-svg-icon svg,
+.ib-sl-svg-icon svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* Refresh timestamp */
+.ib-refresh-time,
+.ib-sd-refresh-time,
+.ib-sl-refresh-time {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    line-height: 1;
+    color: var(--text-muted);
+    white-space: nowrap;
+    margin-top: 2px;
+}
+.ib-refresh-time .ib-svg-icon svg,
+.ib-sd-refresh-time .ib-sd-svg-icon svg,
+.ib-sl-refresh-time .ib-sl-svg-icon svg { width: 12px; height: 12px; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
    IB Stock Dashboard
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .ib-sd-page {
-    --ib-brand: #d97757;
-    --ib-brand-strong: #c26042;
-    --ib-surface: #ffffff;
-    --ib-border-soft: #eadfd9;
     padding: 0 !important;
 }
 
@@ -286,22 +421,20 @@ button[data-label="Submit"] {
 }
 
 .ib-sd-card {
-    background: var(--ib-surface);
-    border: 1px solid var(--ib-border-soft);
-    border-radius: 4px;
-    border-top: 1px solid var(--ib-border-soft);
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
     padding: 12px 14px;
     transition: border-color 0.15s, background 0.15s;
 }
 
 .ib-sd-card:hover {
-    border-color: rgba(217, 119, 87, 0.35);
+    border-color: rgba(217, 119, 87, 0.5);
     background: #fffaf7;
 }
 
 .ib-sd-card--active {
     border-color: var(--ib-brand) !important;
-    border-top-color: var(--ib-brand) !important;
     box-shadow: none;
     background: #fff6f2;
 }
@@ -321,42 +454,12 @@ button[data-label="Submit"] {
     width: 164px;
 }
 
+/* dashboard-specific overrides only — base styles from .ib-action-btn above */
 .ib-sd-action-btn {
-    white-space: nowrap;
-    padding: 6px 16px;
-    height: 34px;
     width: 100%;
-    background: #fff;
-    border: 1px solid rgba(217, 119, 87, 0.35);
-    border-radius: 4px;
-    font-size: var(--text-sm);
-    font-weight: 600;
-    color: #7c2d12;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    box-sizing: border-box;
-    transition: background 0.18s, border-color 0.18s, color 0.18s;
 }
 
-.ib-sd-action-btn:hover {
-    border-color: var(--ib-brand);
-    color: #fff;
-    background: var(--ib-brand);
-}
-
-.ib-sd-svg-icon { display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
-.ib-sd-svg-icon svg {
-    width: 14px;
-    height: 14px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.9;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-}
+/* .ib-sd-svg-icon — styles from shared .ib-svg-icon selector above */
 
 .ib-sd-card-value {
     font-size: 2rem;
@@ -385,9 +488,9 @@ button[data-label="Submit"] {
 
 /* ── Table wrapper ── */
 .ib-sd-table-wrap {
-    background: var(--ib-surface);
-    border: 1px solid var(--ib-border-soft);
-    border-radius: 4px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
     overflow: hidden;
     flex: 1;
 }
@@ -671,21 +774,22 @@ button[data-label="Submit"] {
 
 /* ── Live badge — extends .ib-sd-action-btn with green tint ── */
 .ib-sd-live-badge {
-    color: #7c2d12 !important;
-    border-color: rgba(217, 119, 87, 0.35) !important;
+    color: #16a34a !important;
+    border-color: #bbf7d0 !important;
+    background: #f0fdf4 !important;
     transition: background 0.3s, color 0.3s, border-color 0.3s;
 }
 
 .ib-sd-live-badge:hover {
-    background: var(--ib-brand) !important;
-    border-color: var(--ib-brand) !important;
+    background: #16a34a !important;
+    border-color: #16a34a !important;
     color: #fff !important;
 }
 
 .ib-sd-live-badge--flash {
-    background: #fff3ed !important;
-    border-color: var(--ib-brand) !important;
-    color: #9a3412 !important;
+    background: #dcfce7 !important;
+    border-color: #16a34a !important;
+    color: #15803d !important;
 }
 
 /* ── Breakdown backdrop ── */
@@ -831,6 +935,7 @@ button[data-label="Submit"] {
     padding: 8px 12px;
     border-bottom: 1px solid var(--ib-border-soft);
     color: var(--text-color);
+    background: #fffdfb;
 }
 .ib-breakdown-table tbody tr:hover td { background: #fff8f5; }
 .ib-breakdown-table tbody tr:last-child td { border-bottom: none; }
@@ -839,7 +944,7 @@ button[data-label="Submit"] {
     padding: 8px 12px;
     font-weight: 600;
     border-top: 1px solid var(--ib-border-soft);
-    background: #fffaf7;
+    background: #fffdfb;
 }
 
 .ib-bd-num {
@@ -958,19 +1063,7 @@ mark.ib-search-hl {
     box-shadow: 0 4px 16px rgba(239, 68, 68, 0.18);
 }
 
-/* ── Last refresh timestamp ── */
-.ib-sd-refresh-time {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    font-size: 11px;
-    color: var(--text-muted);
-    text-align: center;
-    white-space: nowrap;
-    margin-top: 2px;
-}
-.ib-sd-refresh-time .ib-sd-svg-icon svg { width: 12px; height: 12px; }
+/* .ib-sd-refresh-time — styles from shared .ib-refresh-time selector above */
 
 
 /* ── Soft refresh — dim existing rows ── */
@@ -1294,13 +1387,12 @@ mark.ib-search-hl {
 /* ── IB Stock Ledger ──────────────────────────────────────────────────────── */
 
 .ib-sl-page {
-    --ib-brand: #d97757;
-    --ib-brand-strong: #c26042;
-    --ib-brand-soft: #fbe9e3;
-    --ib-surface: #ffffff;
+    /* --ib-brand / --ib-brand-strong — now global in :root */
+    --ib-brand-soft:    #fbe9e3;
+    --ib-surface:       #ffffff;
     --ib-surface-muted: #fcfaf9;
-    --ib-border: #eadfd9;
-    --ib-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+    --ib-border:        #eadfd9;
+    --ib-shadow:        0 2px 8px rgba(15, 23, 42, 0.04);
     padding: 0 !important;
 }
 
@@ -1515,6 +1607,28 @@ mark.ib-search-hl {
 
 .ib-sl-nil { color: var(--text-muted); }
 
+/* Date presets bar */
+.ib-sl-presets { padding: 0 18px 4px; }
+.ib-sl-preset-bar { display: flex; gap: 6px; flex-wrap: wrap; }
+.ib-sl-preset-btn {
+    padding: 3px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    background: var(--fg-color);
+    color: var(--text-muted);
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color 0.15s, color 0.15s;
+}
+.ib-sl-preset-btn:hover { border-color: #d97757; color: #d97757; }
+
+/* Page total footer row */
+.ib-sl-tfoot-row { border-top: 2px solid var(--border-color); background: var(--subtle-fg); }
+.ib-sl-tfoot-label { padding: 8px 12px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.ib-sl-tfoot-in  { padding: 8px 12px; color: #16a34a; font-weight: 600; font-size: 12px; }
+.ib-sl-tfoot-out { padding: 8px 12px; color: #dc2626; font-weight: 600; font-size: 12px; }
+
 /* Empty state icon */
 .ib-sl-empty-icon { font-size: 32px; margin-bottom: 8px; }
 .ib-sl-empty-icon {
@@ -1589,25 +1703,10 @@ mark.ib-search-hl {
     align-items: center;
     gap: 8px;
 }
+/* ledger-specific overrides only — base styles from .ib-action-btn above */
 .ib-sl-action-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 6px 12px;
-    border: 1px solid rgba(217, 119, 87, 0.35);
     border-radius: 4px;
-    background: #fff;
-    color: #7c2d12;
-    font-size: 12px;
     font-weight: 600;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: all 0.18s ease;
-}
-.ib-sl-action-btn:hover {
-    border-color: var(--ib-brand);
-    color: #fff;
-    background: var(--ib-brand);
 }
 .ib-sl-clear-btn {
     border-radius: 4px !important;
@@ -1624,49 +1723,37 @@ mark.ib-search-hl {
     background: var(--ib-brand-strong) !important;
     border-color: var(--ib-brand-strong) !important;
 }
-.ib-sl-search-group { width: 100%; display: flex; flex-direction: row; justify-content: flex-end; align-items: center; gap: 8px; flex-shrink: 0; min-width: 260px; }
+.ib-sl-search-group {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 280px;
+    padding-left: 14px;
+    border-left: 1px solid rgba(217, 119, 87, 0.2);
+}
 .ib-sl-search-group .frappe-control { flex: 1; min-width: 0; }
 .ib-sl-search-group .frappe-control input {
-    border-radius: 4px !important;
-    border-color: var(--ib-border) !important;
-    background: #fff !important;
-    min-height: 30px;
+    border: 1px solid rgba(217, 119, 87, 0.45) !important;
+    border-radius: 5px !important;
+    background: rgba(217, 119, 87, 0.03) !important;
+    height: 28px !important;
+    font-size: 12px !important;
+    color: var(--text-color) !important;
+    transition: border-color 0.15s, box-shadow 0.15s !important;
+    box-shadow: none !important;
 }
 .ib-sl-search-group .frappe-control input:focus {
-    border-color: rgba(217, 119, 87, 0.65) !important;
+    border-color: rgba(217, 119, 87, 0.7) !important;
+    background: rgba(217, 119, 87, 0.05) !important;
     box-shadow: 0 0 0 3px rgba(217, 119, 87, 0.14) !important;
+    outline: none !important;
 }
-.ib-sl-refresh-time {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 11px;
-    line-height: 1;
-    color: var(--text-muted);
-    white-space: nowrap;
-}
-.ib-sl-refresh-time .icon { width: 12px; height: 12px; }
-.ib-sl-refresh-time .ib-sl-svg-icon svg { width: 12px; height: 12px; }
+/* .ib-sl-refresh-time — styles from shared .ib-refresh-time selector above */
 
-.ib-sl-svg-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    line-height: 1;
-}
-.ib-sl-svg-icon svg {
-    width: 14px;
-    height: 14px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.9;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-}
-.ib-sl-empty-icon .ib-sl-svg-icon svg {
-    width: 20px;
-    height: 20px;
-}
+/* .ib-sl-svg-icon — base from shared .ib-svg-icon selector above */
+.ib-sl-empty-icon .ib-sl-svg-icon svg { width: 20px; height: 20px; }
 
 /* Ledger pagination */
 .ib-sl-pagination {
@@ -1717,3 +1804,131 @@ mark.ib-search-hl {
     color: #9a3412;
     background: #fff6f2;
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   KB Leads — Kanban column header color accents
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Subtle top-border accent per stage, matching list view indicator colors */
+.kanban-column[data-column-value="Cold Lead"]   { border-top: 3px solid #9ca3af; }
+.kanban-column[data-column-value="Hot Lead"]    { border-top: 3px solid #f97316; }
+.kanban-column[data-column-value="Contacted"]   { border-top: 3px solid #eab308; }
+.kanban-column[data-column-value="Qualified"]   { border-top: 3px solid #3b82f6; }
+.kanban-column[data-column-value="Proposal"]    { border-top: 3px solid #60a5fa; }
+.kanban-column[data-column-value="Negotiation"] { border-top: 3px solid #a855f7; }
+.kanban-column[data-column-value="Converted"]   { border-top: 3px solid #22c55e; }
+.kanban-column[data-column-value="Customer"]    { border-top: 3px solid #16a34a; }
+.kanban-column[data-column-value="Lost"]        { border-top: 3px solid #ef4444; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   KB Leads Kanban — layout, scroll, card style
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Hide "Add Lead" button inside every column — redundant with page New button */
+.kanban .kanban-column .add-card { display: none !important; }
+
+/* Horizontal scroll — Frappe default has no overflow-x */
+.kanban {
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    flex-wrap: nowrap !important;
+    padding-bottom: 12px;
+    align-items: flex-start !important;
+}
+
+/* Fixed column width — prevent flex-grow from stretching columns to fill space */
+.kanban .kanban-column {
+    flex: 0 0 272px !important;
+    max-width: 272px !important;
+    min-width: 272px !important;
+}
+
+/* Let the kanban section scroll without clipping */
+.layout-main-section {
+    overflow-x: visible !important;
+}
+.layout-main-section-wrapper {
+    overflow-x: visible !important;
+}
+
+/* ── Card base ── */
+.kanban-card-wrapper .kanban-card.content {
+    border: 1px solid var(--border-color);
+    border-left: 3px solid var(--border-color); /* overridden per stage below */
+    border-radius: 6px;
+    padding: 10px 12px 8px;
+    transition: box-shadow 0.15s, border-color 0.15s;
+    background: var(--card-bg);
+}
+.kanban-card-wrapper .kanban-card.content:hover {
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+}
+
+/* Card color coding — left accent border matches stage color */
+.kanban-column[data-column-value="Cold Lead"]   .kanban-card.content { border-left-color: #9ca3af; }
+.kanban-column[data-column-value="Hot Lead"]    .kanban-card.content { border-left-color: #f97316; }
+.kanban-column[data-column-value="Contacted"]   .kanban-card.content { border-left-color: #eab308; }
+.kanban-column[data-column-value="Qualified"]   .kanban-card.content { border-left-color: #3b82f6; }
+.kanban-column[data-column-value="Proposal"]    .kanban-card.content { border-left-color: #60a5fa; }
+.kanban-column[data-column-value="Negotiation"] .kanban-card.content { border-left-color: #a855f7; }
+.kanban-column[data-column-value="Converted"]   .kanban-card.content { border-left-color: #22c55e; }
+.kanban-column[data-column-value="Customer"]    .kanban-card.content { border-left-color: #16a34a; }
+.kanban-column[data-column-value="Lost"]        .kanban-card.content { border-left-color: #ef4444; }
+
+/* Card title */
+.kanban-card-title {
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    color: var(--text-color) !important;
+    margin-bottom: 0 !important;
+    line-height: 1.3 !important;
+}
+
+/* Suppress Frappe's <br> between title and doc */
+.kanban-card-title + br { display: none !important; }
+
+/* Separator line */
+.kanban-card-body .kanban-title-area::after {
+    content: "";
+    display: block;
+    height: 1px;
+    background: var(--border-color);
+    margin: 7px 0 6px;
+}
+
+/* Chip container */
+.kanban-card-doc {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+    margin-top: 0 !important;
+}
+
+/* Each field value = a chip pill */
+.kanban-card-doc .text-muted {
+    display: inline-flex !important;
+    align-items: center !important;
+    padding: 2px 8px !important;
+    border-radius: 20px !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    white-space: nowrap !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    /* neutral chip */
+    background: var(--subtle-fg, #f5f5f5) !important;
+    color: var(--text-muted) !important;
+    border: 1px solid var(--border-color) !important;
+    line-height: 1.4 !important;
+}
+
+/* Empty chips shouldn't render */
+.kanban-card-doc .text-muted:empty { display: none !important; }
+
+/* Hide like/heart icon — cluttery */
+.kanban-card .like-action,
+.kanban-card .liked-by,
+.kanban-card-meta { display: none !important; }
