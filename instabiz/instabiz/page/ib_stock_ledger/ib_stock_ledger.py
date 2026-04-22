@@ -137,6 +137,6 @@ def _enrich(rows):
 		r["vtype_short"] = _VTYPE_SHORT.get(r.get("voucher_type"), r.get("voucher_type", ""))
 		r["qty_in"]      = r["actual_qty"] if r["actual_qty"] > 0 else 0
 		r["qty_out"]     = abs(r["actual_qty"]) if r["actual_qty"] < 0 else 0
-		r["rate"]        = r["incoming_rate"] if r["actual_qty"] > 0 else r["outgoing_rate"]
+		r["rate"]        = r["incoming_rate"] if r["actual_qty"] > 0 else (r["outgoing_rate"] if r["actual_qty"] < 0 else 0)
 		dt = r.get("posting_datetime")
 		r["posting_dt_str"] = dt.strftime("%d %b %Y %H:%M") if dt else str(r.get("posting_date", ""))

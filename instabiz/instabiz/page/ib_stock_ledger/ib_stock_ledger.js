@@ -16,13 +16,10 @@ frappe.pages["ib-stock-ledger"].on_page_show = function (wrapper) {
 	}
 	wrapper.ledger._restore_filters();
 	wrapper.ledger.refresh();
-	wrapper.ledger._live.start();
 };
 
 frappe.pages["ib-stock-ledger"].on_page_hide = function (wrapper) {
 	if (!wrapper.ledger) return;
-	wrapper.ledger._live.stop();
-	wrapper.ledger._auto.stop();
 	clearTimeout(wrapper.ledger._search_debounce);
 	$(document).off("keydown.ib-stock-ledger");
 };
@@ -40,9 +37,6 @@ const _COLS = [
 	{ key: "voucher_no",            label: "Voucher", sortable: false },
 	{ key: "rate",                  label: "Rate",    sortable: true,  num: true },
 ];
-
-const _DEFAULT_FROM = () => frappe.datetime.add_days(frappe.datetime.get_today(), -30);
-const _DEFAULT_TO   = () => frappe.datetime.get_today();
 
 class IbStockLedger {
 	constructor(wrapper) {
@@ -62,13 +56,7 @@ class IbStockLedger {
 		this._search_tokens   = [];
 		this._search_chips    = [];
 		this._search_debounce = null;
-		this._STORAGE_KEY     = "ib_sl_v3";
-
-		this._live = IBStock.make_live("ib-stock-ledger", () => {
-			this.refresh({ soft: true });
-			this._flash_live();
-		});
-		this._auto = IBStock.make_auto_refresh(900, "ib-stock-ledger", () => this.refresh());
+		this._STORAGE_KEY     = "ib_sl_v4";
 
 		this._setup_filters();
 		this._setup_content();
@@ -106,7 +94,6 @@ class IbStockLedger {
 			fieldname: "from_date",
 			label:     __("From"),
 			fieldtype: "Date",
-			default:   _DEFAULT_FROM(),
 			change:    () => { if (!this._restoring) this._reset_and_refresh(); },
 		});
 
@@ -114,7 +101,6 @@ class IbStockLedger {
 			fieldname: "to_date",
 			label:     __("To"),
 			fieldtype: "Date",
-			default:   _DEFAULT_TO(),
 			change:    () => { if (!this._restoring) this._reset_and_refresh(); },
 		});
 
@@ -132,7 +118,13 @@ class IbStockLedger {
 			fieldtype:   "Data",
 			placeholder: __("item, party, voucher…"),
 		});
-		$(this.f_search.wrapper).css("margin-left", "auto");
+		const $pf    = $(this.f_search.wrapper).parent();
+		const $group = $('<div class="ib-sl-search-group"></div>').appendTo($pf);
+		$(this.f_search.wrapper).appendTo($group);
+
+		this.$clear_btn = $(`<button class="btn btn-sm btn-primary ib-sl-clear-btn" title="${__("Clear all filters")}">${__("Clear")}</button>`)
+			.on("click", () => this._clear_all())
+			.appendTo($group);
 
 		const $inp = $(this.f_search.wrapper).find("input");
 		$inp.on("input", () => {
@@ -164,16 +156,15 @@ class IbStockLedger {
 		this.$body.addClass("ib-sl-page");
 
 		const thead_html = _COLS.map(c => {
-			const num  = c.num      ? " ib-sl-th-num" : "";
-			const sort = c.sortable ? ` data-col="${c.key}" class="ib-sl-th-sortable${num}"` : `class="${num}"`;
-			return `<th${sort}>${__(c.label)}<span class="ib-sort-icon"></span></th>`;
+			const cls   = [c.sortable ? "ib-sl-th-sortable" : "", c.num ? "ib-sl-th-num" : ""].filter(Boolean).join(" ");
+			const attrs = [cls ? `class="${cls}"` : "", c.sortable ? `data-col="${c.key}"` : ""].filter(Boolean).join(" ");
+			return `<th${attrs ? " " + attrs : ""}>${__(c.label)}<span class="ib-sort-icon"></span></th>`;
 		}).join("");
 
 		this.$content = $(`
 			<div class="ib-sl-wrap">
 				<div class="ib-sl-cards"></div>
 				<div class="ib-sl-chips" style="display:none"></div>
-				<div class="ib-sl-status-bar"></div>
 				<div class="ib-sl-table-wrap">
 					<table class="ib-sl-table">
 						<thead class="ib-sl-thead"><tr>${thead_html}</tr></thead>
@@ -189,7 +180,6 @@ class IbStockLedger {
 		this.$chips    = this.$content.find(".ib-sl-chips");
 		this.$tbody    = this.$content.find(".ib-sl-tbody");
 		this.$empty    = this.$content.find(".ib-sl-empty");
-		this.$status   = this.$content.find(".ib-sl-status-bar");
 		this.$pg       = this.$content.find(".ib-sl-pagination");
 
 		this.$content.find(".ib-sl-th-sortable").on("click", (e) => {
@@ -221,10 +211,11 @@ class IbStockLedger {
 		this._search_chips  = [];
 		$(this.f_search.wrapper).find("input").val("");
 		this.$tbody.empty();
+		this._save_filters();
 		this.refresh();
 	}
 
-	refresh({ soft = false } = {}) {
+	refresh() {
 		if (this._loading) return;
 
 		if (this._prefill_item) {
@@ -234,27 +225,29 @@ class IbStockLedger {
 			this._restoring    = false;
 		}
 
+		const from_date = this.f_from.get_value();
+		const to_date   = this.f_to.get_value();
+
+		if (!from_date && !to_date) {
+			this._show_idle();
+			return;
+		}
+
 		this._save_filters();
-		this._auto.stop();
-		this._auto.start();
 		this._loading = true;
 
 		const offset = (this._page - 1) * this._page_size;
 
-		if (!soft) {
-			this.$tbody.empty();
-			this.$status.html(`
-				<span class="ib-sl-spinner"><div class="ib-sl-spin"></div>${__("Loading…")}</span>
-			`);
-		}
+		this.$tbody.empty();
+		this.$cards.html(`<span class="ib-sl-spinner"><div class="ib-sl-spin"></div>${__("Loading…")}</span>`);
 
 		frappe.call({
 			method: "instabiz.instabiz.page.ib_stock_ledger.ib_stock_ledger.get_ledger",
 			args: {
 				item_code:    this.f_item.get_value()      || null,
 				warehouse:    this.f_warehouse.get_value() || null,
-				from_date:    this.f_from.get_value()      || null,
-				to_date:      this.f_to.get_value()        || null,
+				from_date:    from_date                    || null,
+				to_date:      to_date                      || null,
 				voucher_type: this.f_vtype.get_value()     || null,
 				uom:          this.f_uom.get_value()       || null,
 				limit:        this._page_size,
@@ -277,41 +270,55 @@ class IbStockLedger {
 
 	// ── Stat cards ────────────────────────────────────────────────────────────
 
+	_icon(name) {
+		const icons = {
+			activity: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>`,
+			arrow_up: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m0 0-5 5m5-5 5 5"/></svg>`,
+			arrow_down: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14m0 0-5-5m5 5 5-5"/></svg>`,
+			clock: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`,
+			calendar: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4m8-4v4M3 10h18"/></svg>`,
+			inbox: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16l-2 10h-4l-2 3-2-3H6z"/><path d="M9 14h6"/></svg>`,
+			download: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10m0 0-4-4m4 4 4-4"/><path d="M4 18v2h16v-2"/></svg>`,
+		};
+		return `<span class="ib-sl-svg-icon ib-sl-svg-icon--${name}">${icons[name] || ""}</span>`;
+	}
+
 	_render_cards() {
-		const fmt   = n => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
-		const ts    = this._last_refresh
+		const fmt = n => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+		const ts  = this._last_refresh
 			? this._last_refresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
 			: "";
 
 		this.$cards.html(`
-			<div class="ib-sl-card">
-				<div class="ib-sl-card-value">${(this._total || 0).toLocaleString()}</div>
-				<div class="ib-sl-card-label">${__("Total Entries")}</div>
-			</div>
-			<div class="ib-sl-card ib-sl-card--in">
-				<div class="ib-sl-card-value">↑ ${fmt(this._summary.qty_in)}</div>
-				<div class="ib-sl-card-label">${__("Total IN")}</div>
-			</div>
-			<div class="ib-sl-card ib-sl-card--out">
-				<div class="ib-sl-card-value">↓ ${fmt(this._summary.qty_out)}</div>
-				<div class="ib-sl-card-label">${__("Total OUT")}</div>
+			<div class="ib-sl-summary">
+				<span class="ib-sl-stat">
+					<span class="ib-sl-stat-icon">${this._icon("activity")}</span>
+					<span class="ib-sl-stat-value">${(this._total || 0).toLocaleString()}</span>
+					<span class="ib-sl-stat-label">${__("movements")}</span>
+				</span>
+				<span class="ib-sl-stat-sep">·</span>
+				<span class="ib-sl-stat ib-sl-stat--in">
+					<span class="ib-sl-stat-icon">${this._icon("arrow_up")}</span>
+					<span class="ib-sl-stat-value">${fmt(this._summary.qty_in)}</span>
+					<span class="ib-sl-stat-label">${__("stock received")}</span>
+				</span>
+				<span class="ib-sl-stat-sep">·</span>
+				<span class="ib-sl-stat ib-sl-stat--out">
+					<span class="ib-sl-stat-icon">${this._icon("arrow_down")}</span>
+					<span class="ib-sl-stat-value">${fmt(this._summary.qty_out)}</span>
+					<span class="ib-sl-stat-label">${__("stock issued")}</span>
+				</span>
 			</div>
 			<div class="ib-sl-actions">
 				<button class="ib-sl-action-btn ib-sl-export-btn" title="${__("Export current view as CSV")}">
-					<svg class="icon icon-sm"><use href="#es-line-down"></use></svg>
+					${this._icon("download")}
 					${__("Export CSV")}
 				</button>
-				${ts ? `<span class="ib-sl-refresh-time">${__("Updated")} ${ts}</span>` : ""}
+				${ts ? `<span class="ib-sl-refresh-time">${this._icon("clock")} ${__("Updated")} ${ts}</span>` : ""}
 			</div>
 		`);
 
 		this.$cards.find(".ib-sl-export-btn").on("click", () => this._export_csv());
-		this.$cards.find(".ib-sl-live-badge").on("click", () => this.refresh());
-	}
-
-	_flash_live() {
-		this.$cards.find(".ib-sl-live-badge").addClass("ib-sl-live-badge--flash");
-		setTimeout(() => this.$cards.find(".ib-sl-live-badge").removeClass("ib-sl-live-badge--flash"), 400);
 	}
 
 	// ── Client-side filter + sort + render ────────────────────────────────────
@@ -328,7 +335,7 @@ class IbStockLedger {
 			rows = rows.filter(r => {
 				const hay = [
 					r.item_code, r.item_name, r.party, r.voucher_no,
-					r.wh_short, r.vtype_short, r.color, r.custom_thickness,
+					r.wh_short, r.vtype_short, r.color, r.custom_thickness, r.custom_adhesive_type,
 				].join(" ").toLowerCase();
 				return this._search_tokens.every(t => hay.includes(t));
 			});
@@ -347,7 +354,6 @@ class IbStockLedger {
 		}
 
 		this._render_chips();
-		this._update_status();
 		this._update_sort_icons();
 		this._render_pagination();
 	}
@@ -355,8 +361,9 @@ class IbStockLedger {
 	// ── Rendering ─────────────────────────────────────────────────────────────
 
 	_render_rows(data) {
-		const esc = frappe.utils.escape_html;
-		const hl  = (v) => IBStock.highlight(v, this._search_tokens);
+		const esc  = frappe.utils.escape_html;
+		const hl   = (v) => IBStock.highlight(v, this._search_tokens);
+		const frag = document.createDocumentFragment();
 
 		data.forEach(r => {
 			const direction = r.actual_qty > 0 ? "in" : r.actual_qty < 0 ? "out" : "zero";
@@ -376,32 +383,35 @@ class IbStockLedger {
 
 			const in_html   = r.qty_in  ? `<span class="ib-sl-qty-in">+${frappe.format(r.qty_in,  { fieldtype: "Float" })}</span>` : `<span class="ib-sl-nil">—</span>`;
 			const out_html  = r.qty_out ? `<span class="ib-sl-qty-out">−${frappe.format(r.qty_out, { fieldtype: "Float" })}</span>` : `<span class="ib-sl-nil">—</span>`;
-			const rate_html = r.rate    ? frappe.format(r.rate, { fieldtype: "Currency" }) : `<span class="ib-sl-nil">—</span>`;
+			const rate_html = r.rate    ? frappe.format(r.rate, { fieldtype: "Float" }) : `<span class="ib-sl-nil">—</span>`;
 
-			const $tr = $(`
-				<tr class="ib-sl-row ib-sl-row--${direction}">
-					<td class="ib-sl-td-date">${esc(r.posting_dt_str)}</td>
-					<td class="ib-sl-td-item">
-						<a href="${item_link}" class="ib-sl-item-code">${hl(r.item_code)}</a>
-						${spec_html ? `<div class="ib-sl-spec">${spec_html}</div>` : ""}
-					</td>
-					<td><span class="ib-sl-wh-badge ${wh_cls}">${esc(r.wh_short)}</span></td>
-					<td class="ib-sl-td-num">${in_html}</td>
-					<td class="ib-sl-td-num">${out_html}</td>
-					<td class="ib-sl-td-num">
-						<span class="ib-sl-balance">${frappe.format(r.qty_after_transaction, { fieldtype: "Float" })}</span>
-						<span class="ib-sl-uom">${esc(r.stock_uom || "")}</span>
-					</td>
-					<td class="ib-sl-td-party"><span class="ib-sl-party">${hl(r.party || "—")}</span></td>
-					<td class="ib-sl-td-voucher">
-						<span class="ib-sl-vtype-badge ${vt_cls}">${esc(r.vtype_short)}</span>
-						<a href="${doc_link}" class="ib-sl-voucher-no" target="_blank">${hl(r.voucher_no || "")}</a>
-					</td>
-					<td class="ib-sl-td-num">${rate_html}</td>
-				</tr>
-			`);
-			this.$tbody.append($tr);
+			const tr = document.createElement("tr");
+			tr.className = `ib-sl-row ib-sl-row--${direction}`;
+			tr.innerHTML = `
+				<td class="ib-sl-td-date">${esc(r.posting_dt_str)}</td>
+				<td class="ib-sl-td-item">
+					${r.item_name && r.item_name !== r.item_code ? `<div class="ib-sl-item-name">${hl(r.item_name)}</div>` : ""}
+					<a href="${item_link}" class="ib-sl-item-code">${hl(r.item_code)}</a>
+					${spec_html ? `<div class="ib-sl-spec">${spec_html}</div>` : ""}
+				</td>
+				<td><span class="ib-sl-wh-badge ${wh_cls}">${esc(r.wh_short)}</span></td>
+				<td class="ib-sl-td-num">${in_html}</td>
+				<td class="ib-sl-td-num">${out_html}</td>
+				<td class="ib-sl-td-num">
+					<span class="ib-sl-balance">${frappe.format(r.qty_after_transaction, { fieldtype: "Float" })}</span>
+					<span class="ib-sl-uom">${esc(r.stock_uom || "")}</span>
+				</td>
+				<td class="ib-sl-td-party"><span class="ib-sl-party">${hl(r.party || "—")}</span></td>
+				<td class="ib-sl-td-voucher">
+					<span class="ib-sl-vtype-badge ${vt_cls}">${esc(r.vtype_short)}</span>
+					<a href="${doc_link}" class="ib-sl-voucher-no" target="_blank">${hl(r.voucher_no || "")}</a>
+				</td>
+				<td class="ib-sl-td-num">${rate_html}</td>
+			`;
+			frag.appendChild(tr);
 		});
+
+		this.$tbody[0].appendChild(frag);
 	}
 
 	_spec_html(r) {
@@ -410,13 +420,13 @@ class IbStockLedger {
 		const uom   = r.stock_uom;
 
 		if (uom === "SQMT") {
-			if (r.width_mm)            parts.push(esc(String(r.width_mm)));
-			if (r.length_mtr)          parts.push(esc(String(r.length_mtr)));
-			if (r.custom_thickness)    parts.push(esc(r.custom_thickness));
-			if (r.color)               parts.push(IBStock.color_dots(r.color) + esc(r.color));
-			if (r.custom_liner)        parts.push(esc(r.custom_liner));
+			if (r.width_mm)             parts.push(esc(String(r.width_mm)));
+			if (r.length_mtr)           parts.push(esc(String(r.length_mtr)));
+			if (r.custom_thickness)     parts.push(esc(r.custom_thickness));
+			if (r.color)                parts.push(IBStock.color_dots(r.color) + esc(r.color));
+			if (r.custom_liner)         parts.push(esc(r.custom_liner));
 		} else if (uom === "PCS") {
-			if (r.color)               parts.push(IBStock.color_dots(r.color) + esc(r.color));
+			if (r.color)                parts.push(IBStock.color_dots(r.color) + esc(r.color));
 		} else if (uom === "KG") {
 			if (r.custom_adhesive_type) parts.push(esc(r.custom_adhesive_type));
 		}
@@ -450,18 +460,15 @@ class IbStockLedger {
 		if (vtype) chips.push({ label: vtype, type: "vtype",
 			clear: _server_clear(() => this.f_vtype.set_value("")) });
 
-		// Date range chip — show when non-default
-		const from  = this.f_from.get_value();
-		const to    = this.f_to.get_value();
-		const def_f = _DEFAULT_FROM();
-		const def_t = _DEFAULT_TO();
-		if (from !== def_f || to !== def_t) {
+		const from = this.f_from.get_value();
+		const to   = this.f_to.get_value();
+		if (from || to) {
 			chips.push({
-				label: `${from} → ${to}`,
+				label: `${from || "…"} → ${to || "…"}`,
 				type:  "date",
 				clear: _server_clear(() => {
-					this.f_from.set_value(def_f);
-					this.f_to.set_value(def_t);
+					this.f_from.set_value("");
+					this.f_to.set_value("");
 				}),
 			});
 		}
@@ -490,31 +497,6 @@ class IbStockLedger {
 			this.$chips.append(`<button class="ib-chip-clear-all">${__("Clear all")}</button>`);
 			this.$chips.find(".ib-chip-clear-all").on("click", () => this._clear_all());
 		}
-	}
-
-	// ── Status bar ────────────────────────────────────────────────────────────
-
-	_update_status() {
-		const shown = this._filtered_data.length;
-		const total = this._total;
-
-		const in_rows  = this._filtered_data.filter(r => r.actual_qty > 0).length;
-		const out_rows = this._filtered_data.filter(r => r.actual_qty < 0).length;
-
-		const is_filtered = shown < this._data.length;
-		const count_txt   = is_filtered
-			? `<strong>${shown}</strong> ${__("matches")} <span class="text-muted">(${this._data.length} ${__("on page")})</span>`
-			: `<strong>${shown}</strong> ${__("entries")}`;
-
-		this.$status.html(`
-			<span class="ib-sl-status-text">
-				${count_txt}
-				&nbsp;·&nbsp;
-				<span class="ib-sl-stat-in">↑ ${in_rows} IN</span>
-				&nbsp;
-				<span class="ib-sl-stat-out">↓ ${out_rows} OUT</span>
-			</span>
-		`);
 	}
 
 	// ── Pagination ────────────────────────────────────────────────────────────
@@ -549,17 +531,19 @@ class IbStockLedger {
 		`);
 
 		this.$pg.find("[data-action='prev']").on("click", () => {
+			if (this._page <= 1) return;
 			this._page--;
 			this._save_filters();
 			this.refresh();
 		});
 		this.$pg.find("[data-action='next']").on("click", () => {
+			if (this._page >= max_pages) return;
 			this._page++;
 			this._save_filters();
 			this.refresh();
 		});
 		this.$pg.find(".ib-sl-pg-size").on("click", (e) => {
-			this._page_size = parseInt($(e.currentTarget).data("size"));
+			this._page_size = parseInt($(e.currentTarget).data("size"), 10);
 			this._page      = 1;
 			this._save_filters();
 			this.refresh();
@@ -578,7 +562,19 @@ class IbStockLedger {
 		});
 	}
 
-	// ── Empty state ───────────────────────────────────────────────────────────
+	// ── Empty / idle states ───────────────────────────────────────────────────
+
+	_show_idle() {
+		this.$tbody.empty();
+		this.$pg.empty();
+		this._render_chips();
+		this.$empty.html(`
+			<div class="ib-sl-empty-msg">
+				<div class="ib-sl-empty-icon">${this._icon("calendar")}</div>
+				${__("Select a date range to view stock movements")}
+			</div>
+		`).show();
+	}
 
 	_show_empty() {
 		const item = this.f_item.get_value();
@@ -586,8 +582,8 @@ class IbStockLedger {
 			? __("No entries match your search")
 			: item
 				? __("No stock movements for {0} in this period", [item])
-				: __("No entries — try a wider date range or remove filters");
-		this.$empty.html(`<div class="ib-sl-empty-msg"><div class="ib-sl-empty-icon">📭</div>${msg}</div>`).show();
+				: __("No entries found — try adjusting your filters");
+		this.$empty.html(`<div class="ib-sl-empty-msg"><div class="ib-sl-empty-icon">${this._icon("inbox")}</div>${msg}</div>`).show();
 	}
 
 	// ── CSV export ────────────────────────────────────────────────────────────
@@ -627,6 +623,7 @@ class IbStockLedger {
 				sort_col:     this._sort.col  || "",
 				sort_asc:     this._sort.asc  ? 1 : 0,
 				page_size:    this._page_size,
+				search_chips: this._search_chips || [],
 			}));
 		} catch (_) {}
 	}
@@ -645,6 +642,7 @@ class IbStockLedger {
 			if (saved.voucher_type) this.f_vtype.set_value(saved.voucher_type);
 			if (saved.sort_col)     { this._sort.col = saved.sort_col; this._sort.asc = !!saved.sort_asc; }
 			if (saved.page_size)    this._page_size = saved.page_size;
+			if (Array.isArray(saved.search_chips)) this._search_chips = saved.search_chips;
 			this._restoring = false;
 		} catch (_) { this._restoring = false; }
 	}
@@ -654,14 +652,15 @@ class IbStockLedger {
 		this.f_item.set_value("");
 		this.f_warehouse.set_value("");
 		this.f_uom.set_value("");
-		this.f_from.set_value(_DEFAULT_FROM());
-		this.f_to.set_value(_DEFAULT_TO());
+		this.f_from.set_value("");
+		this.f_to.set_value("");
 		this.f_vtype.set_value("");
 		this._restoring    = false;
 		this._search_chips = [];
 		this._sort         = { col: null, asc: true };
 		this._page         = 1;
 		$(this.f_search.wrapper).find("input").val("");
+		try { localStorage.removeItem(this._STORAGE_KEY); } catch (_) {}
 		this._reset_and_refresh();
 	}
 }

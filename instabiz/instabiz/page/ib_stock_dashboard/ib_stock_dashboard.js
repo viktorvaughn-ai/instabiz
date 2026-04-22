@@ -267,6 +267,15 @@ class IBStockDashboard {
 
 	// ── Stat cards ────────────────────────────────────────────────────────────
 
+	_icon(name) {
+		const icons = {
+			download: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10m0 0-4-4m4 4 4-4"/><path d="M4 18v2h16v-2"/></svg>`,
+			live: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>`,
+			clock: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`,
+		};
+		return `<span class="ib-sd-svg-icon ib-sd-svg-icon--${name}">${icons[name] || ""}</span>`;
+	}
+
 	_render_cards(s) {
 		const cards = [
 			{ id: "all",      label: __("Total Items"),   value: s.total,     accent: true  },
@@ -301,13 +310,14 @@ class IBStockDashboard {
 		$cards.append(`
 			<div class="ib-sd-actions">
 				<button class="ib-sd-action-btn ib-sd-export-btn" title="${__("Export current view as CSV")}">
-					<svg class="icon icon-sm"><use href="#es-line-down"></use></svg>
+					${this._icon("download")}
 					${__("Export CSV")}
 				</button>
 				<button class="ib-sd-action-btn ib-sd-live-badge" title="${__("Click to Refresh Data")}">
-					● ${__("Live")}
+					${this._icon("live")}
+					${__("Live")}
 				</button>
-				${ts ? `<span class="ib-sd-refresh-time">${__("Updated")} ${ts}</span>` : ""}
+				${ts ? `<span class="ib-sd-refresh-time">${this._icon("clock")} ${__("Updated")} ${ts}</span>` : ""}
 			</div>
 		`);
 
@@ -641,12 +651,13 @@ class IBStockDashboard {
 		else                      { status = __("Healthy");        status_cls = "ib-status--good";   }
 
 		const rows_html = whs.map(w => {
-			const avail     = w.stock - w.res;
-			const avail_cls = avail < 0 ? "ib-qty-negative" : avail > 0 ? "ib-qty-positive" : "ib-qty-zero";
-			const bar_pct   = Math.round(w.stock / max_stock * 100);
-			const res_pct   = w.stock > 0 ? Math.round(w.res / w.stock * 100) : 0;
-			const res_label = w.res > 0
-				? `${w.res.toLocaleString()} <span class="ib-bd-pct">(${res_pct}%)</span>`
+			const avail      = w.stock - w.res;
+			const avail_cls  = avail < 0 ? "ib-qty-negative" : avail > 0 ? "ib-qty-positive" : "ib-qty-zero";
+			const stock_cls  = w.stock > 0 ? "ib-qty-positive" : "ib-qty-zero";
+			const bar_pct    = Math.round(w.stock / max_stock * 100);
+			const res_pct    = w.stock > 0 ? Math.round(w.res / w.stock * 100) : 0;
+			const res_label  = w.res > 0
+				? `<span class="ib-bd-warn">${w.res.toLocaleString()}</span> <span class="ib-bd-pct">(${res_pct}%)</span>`
 				: `<span class="ib-bd-zero">—</span>`;
 			const reorder_label = w.reorder > 0
 				? w.reorder.toLocaleString()
@@ -654,23 +665,24 @@ class IBStockDashboard {
 			return `<tr>
 				<td class="ib-bd-loc">${w.label}</td>
 				<td class="ib-bd-num">
-					${w.stock.toLocaleString()}
+					<span class="${stock_cls}">${w.stock.toLocaleString()}</span>
 					<div class="ib-bd-bar">
 						<div class="ib-bd-bar-stock" style="width:${bar_pct}%">
 							<div class="ib-bd-bar-res" style="width:${res_pct}%"></div>
 						</div>
 					</div>
 				</td>
-				<td class="ib-bd-num ib-bd-reserved">${res_label}</td>
+				<td class="ib-bd-num">${res_label}</td>
 				<td class="ib-bd-num ib-bd-reorder">${reorder_label}</td>
 				<td class="ib-bd-num"><span class="${avail_cls}">${avail.toLocaleString()}</span></td>
 			</tr>`;
 		}).join("");
 
-		const avail_cls     = total_avail < 0 ? "ib-qty-negative" : total_avail > 0 ? "ib-qty-positive" : "ib-qty-zero";
-		const tot_res_pct   = total_stock > 0 ? Math.round(total_res / total_stock * 100) : 0;
-		const tot_res_label = total_res > 0
-			? `${total_res.toLocaleString()} <span class="ib-bd-pct">(${tot_res_pct}%)</span>`
+		const avail_cls         = total_avail < 0 ? "ib-qty-negative" : total_avail > 0 ? "ib-qty-positive" : "ib-qty-zero";
+		const total_stock_cls   = total_stock > 0 ? "ib-qty-positive" : "ib-qty-zero";
+		const tot_res_pct       = total_stock > 0 ? Math.round(total_res / total_stock * 100) : 0;
+		const tot_res_label     = total_res > 0
+			? `<span class="ib-bd-warn">${total_res.toLocaleString()}</span> <span class="ib-bd-pct">(${tot_res_pct}%)</span>`
 			: `<span class="ib-bd-zero">—</span>`;
 		const tot_reorder_label = total_reorder > 0
 			? total_reorder.toLocaleString()
@@ -708,8 +720,8 @@ class IBStockDashboard {
 					<tfoot>
 						<tr>
 							<td>${__("Total")}</td>
-							<td class="ib-bd-num">${total_stock.toLocaleString()}</td>
-							<td class="ib-bd-num ib-bd-reserved">${tot_res_label}</td>
+							<td class="ib-bd-num"><span class="${total_stock_cls}">${total_stock.toLocaleString()}</span></td>
+							<td class="ib-bd-num">${tot_res_label}</td>
 							<td class="ib-bd-num ib-bd-reorder">${tot_reorder_label}</td>
 							<td class="ib-bd-num"><span class="${avail_cls}">${total_avail.toLocaleString()}</span></td>
 						</tr>
