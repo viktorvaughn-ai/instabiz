@@ -140,6 +140,19 @@ def get_pincode_info(pincode):
 
 
 @frappe.whitelist()
+def set_lead_status(lead, status):
+	"""Update custom_status directly — bypasses full validate."""
+	VALID = {"Cold Lead", "Hot Lead", "Contacted", "Qualified", "Proposal", "Negotiation", "Converted", "Customer", "Lost"}
+	if status not in VALID:
+		frappe.throw(_("Invalid status"))
+	doc = frappe.get_doc("Lead", lead)
+	if not has_permission(doc, "write", frappe.session.user):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	frappe.db.set_value("Lead", lead, "custom_status", status)
+	return status
+
+
+@frappe.whitelist()
 def transfer_leads(leads, to_user):
     """Bulk transfer lead ownership to a given user.
 

@@ -2270,5 +2270,37 @@
   "property_type": "Text",
   "row_name": null,
   "value": "Draft\nPending\nConfirmed\nReturn Issued\nCancelled"
+ },
+ {
+  "default_value": null,
+  "doc_type": "Lead",
+  "docstatus": 0,
+  "doctype": "Property Setter",
+  "doctype_or_field": "DocField",
+  "field_name": "lead_type",
+  "is_system_generated": 0,
+  "modified": "2026-04-23 12:25:03.767772",
+  "module": null,
+  "name": "Lead-lead_type-in_standard_filter",
+  "property": "in_standard_filter",
+  "property_type": "Check",
+  "row_name": null,
+  "value": "0"
+ },
+ {
+  "default_value": null,
+  "doc_type": "Lead",
+  "docstatus": 0,
+  "doctype": "Property Setter",
+  "doctype_or_field": "DocField",
+  "field_name": "job_title",
+  "is_system_generated": 0,
+  "modified": "2026-04-23 12:25:03.986841",
+  "module": null,
+  "name": "Lead-job_title-in_standard_filter",
+  "property": "in_standard_filter",
+  "property_type": "Check",
+  "row_name": null,
+  "value": "0"
  }
 ]

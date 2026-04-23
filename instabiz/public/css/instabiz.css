@@ -1932,3 +1932,65 @@ mark.ib-search-hl {
 .kanban-card .like-action,
 .kanban-card .liked-by,
 .kanban-card-meta { display: none !important; }
+
+/* ── Inline Lead Status Picker ── */
+.frappe-list .list-row .indicator-pill {
+    cursor: pointer;
+}
+
+.ib-status-picker {
+    position: fixed;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    min-width: 130px;
+}
+
+.ib-status-picker-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    padding: 3px 8px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    font-family: inherit;
+    transition: filter 0.1s;
+}
+
+.ib-status-picker-item:hover {
+    filter: brightness(0.92);
+}
+
+.ib-status-picker-item.ib-status-active {
+    outline: 2px solid currentColor;
+    outline-offset: 1px;
+}
+
+/* ── Compact status multiselect (Lead / Quotation / Sales Order list filters) ── */
+.ib-lead-status-multi-filter .multiselect-list .dropdown-menu .selectable-item,
+.ib-quotation-status-multi-filter .multiselect-list .dropdown-menu .selectable-item,
+.ib-sales-order-status-multi-filter .multiselect-list .dropdown-menu .selectable-item {
+    font-size: 11px;
+}
+
+.ib-lead-status-multi-filter .multiselect-list .dropdown-menu .small,
+.ib-quotation-status-multi-filter .multiselect-list .dropdown-menu .small,
+.ib-sales-order-status-multi-filter .multiselect-list .dropdown-menu .small {
+    font-size: 10px;
+}
+
+.ib-lead-status-multi-filter .multiselect-list .dropdown-menu .btn.btn-xs,
+.ib-quotation-status-multi-filter .multiselect-list .dropdown-menu .btn.btn-xs,
+.ib-sales-order-status-multi-filter .multiselect-list .dropdown-menu .btn.btn-xs {
+    font-size: 10px;
+}

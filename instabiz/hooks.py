@@ -166,7 +166,6 @@ override_whitelisted_methods = {
     "erpnext.stock.doctype.delivery_note.delivery_note.make_sales_invoice":
         "instabiz.overrides.delivery_note.custom_make_sales_invoice",
 
-
 }
 
 # ── Frontend assets ───────────────────────────────────────────────────────────

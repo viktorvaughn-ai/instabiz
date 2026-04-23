@@ -4,6 +4,90 @@ Single source of truth for all Claude Code sessions. Read this before touching a
 
 ---
 
+## Agent Operating Rules (STRICT, ALWAYS FOLLOW)
+
+These rules are mandatory for all agents working on this repo. Do not skip them.
+
+### 1) No Assumptions, Ever
+- Never guess fieldnames, doctype behavior, filters, hooks, or API contracts.
+- Verify from source first:
+  - `instabiz/fixtures/custom_field.json`
+  - `instabiz/fixtures/property_setter.json`
+  - actual file implementation in `instabiz/public/js/*` or `instabiz/overrides/*`.
+- If evidence is missing or ambiguous, ask the user before implementing.
+
+### 2) Ask Questions Before Major Work
+- Before any **big feature rewrite**, **new enhancement**, or **cross-file behavioral change**:
+  - ask clarifying questions,
+  - confirm assumptions explicitly,
+  - confirm scope boundaries (what must not change),
+  - confirm rollout order and acceptance criteria.
+- Do not proceed on inferred intent for high-impact changes.
+
+### 3) Verify-First Workflow (Required)
+- Before presenting or coding a solution:
+  1. inspect current behavior in code,
+  2. validate dependencies and touch points,
+  3. identify risk areas and fallback path.
+- Before declaring work complete:
+  1. lint affected files,
+  2. run required build/restart/migrate per change type,
+  3. report what was verified and what was not.
+
+### 4) Production Safety Rules
+- Treat all work as production-sensitive unless user says otherwise.
+- Prefer minimal diffs and targeted edits over broad refactors.
+- Preserve existing working behavior unless user explicitly approves change.
+- If an existing behavior (e.g. status picker, list action, print action) might be impacted, call it out before editing.
+- Never remove or alter a feature silently.
+
+### 5) Scope Control and Change Isolation
+- Implement one logical unit at a time (e.g. Lead first, then Quotation, then SO).
+- For multi-doctype work, complete and verify one doctype before cloning pattern to others.
+- Keep unrelated files untouched.
+- Do not “cleanup” or refactor adjacent code unless requested.
+
+### 6) UI + Backend Sync Discipline
+- For filter/UI changes:
+  - ensure control value format matches backend expectation (e.g. `in` + array).
+  - ensure clear/reset actions sync UI state and filter state.
+  - ensure route/filter state restoration is consistent.
+- If frontend-only phase is requested, do not call backend beyond agreed scope.
+
+### 7) Preserve and Respect Existing Custom Patterns
+- Lead row status picker is a protected behavior and must remain unless explicitly requested otherwise.
+- Existing custom list actions/formatters/print behavior must be preserved unless requested.
+- Do not re-enable native behavior that user asked to disable.
+
+### 8) Mandatory Communication Pattern
+- Before implementation: state understanding + first verification step.
+- During implementation: provide short progress updates for major steps.
+- After implementation: provide exact files changed, behavior changed, and verification performed.
+- If user asks “ask questions, don’t assume,” always ask first for ambiguous decisions.
+
+### 9) Command and Environment Discipline
+- Run commands from bench root: `/home/dev/frappe-bench/`.
+- Use site `frontend` for all `bench --site` operations.
+- After JS/CSS changes: `bench build --app instabiz`.
+- After Python changes: `bench restart`.
+- After fixture updates: `bench --site frontend migrate`.
+- After hooks changes: `bench --site frontend clear-cache`.
+
+### 10) No Silent Risk Escalation
+- If something appears risky, conflicting, or unexpected, stop and ask.
+- If local observations differ from user expectations, report discrepancy before editing.
+- If rollback may be needed, mention rollback approach in advance.
+
+### 11) Completion Checklist (must satisfy before handoff)
+- [ ] User-requested scope only.
+- [ ] Existing critical behavior preserved.
+- [ ] No guessed metadata/fieldnames.
+- [ ] Lint/build/restart/migrate run as required.
+- [ ] Clear verification summary provided.
+- [ ] Open questions/limitations listed explicitly.
+
+---
+
 ## Project
 
 **App:** instabiz — `/home/dev/frappe-bench/apps/instabiz/`  
@@ -108,10 +192,33 @@ tail -f logs/web.error.log
 | `*_list.js` | List view customizations per doctype |
 | `ib_color_map.js` | window.IB_COLOR_MAP — color name → hex (70+ entries); null = transparent/checkerboard; loaded globally |
 
+### Latest list-view update (2026-04)
+- Lead, Quotation, and Sales Order list views now use a **custom compact MultiSelectList status filter** in the standard filter row.
+- Existing native status filter fields are hidden in UI and replaced by helper controls:
+  - Lead uses `custom_status`
+  - Quotation uses `status`
+  - Sales Order uses `status`
+- Multi-select values are applied via list filters using `in` operator (array values), then list is refreshed.
+- Existing row-level status picker behavior on Lead remains intact.
+- UI details: no visible label (`only_input: true`), compact width (`140px`), control inserted in standard filter section (not right-corner page form fallback unless needed).
+
+### Lead row status picker (must preserve)
+- File: `instabiz/public/js/lead_list.js`
+- Lead list indicator pill is clickable and opens a floating status picker (`.ib-status-picker`) near the pill.
+- Selecting a status updates UI optimistically and calls backend method:
+  - `instabiz.overrides.lead.set_lead_status`
+  - args: `{ lead, status }`
+- Picker behavior:
+  - closes on outside click
+  - repositions on window/list scroll
+  - unbinds listeners on cleanup
+- This row-level picker is separate from the top-row multi-select filter and must not be removed when changing filter UX.
+
 ### Custom Pages (`instabiz/instabiz/page/`)
 | Page | Files | Notes |
 |---|---|---|
 | `ib-stock-dashboard` | `ib_stock_dashboard.js`, `ib_stock_dashboard.py` | See Stock Dashboard section below |
+| `attendance-terminal` | `attendance_terminal.js`, `attendance_terminal.py` | Attendance operations page (employee status, check-in, absent marking) |
 
 ### Fonts (`instabiz/public/fonts/`)
 | File | Notes |
@@ -262,6 +369,7 @@ Loaded globally via `app_include_js` in `hooks.py`.
 - **JS:** prettier + eslint
 - No docstrings, type hints, or extra comments unless logic is non-obvious
 - Do NOT double-register hooks for logic already in override classes (causes double execution)
+- For list/filter work: **never guess fieldnames**. Verify from fixtures (`custom_field.json`, `property_setter.json`) before implementation.
 
 ---
 
