@@ -65,6 +65,12 @@
         });
     }
 
+    /* ── factory / office detection (matches attendance terminal logic) ─────── */
+
+    function is_factory(dept) {
+        return (dept || "").toLowerCase().includes("factory");
+    }
+
     /* ── filter + render table ────────────────────────────────────────────── */
 
     function apply_filter(s) {
@@ -73,6 +79,8 @@
         if (s.status_filter === "Present")  rows = rows.filter(r => !absent_statuses.includes(r.status));
         if (s.status_filter === "Absent")   rows = rows.filter(r => absent_statuses.includes(r.status));
         if (s.status_filter === "IN")       rows = rows.filter(r => r.status === "IN");
+        if (s.category === "factory")       rows = rows.filter(r => is_factory(r.department));
+        if (s.category === "office")        rows = rows.filter(r => !is_factory(r.department));
         render_table(s.$table_wrap, rows, s.all_rows_data.length);
     }
 
@@ -151,6 +159,7 @@
                 date:          frappe.datetime.get_today(),
                 dept:          "",
                 search:        "",
+                category:      null,
                 status_filter: null,
                 all_rows_data: [],
                 $cards_wrap:   null,
@@ -158,6 +167,29 @@
             };
 
             listview.page.main.find(".standard-filter-section").hide();
+
+            if (!document.getElementById("eck-styles")) {
+                const s = document.createElement("style");
+                s.id = "eck-styles";
+                s.textContent = `
+                    .eck-cat-group { display:flex; border:1px solid var(--border-color); border-radius:6px; overflow:hidden; }
+                    .eck-cat-btn {
+                        padding:4px 14px; font-size:12px; font-weight:500; cursor:pointer;
+                        background:var(--card-bg); color:var(--text-muted);
+                        border:none; border-right:1px solid var(--border-color);
+                        transition:all 0.12s;
+                    }
+                    .eck-cat-btn:last-child { border-right:none; }
+                    .eck-cat-btn--active { background:var(--ib-primary,#d97757); color:#fff; }
+                    .eck-card { display:flex;flex-direction:column;align-items:center;padding:12px 20px;background:var(--card-bg);border:1px solid var(--border-color);border-radius:8px;min-width:80px; }
+                    .eck-cards { display:flex;gap:10px;padding:12px 15px 4px;flex-wrap:wrap; }
+                    .eck-card--active { border-color:var(--ib-primary,#d97757); }
+                    .eck-card-value { font-size:22px;font-weight:800;line-height:1; }
+                    .eck-card-label { font-size:11px;color:var(--text-muted);margin-top:4px;text-transform:uppercase;letter-spacing:0.4px; }
+                    .eck-th { padding:10px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;white-space:nowrap; }
+                `;
+                document.head.appendChild(s);
+            }
 
             listview.set_primary_action = function () {
                 listview.page.set_primary_action(
@@ -180,29 +212,32 @@
                 // Summary cards
                 s.$cards_wrap = $(`<div class="eck-cards"></div>`);
 
-                // Filters  (date picker lives here — not in title area which is non-interactive)
+                // Filters
                 const $sub = $(`
                     <div style="display:flex;gap:8px;padding:10px 15px 12px;flex-wrap:wrap;align-items:center;">
                         <input type="date" class="form-control eck-date"
                             style="height:28px;font-size:12px;width:150px;padding:2px 8px;"
                             value="${s.date}">
-                        <input type="text" class="form-control eck-dept"
-                            style="height:28px;font-size:12px;width:180px;"
-                            placeholder="Department">
+                        <div class="eck-cat-group">
+                            <button class="eck-cat-btn eck-cat-btn--active" data-cat="">All</button>
+                            <button class="eck-cat-btn" data-cat="office">Office</button>
+                            <button class="eck-cat-btn" data-cat="factory">Factory</button>
+                        </div>
                         <input type="text" class="form-control eck-search"
-                            style="height:28px;font-size:12px;width:200px;"
+                            style="height:28px;font-size:12px;width:200px;margin-left:auto;"
                             placeholder="Search employee…">
                     </div>`);
 
-                let dept_t, search_t;
+                let search_t;
                 $sub.find(".eck-date").on("change", function () {
                     s.date = $(this).val() || frappe.datetime.get_today();
                     load(listview);
                 });
-                $sub.find(".eck-dept").on("input", function () {
-                    clearTimeout(dept_t);
-                    const v = $(this).val().trim();
-                    dept_t = setTimeout(function () { s.dept = v; load(listview); }, 500);
+                $sub.find(".eck-cat-btn").on("click", function () {
+                    $sub.find(".eck-cat-btn").removeClass("eck-cat-btn--active");
+                    $(this).addClass("eck-cat-btn--active");
+                    s.category = $(this).data("cat") || null;
+                    apply_filter(s);
                 });
                 $sub.find(".eck-search").on("input", function () {
                     clearTimeout(search_t);

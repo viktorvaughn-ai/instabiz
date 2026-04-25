@@ -1,0 +1,51 @@
+{
+ "charts": [],
+ "content": "[{\"id\":\"ib-h1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Quick Access</b></span>\",\"col\":12}},{\"id\":\"ib-sc-cb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Board\",\"col\":3}},{\"id\":\"ib-sc-aa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Assignment Admin\",\"col\":3}},{\"id\":\"ib-sc-at\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Attendance Terminal\",\"col\":3}},{\"id\":\"ib-sc-ci\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Employee Check-in\",\"col\":3}}]",
+ "creation": "2026-04-25 11:15:33.281823",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "hide_custom": 0,
+ "idx": 0,
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "Instabiz",
+ "links": [],
+ "modified": "2026-04-25 13:06:52.336496",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "Instabiz",
+ "number_cards": [],
+ "owner": "Administrator",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [],
+ "sequence_id": 0.0,
+ "shortcuts": [
+  {
+   "doc_view": "",
+   "label": "Customer Board",
+   "link_to": "ib-customer-board",
+   "type": "Page"
+  },
+  {
+   "doc_view": "",
+   "label": "Employee Check-in",
+   "type": "URL",
+   "url": "/app/employee-checkin"
+  },
+  {
+   "doc_view": "",
+   "label": "Assignment Admin",
+   "link_to": "ib-assignment-admin",
+   "type": "Page"
+  },
+  {
+   "doc_view": "",
+   "label": "Attendance Terminal",
+   "link_to": "attendance-terminal",
+   "type": "Page"
+  }
+ ],
+ "title": "Instabiz"
+}

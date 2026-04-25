@@ -115,6 +115,8 @@ These rules are mandatory for all agents working on this repo. Do not skip them.
 7. **Role-based Data Isolation** — non-privileged users see only their own sales docs
 8. **HRMS Payroll** — two salary structures (IB Payroll / Astro Payroll); salary assignments done
 9. **IB Stock Dashboard** — custom page (`ib-stock-dashboard`); live stock across 3 warehouses; filter chips; multi-token search + highlight; breakdown popover; CSV export; WebSocket live-updates
+10. **IB Customer Board** — sales pipeline state machine; `ib-customer-board` (4-column kanban: Dormant/Regular/Today/Tomorrow); `ib-assignment-admin` (roster + view-as kanban + pool assign); 12am scheduler auto-assigns tomorrow's batch per user territory; SO submit auto-marks assignment done; `IB Customer Assignment` doctype + `IB Assignment Config` singleton
+11. **Instabiz Workspace** — sidebar workspace with shortcuts: Customer Board, Stock Dashboard, Assignment Admin, Attendance Terminal, Employee Check-in
 
 ---
 
@@ -215,10 +217,32 @@ tail -f logs/web.error.log
 - This row-level picker is separate from the top-row multi-select filter and must not be removed when changing filter UX.
 
 ### Custom Pages (`instabiz/instabiz/page/`)
-| Page | Files | Notes |
+| Page slug | JS / PY files | Purpose |
 |---|---|---|
-| `ib-stock-dashboard` | `ib_stock_dashboard.js`, `ib_stock_dashboard.py` | See Stock Dashboard section below |
-| `attendance-terminal` | `attendance_terminal.js`, `attendance_terminal.py` | Attendance operations page (employee status, check-in, absent marking) |
+| `ib-stock-dashboard` | `ib_stock_dashboard.js`, `ib_stock_dashboard.py` | Live stock across 3 warehouses — see Stock Dashboard section |
+| `ib-stock-ledger` | `ib_stock_ledger.js`, `ib_stock_ledger.py` | Filterable stock ledger per item/warehouse/date range; deep-links from stock dashboard |
+| `ib-customer-board` | `ib_customer_board.js`, `ib_customer_board.py` | 4-column kanban (Dormant / Regular / Today / Tomorrow) for sales users; date picker; add/remove with undo toast |
+| `ib-assignment-admin` | `ib_assignment_admin.js`, `ib_assignment_admin.py` | Manager view: roster overview (avatar + stats + progress), view-as-user kanban, customer pool assign panel with server-side pagination |
+| `attendance-terminal` | `attendance_terminal.js`, `attendance_terminal.py` | Bulk check-in/absent marking; factory vs office filter |
+
+#### IB Stock Ledger (`ib-stock-ledger`)
+- Backend: `get_ledger(item_code, warehouse, from_date, to_date, ...)` — @whitelist
+- Queries `tabStock Ledger Entry` with party lookup via `_PARTY_MAP` (DN/SI/SO/PR/PI/PO)
+- Warehouse short labels: `MAHARASHTRA - IB → MH`, `CHENNAI - IB → CN`, `GUJARAT - IB → GJ`
+- Deep-linked from stock dashboard via `frappe.route_options = { item_code }`
+
+#### IB Customer Board (`ib-customer-board`)
+- Backend lives in `instabiz/overrides/customer_assignment.py` (not in the page py)
+- Key whitelisted methods: `get_customer_board_data(date)`, `add_customer_to_today(customer, date, target_user)`, `remove_assignment(assignment_id, force)`, `get_customer_pool(territory, pool_type, date, limit, offset, search)`
+- Columns: Dormant pool → Regular pool → Today → Tomorrow
+- Undo toast: 5s window to re-add removed card
+
+#### IB Assignment Admin (`ib-assignment-admin`)
+- Backend methods (all in `customer_assignment.py`): `get_admin_overview(date, territory, view_as_user)`, `get_active_sales_users()`, `get_customer_pool(...)` with server-side pagination (50/page)
+- `_require_manager()` guards all admin-facing methods (Sales Manager or System Manager role)
+- Roster: avatar color = team-based (hash of team name → 10-color palette); no team → `var(--ib-primary)`
+- View-as: loads full 4-column kanban for any user; manager can add/remove on their behalf
+- Pool assign panel: always visible; Assign button enabled only when user + date + customers all selected
 
 ### Fonts (`instabiz/public/fonts/`)
 | File | Notes |
@@ -230,12 +254,15 @@ tail -f logs/web.error.log
 | DocType | Naming | Notes |
 |---|---|---|
 | Employee Exit Handover | EXH-.YYYY.-.##### | execute_reassignment() is whitelisted |
-| Employee Exit Handover Item | (child) | |
+| Employee Exit Handover Item | (child) | child of Employee Exit Handover |
+| Employee Document | (child, istable=1) | child used for storing employee files; options: PANCARD, AADHAR CARD, Passport, Education Certificate, Experience Letter, Offer Letter, Relieving Letter, Salary Slip, Bank Passbook, Other |
 | Lead Sales Team | team_name | validate() checks duplicates |
-| Lead Sales Team Member | (child) | |
+| Lead Sales Team Member | (child) | fields: user (Link→User), parent = team name — used for avatar color grouping |
 | Lead Sales Team Territory | (child) | |
 | IB Branding | (simple master) | |
 | IB Transport | (simple master) | |
+| IB Assignment Config | (singleton) | fields: assignments_per_day (Int), dormant_threshold_days (Int), dormant_ratio (Percent) |
+| IB Customer Assignment | ICA-.YYYY.-.##### | fields: customer, assigned_to (User), assigned_date, status (Pending/Contacted/Order Placed/Skipped/Rolled Over), source_pool (Dormant/Regular), territory, notes, outcome (Interested/Not Interested/Follow Up/No Response), completed_at |
 
 ### Fixtures
 - `instabiz/fixtures/custom_field.json` — ~85 custom fields

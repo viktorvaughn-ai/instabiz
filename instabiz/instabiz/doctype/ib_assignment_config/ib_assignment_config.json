@@ -1,0 +1,65 @@
+{
+ "actions": [],
+ "creation": "2026-04-26 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "assignments_per_day",
+  "dormant_threshold_days",
+  "dormant_ratio"
+ ],
+ "fields": [
+  {
+   "fieldname": "assignments_per_day",
+   "fieldtype": "Int",
+   "default": "10",
+   "label": "Assignments Per Day",
+   "reqd": 1,
+   "description": "Number of customers auto-assigned to each sales user per day"
+  },
+  {
+   "fieldname": "dormant_threshold_days",
+   "fieldtype": "Int",
+   "default": "90",
+   "label": "Dormant Threshold (Days)",
+   "reqd": 1,
+   "description": "Customers with no SO in this many days are treated as Dormant"
+  },
+  {
+   "fieldname": "dormant_ratio",
+   "fieldtype": "Percent",
+   "default": "50",
+   "label": "Dormant Mix Ratio (%)",
+   "reqd": 1,
+   "description": "Percentage of daily assignments drawn from Dormant pool (remainder from Regular)"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-04-26 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "IB Assignment Config",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "email": 1, "export": 1, "print": 1,
+   "read": 1, "report": 1, "role": "Sales User",
+   "select": 1, "share": 0,
+   "create": 0, "write": 0, "delete": 0
+  },
+  {
+   "create": 1, "delete": 0, "email": 1, "export": 1, "print": 1,
+   "read": 1, "report": 1, "role": "Sales Manager",
+   "select": 1, "share": 1, "write": 1
+  },
+  {
+   "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1,
+   "read": 1, "report": 1, "role": "System Manager",
+   "select": 1, "share": 1, "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

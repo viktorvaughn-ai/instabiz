@@ -5,6 +5,8 @@ scheduler_events = {
         "instabiz.overrides.employee_exit.run_exit_handover_daily",
         # Runs on relieving_date + 1 — disables the ERP user account (only for employees marked "Left")
         "instabiz.overrides.employee_exit.run_user_disable_daily",
+        # Rolls over pending assignments and generates tomorrow's customer board
+        "instabiz.overrides.customer_assignment.run_daily_assignment",
     ],
 }
 
@@ -115,7 +117,10 @@ doc_events = {
         "after_insert": "instabiz.overrides.comment.notify_owner_on_comment",
     },
     "Sales Order": {
-        "on_submit": "instabiz.overrides.stock_events.publish_stock_update",
+        "on_submit": [
+            "instabiz.overrides.stock_events.publish_stock_update",
+            "instabiz.overrides.customer_assignment.mark_assignment_done_on_so",
+        ],
         "on_cancel": "instabiz.overrides.stock_events.publish_stock_update",
     },
     "Delivery Note": {
