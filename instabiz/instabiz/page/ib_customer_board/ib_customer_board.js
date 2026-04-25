@@ -1,3 +1,49 @@
+const _WA_TEMPLATES = [
+	`Hi {customer},
+
+I'm *{name}* from *Instabiz Solutions India PVT LTD*.
+
+We are premium suppliers of _adhesive tapes_ and _spray paints_, trusted by businesses across India.
+
+Our prices are *significantly lower than the market* — same quality, better value. No compromise.
+
+Would love to understand your requirements and show you what we can offer. When would be a good time to connect?`,
+
+	`Hello {customer},
+
+This is *{name}* from *Instabiz Solutions India PVT LTD*.
+
+We specialise in high-quality _adhesive tapes_ and _spray paints_ at *prices that consistently beat the competition*.
+
+Whether you need industrial or commercial solutions, we have the right products at the right price.
+
+Happy to share our catalogue and best pricing — shall I send it across?`,
+
+	`Hi {customer},
+
+*{name}* here from *Instabiz Solutions India PVT LTD*.
+
+We deal in _adhesive tapes_ and _spray paints_, and our customers regularly tell us our prices are *lower than what they were paying elsewhere* — without any drop in quality.
+
+Would love to discuss how we can add value to your business. Looking forward to connecting!`,
+
+	`Hello {customer},
+
+I'm *{name}* from *Instabiz Solutions India PVT LTD* — your trusted partner for _adhesive tapes_ and _spray paints_.
+
+We offer *market-beating prices* backed by reliable supply, consistent quality, and prompt delivery.
+
+Let us know your requirements and we will get you the best deal available. Looking forward to a great association!`,
+
+	`Hi {customer},
+
+*{name}* from *Instabiz Solutions India PVT LTD* here.
+
+We supply premium _adhesive tapes_ and _spray paints_ at *prices lower than what you will find in the open market*.
+
+If you are looking for quality products at the right price, we should definitely talk. What are your current requirements?`,
+];
+
 frappe.pages["ib-customer-board"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
@@ -22,6 +68,13 @@ class IBCustomerBoard {
 	}
 
 	_init() {
+		this._gsap_ready = new Promise((resolve) => {
+			if (window.gsap) { resolve(); return; }
+			const s = document.createElement("script");
+			s.src = "https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js";
+			s.onload = resolve;
+			document.head.appendChild(s);
+		});
 		this._build_toolbar();
 		this._build_skeleton();
 		this.refresh();
@@ -132,6 +185,7 @@ class IBCustomerBoard {
 	// ── Render ────────────────────────────────────────────────────────────────
 
 	_render(data) {
+		this._tomorrow_date = data.tomorrow_date;
 		$("#ib-cb-today-date").text(frappe.datetime.str_to_user(data.date));
 		$("#ib-cb-tomorrow-date").text(frappe.datetime.str_to_user(data.tomorrow_date));
 		this._render_pool("dormant", data.dormant, data.dormant_total);
@@ -164,9 +218,13 @@ class IBCustomerBoard {
 				<div class="ib-cb-card-meta">${frappe.utils.escape_html(r.territory || "")}</div>
 				<div class="ib-cb-card-last">${last}</div>
 				<div class="ib-cb-card-actions">
-					<button class="btn btn-xs ib-action-btn ib-cb-btn-add-today"
+					<button class="ib-cb-pill ib-cb-pill--add ib-cb-btn-add-today"
 						data-customer="${frappe.utils.escape_html(r.customer)}">
-						<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add to Today
+						<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add to Today
+					</button>
+					<button class="ib-cb-pill ib-cb-pill--tomorrow ib-cb-btn-add-tomorrow"
+						data-customer="${frappe.utils.escape_html(r.customer)}">
+						<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Tomorrow
 					</button>
 				</div>
 			</div>
@@ -174,6 +232,10 @@ class IBCustomerBoard {
 		$card.find(".ib-cb-btn-add-today").on("click", function () {
 			const customer = $(this).data("customer");
 			self._add_to_today(customer, $(this));
+		});
+		$card.find(".ib-cb-btn-add-tomorrow").on("click", function () {
+			const customer = $(this).data("customer");
+			self._add_to_tomorrow(customer, $(this));
 		});
 		return $card;
 	}
@@ -207,29 +269,28 @@ class IBCustomerBoard {
 			? `Last SO: ${frappe.datetime.str_to_user(r.last_so_date)}`
 			: "No orders yet";
 
+		const wa_btn = r.mobile_no ? `
+				<button class="ib-cb-pill ib-cb-pill--wa ib-cb-btn-wa" title="WhatsApp ${frappe.utils.escape_html(r.mobile_no)}">
+					<svg width="11" height="11" viewBox="0 0 360 362" fill="none"><path fill="#25D366" fill-rule="evenodd" d="M307.546 52.566C273.709 18.684 228.706.017 180.756 0 81.951 0 1.538 80.404 1.504 179.235c-.017 31.594 8.242 62.432 23.928 89.609L0 361.736l95.024-24.925c26.179 14.285 55.659 21.805 85.655 21.814h.077c98.788 0 179.21-80.413 179.244-179.244.017-47.898-18.608-92.926-52.454-126.807v-.008Zm-126.79 275.788h-.06c-26.73-.008-52.952-7.194-75.831-20.765l-5.44-3.231-56.391 14.791 15.05-54.981-3.542-5.638c-14.912-23.721-22.793-51.139-22.776-79.286.035-82.14 66.867-148.973 149.051-148.973 39.793.017 77.198 15.53 105.328 43.695 28.131 28.157 43.61 65.596 43.593 105.398-.035 82.149-66.867 148.982-148.982 148.982v.008Zm81.719-111.577c-4.478-2.243-26.497-13.073-30.606-14.568-4.108-1.496-7.09-2.243-10.073 2.243-2.982 4.487-11.568 14.577-14.181 17.559-2.613 2.991-5.226 3.361-9.704 1.117-4.477-2.243-18.908-6.97-36.02-22.226-13.313-11.878-22.304-26.54-24.916-31.027-2.613-4.486-.275-6.91 1.959-9.136 2.011-2.011 4.478-5.234 6.721-7.847 2.244-2.613 2.983-4.486 4.478-7.469 1.496-2.991.748-5.603-.369-7.847-1.118-2.243-10.073-24.289-13.812-33.253-3.636-8.732-7.331-7.546-10.073-7.692-2.613-.13-5.595-.155-8.586-.155-2.991 0-7.839 1.118-11.947 5.604-4.108 4.486-15.677 15.324-15.677 37.361s16.047 43.344 18.29 46.335c2.243 2.991 31.585 48.225 76.51 67.632 10.684 4.615 19.029 7.374 25.535 9.437 10.727 3.412 20.49 2.931 28.208 1.779 8.604-1.289 26.498-10.838 30.228-21.298 3.73-10.46 3.73-19.433 2.613-21.298-1.117-1.865-4.108-2.991-8.586-5.234l.008-.017Z" clip-rule="evenodd"/></svg> WA
+				</button>` : "";
+
+		const skip_btn = !is_done && r.status !== "Skipped" ? `
+			<button class="ib-cb-skip-btn ib-cb-btn-skip" title="Skip">&#x2715;</button>` : "";
+
 		const actions = r.status === "Skipped" ? `
 			<div class="ib-cb-card-actions">
-				<button class="btn btn-xs ib-action-btn ib-cb-btn-unskip" data-id="${r.name}">
-					<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.49"/></svg> Undo Skip
+				<button class="ib-cb-pill ib-cb-pill--neutral ib-cb-btn-unskip" data-id="${r.name}">
+					<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.49"/></svg> Undo Skip
 				</button>
 			</div>` : !is_done ? `
 			<div class="ib-cb-card-actions">
-				<button class="btn btn-xs ib-action-btn ib-cb-btn-contact" data-id="${r.name}">
-					<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.99 12 19.79 19.79 0 0 1 1.85 3.5 2 2 0 0 1 3.84 1.34h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9a16 16 0 0 0 6.91 6.91l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg> Contacted
+				<button class="ib-cb-pill ib-cb-pill--contact ib-cb-btn-contact" data-id="${r.name}">
+					<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.99 12 19.79 19.79 0 0 1 1.85 3.5 2 2 0 0 1 3.84 1.34h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9a16 16 0 0 0 6.91 6.91l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg> Contacted
 				</button>
-				<div class="ib-cb-create-group">
-					<button class="btn btn-xs ib-action-btn ib-cb-btn-q"
-						data-customer="${frappe.utils.escape_html(r.customer)}">
-						<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Quote
-					</button>
-					<button class="btn btn-xs ib-action-btn ib-cb-btn-so"
-						data-customer="${frappe.utils.escape_html(r.customer)}">
-						<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg> Order
-					</button>
-				</div>
-				<button class="btn btn-xs btn-default ib-cb-btn-skip" data-id="${r.name}">
-					<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg> Skip
+				<button class="ib-cb-pill ib-cb-pill--quote ib-cb-btn-q" data-customer="${frappe.utils.escape_html(r.customer)}">
+					<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Quote
 				</button>
+				${wa_btn}
 			</div>` : "";
 
 		const $card = $(`
@@ -237,6 +298,7 @@ class IBCustomerBoard {
 				<div class="ib-cb-card-top">
 					<div class="ib-cb-card-name">${frappe.utils.escape_html(r.customer_name || r.customer)}</div>
 					<span class="ib-cb-status ${status_cls}">${r.status}</span>
+					${skip_btn}
 				</div>
 				<div class="ib-cb-card-meta">${frappe.utils.escape_html(r.territory || "")}</div>
 				<div class="ib-cb-card-last">${last}</div>
@@ -251,9 +313,11 @@ class IBCustomerBoard {
 			$card.find(".ib-cb-btn-q").on("click", () =>
 				frappe.new_doc("Quotation", { party_name: r.customer, quotation_to: "Customer" })
 			);
-			$card.find(".ib-cb-btn-so").on("click", () =>
-				frappe.new_doc("Sales Order", { customer: r.customer })
-			);
+			if (r.mobile_no) {
+				$card.find(".ib-cb-btn-wa").on("click", () =>
+					window.open(self._wa_url(r.mobile_no, r.customer_name || r.customer), "_blank")
+				);
+			}
 			$card.find(".ib-cb-btn-skip").on("click", () => self._skip(r.name, $card));
 		}
 		return $card;
@@ -286,71 +350,78 @@ class IBCustomerBoard {
 	_add_to_today(customer, $btn) {
 		const self = this;
 		const $card = $btn.closest(".ib-cb-card");
-
-		// Snapshot positions before any DOM change
-		const srcRect = $card[0].getBoundingClientRect();
-
-		// Build flying clone at source position
-		const $clone = $("<div class='ib-cb-card ib-cb-card--today ib-cb-flying'></div>");
-		$clone.html($card.html()).find(".ib-cb-btn-add-today").remove();
-		$clone.css({
-			position: "fixed",
-			top: srcRect.top,
-			left: srcRect.left,
-			width: srcRect.width,
-			zIndex: 9000,
-			margin: 0,
-			pointerEvents: "none",
-			boxShadow: "0 6px 20px rgba(0,0,0,0.15)",
-		});
-		document.body.appendChild($clone[0]);
-
-		// Ghost the source card
-		$card.css({ opacity: 0.3, transition: "opacity 0.2s ease" });
 		$btn.prop("disabled", true);
 
-		// Animate clone to top of Today cards container (below header ~49px)
-		const $todayCards = $("#ib-cb-today-cards");
-		const cardsRect = $todayCards[0].getBoundingClientRect();
-		const targetTop = cardsRect.top + 10;
-		const targetLeft = cardsRect.left + 10;
-		const targetWidth = cardsRect.width - 20;
+		this._gsap_ready.then(() => {
+			const srcRect = $card[0].getBoundingClientRect();
+			const $todayCards = $("#ib-cb-today-cards");
+			const targetRect = $todayCards[0].getBoundingClientRect();
 
-		requestAnimationFrame(() => {
-			requestAnimationFrame(() => {
-				$clone.css({
-					transition: "top 0.38s cubic-bezier(0.4,0,0.2,1), left 0.38s cubic-bezier(0.4,0,0.2,1), width 0.38s cubic-bezier(0.4,0,0.2,1), opacity 0.3s 0.2s, transform 0.38s cubic-bezier(0.4,0,0.2,1)",
-					top: targetTop,
-					left: targetLeft,
-					width: targetWidth,
-					opacity: 0,
-					transform: "scale(0.96)",
-				});
+			const clone = document.createElement("div");
+			clone.className = "ib-cb-card ib-cb-card--today";
+			clone.innerHTML = $card.html();
+			clone.querySelector(".ib-cb-btn-add-today")?.remove();
+			Object.assign(clone.style, {
+				position: "fixed",
+				top: srcRect.top + "px",
+				left: srcRect.left + "px",
+				width: srcRect.width + "px",
+				margin: "0",
+				zIndex: "9000",
+				pointerEvents: "none",
+			});
+			document.body.appendChild(clone);
+
+			gsap.set($card[0], { opacity: 0.35 });
+
+			gsap.to(clone, {
+				top: targetRect.top + 8,
+				left: targetRect.left + 8,
+				width: targetRect.width - 16,
+				opacity: 0,
+				scale: 0.94,
+				duration: 0.52,
+				ease: "power3.inOut",
+				onComplete: () => clone.remove(),
+			});
+
+			frappe.call({
+				method: "instabiz.overrides.customer_assignment.add_customer_to_today",
+				args: { customer, date: self._selected_date },
+				callback(r) {
+					if (r.message && r.message.status === "ok") {
+						gsap.to($card[0], { opacity: 0, scale: 0.92, duration: 0.22, ease: "power2.in",
+							onComplete: () => { self.refresh(); self._show_undo_toast(customer, r.message.assignment); }
+						});
+					} else {
+						gsap.to($card[0], { opacity: 1, duration: 0.2 });
+						$btn.prop("disabled", false);
+					}
+				},
+				error() {
+					gsap.to($card[0], { opacity: 1, duration: 0.2 });
+					$btn.prop("disabled", false);
+				},
 			});
 		});
+	}
 
-		// Fire API call in parallel — clean up clone after animation finishes
+	_add_to_tomorrow(customer, $btn) {
+		const self = this;
+		$btn.prop("disabled", true);
 		frappe.call({
 			method: "instabiz.overrides.customer_assignment.add_customer_to_today",
-			args: { customer, date: self._selected_date },
+			args: { customer, date: self._tomorrow_date },
 			callback(r) {
-				setTimeout(() => {
-					$clone.remove();
-					if (r.message && r.message.status === "ok") {
-						self.refresh();
-						self._show_undo_toast(customer, r.message.assignment);
-					} else {
-						$card.css({ opacity: 1 });
-						$btn.prop("disabled", false).text("+ Add to Today");
-					}
-				}, 420);
+				if (r.message && r.message.status === "ok") {
+					frappe.show_alert({ message: `${customer} added to Tomorrow`, indicator: "blue" });
+					self.refresh();
+				} else {
+					$btn.prop("disabled", false);
+				}
 			},
 			error() {
-				setTimeout(() => {
-					$clone.remove();
-					$card.css({ opacity: 1 });
-					$btn.prop("disabled", false).text("+ Add to Today");
-				}, 420);
+				$btn.prop("disabled", false);
 			},
 		});
 	}
@@ -481,6 +552,25 @@ class IBCustomerBoard {
 		});
 	}
 
+	_wa_phone(raw) {
+		const digits = raw.replace(/\D/g, "");
+		return digits.startsWith("91") && digits.length >= 12 ? `+${digits}` : `+91${digits}`;
+	}
+
+	_wa_url(raw, customer_name) {
+		const num = this._wa_phone(raw).replace("+", "");
+		const key = "ib_wa_tmpl_idx";
+		const idx = parseInt(localStorage.getItem(key) || "0", 10) % _WA_TEMPLATES.length;
+		localStorage.setItem(key, (idx + 1) % _WA_TEMPLATES.length);
+		const sender = frappe.boot.user_info?.[frappe.session.user]?.fullname
+			|| frappe.boot.full_name
+			|| frappe.session.user;
+		const msg = _WA_TEMPLATES[idx]
+			.replace("{name}", sender)
+			.replace("{customer}", customer_name || "");
+		return `https://web.whatsapp.com/send/?phone=${num}&text=${encodeURIComponent(msg)}&type=phone_number&app_absent=0`;
+	}
+
 	// ── Styles ────────────────────────────────────────────────────────────────
 
 	_inject_styles() {
@@ -540,8 +630,13 @@ class IBCustomerBoard {
 				background: var(--fg-color, #fff);
 				border: 1px solid var(--border-color);
 				border-radius: 6px;
-				padding: 10px 12px;
+				padding: 8px 10px;
 				font-size: 12px;
+				transition: box-shadow 0.18s ease, transform 0.18s ease;
+			}
+			.ib-cb-card:hover {
+				box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+				transform: translateY(-1px);
 			}
 
 			.ib-cb-card--pool { border-left: 3px solid var(--border-color); }
@@ -572,33 +667,66 @@ class IBCustomerBoard {
 				display: flex;
 				gap: 5px;
 				margin-top: 8px;
-				flex-wrap: wrap;
 				align-items: center;
 			}
+			.ib-cb-skip-btn {
+				background: none;
+				border: none;
+				color: var(--text-muted);
+				font-size: 14px;
+				line-height: 1;
+				cursor: pointer;
+				padding: 0 2px;
+				margin-left: auto;
+				opacity: 0.4;
+				transition: opacity 0.15s, color 0.15s;
+				flex-shrink: 0;
+			}
+			.ib-cb-skip-btn:hover { opacity: 1; color: #ef4444; }
 			.ib-cb-card-actions .btn,
 			.ib-cb-card-actions .ib-action-btn {
 				display: inline-flex; align-items: center; gap: 4px;
 			}
 
-			.ib-cb-create-group {
-				display: flex;
-				gap: 3px;
-			}
-			.ib-cb-create-group .btn { border-radius: 4px; }
-
-			.ib-cb-status {
-				font-size: 10px;
-				font-weight: 600;
-				border-radius: 4px;
-				padding: 2px 6px;
+.ib-cb-status {
+				font-size: 9px;
+				font-weight: 700;
+				border-radius: 3px;
+				padding: 1px 5px;
 				white-space: nowrap;
 				text-transform: uppercase;
-				letter-spacing: 0.3px;
+				letter-spacing: 0.4px;
+				flex-shrink: 0;
 			}
 			.ib-cb-status--pending   { background: #fef3c7; color: #92400e; }
 			.ib-cb-status--contacted { background: #d1fae5; color: #065f46; }
 			.ib-cb-status--ordered   { background: #dbeafe; color: #1e40af; }
 			.ib-cb-status--skipped   { background: #f3f4f6; color: #6b7280; }
+
+			/* Pill buttons */
+			.ib-cb-pill {
+				display: inline-flex;
+				align-items: center;
+				gap: 4px;
+				border: none;
+				border-radius: 20px;
+				padding: 4px 10px;
+				font-size: 11px;
+				font-weight: 600;
+				cursor: pointer;
+				transition: filter 0.15s ease, transform 0.12s ease;
+				white-space: nowrap;
+				line-height: 1;
+			}
+			.ib-cb-pill:hover  { filter: brightness(0.9); transform: translateY(-1px); }
+			.ib-cb-pill:active { transform: translateY(0); filter: brightness(0.85); }
+			.ib-cb-pill--contact { background: #d1fae5; color: #065f46; }
+			.ib-cb-pill--quote   { background: #fef3c7; color: #92400e; }
+			.ib-cb-pill--wa      { background: #dcfce7; color: #15803d; }
+			.ib-cb-pill--skip    { background: var(--subtle-bg); color: var(--text-muted); padding: 4px 8px; }
+			.ib-cb-pill--neutral { background: var(--subtle-bg); color: var(--text-color); }
+			.ib-cb-pill--add      { background: #ffe8df; color: #b94a20; }
+			.ib-cb-pill--tomorrow { background: #dbeafe; color: #1e40af; }
 
 			.ib-cb-pool-badge {
 				display: inline-block;

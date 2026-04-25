@@ -118,7 +118,7 @@ def get_dormant_pool(territories, exclude_customers, threshold_days, limit=50, o
 		return rows[0].cnt if rows else 0
 	rows = frappe.db.sql(
 		f"""
-		SELECT c.name AS customer, c.customer_name, c.territory,
+		SELECT c.name AS customer, c.customer_name, c.territory, c.gstin,
 		       MAX(so.transaction_date) AS last_so_date
 		FROM `tabCustomer` c
 		LEFT JOIN `tabSales Order` so
@@ -169,7 +169,7 @@ def get_regular_pool(territories, exclude_customers, threshold_days, limit=50, o
 		return rows[0].cnt if rows else 0
 	rows = frappe.db.sql(
 		f"""
-		SELECT c.name AS customer, c.customer_name, c.territory,
+		SELECT c.name AS customer, c.customer_name, c.territory, c.gstin,
 		       MAX(so.transaction_date) AS last_so_date
 		FROM `tabCustomer` c
 		INNER JOIN `tabSales Order` so
@@ -313,7 +313,7 @@ def get_customer_board_data(date=None):
 	today_assignments = frappe.db.sql(
 		"""
 		SELECT ca.name, ca.customer, ca.status, ca.source_pool, ca.territory,
-		       c.customer_name, c.territory AS cust_territory,
+		       c.customer_name, c.territory AS cust_territory, c.mobile_no,
 		       MAX(so.transaction_date) AS last_so_date
 		FROM `tabIB Customer Assignment` ca
 		INNER JOIN `tabCustomer` c ON c.name = ca.customer

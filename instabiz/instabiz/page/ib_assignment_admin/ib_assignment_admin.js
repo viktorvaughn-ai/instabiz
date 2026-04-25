@@ -595,7 +595,10 @@ class IBAssignmentAdmin {
 				<div class="ib-va-card-code">${frappe.utils.escape_html(r.customer)}</div>
 				<div class="ib-va-card-meta">${frappe.utils.escape_html(r.territory || "")}</div>
 				<div class="ib-va-card-last">${last}</div>
-				<button class="ib-va-add-btn" data-customer="${frappe.utils.escape_html(r.customer)}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add to Today</button>
+				<div class="ib-va-card-btns">
+					<button class="ib-va-add-btn" data-customer="${frappe.utils.escape_html(r.customer)}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Today</button>
+					<button class="ib-va-tmrw-btn" data-customer="${frappe.utils.escape_html(r.customer)}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Tomorrow</button>
+				</div>
 			</div>
 		`);
 		$card.find(".ib-va-add-btn").on("click", function () {
@@ -610,10 +613,29 @@ class IBAssignmentAdmin {
 						self._va_show_undo(customer, r.message.assignment);
 						self._reload_va_board();
 					} else {
-						$btn.prop("disabled", false).text("+ Add to Today");
+						$btn.prop("disabled", false).text("Today");
 					}
 				},
-				error() { $btn.prop("disabled", false).text("+ Add to Today"); },
+				error() { $btn.prop("disabled", false).text("Today"); },
+			});
+		});
+		$card.find(".ib-va-tmrw-btn").on("click", function () {
+			const customer = $(this).data("customer");
+			const $btn = $(this);
+			const tomorrow = frappe.datetime.add_days(self._date, 1);
+			$btn.prop("disabled", true).text("Adding…");
+			frappe.call({
+				method: "instabiz.overrides.customer_assignment.add_customer_to_today",
+				args: { customer, date: tomorrow, target_user },
+				callback(r) {
+					if (r.message && r.message.status === "ok") {
+						frappe.show_alert({ message: `${customer} added to Tomorrow`, indicator: "blue" });
+						self._reload_va_board();
+					} else {
+						$btn.prop("disabled", false).text("Tomorrow");
+					}
+				},
+				error() { $btn.prop("disabled", false).text("Tomorrow"); },
 			});
 		});
 		return $card;
@@ -741,12 +763,14 @@ class IBAssignmentAdmin {
 			const checked = this._selected_pool_customers.has(r.customer);
 			const display_name = frappe.utils.escape_html(r.customer_name || r.customer);
 			const code = frappe.utils.escape_html(r.customer);
+			const gstin = r.gstin ? `<span class="ib-aa-pool-cust-gstin">${frappe.utils.escape_html(r.gstin)}</span>` : "";
 			$list.append(`
 				<label class="ib-aa-pool-row ${checked ? "ib-aa-pool-row--checked" : ""}" data-name="${code}">
 					<input type="checkbox" class="ib-aa-pool-chk" value="${code}" ${checked ? "checked" : ""}>
 					<span class="ib-aa-pool-cust">
 						<span class="ib-aa-pool-cust-name">${display_name}</span>
 						<span class="ib-aa-pool-cust-code">${code}</span>
+						${gstin}
 					</span>
 					<span class="ib-aa-pool-terr">${frappe.utils.escape_html(r.territory || "—")}</span>
 					<span class="ib-aa-pool-last">${this._age_chip(r.last_so_date)}</span>
@@ -1126,9 +1150,24 @@ class IBAssignmentAdmin {
 				border-left-color: var(--ib-primary);
 			}
 			.ib-aa-pool-chk { width: 15px; height: 15px; cursor: pointer; accent-color: var(--ib-primary); flex-shrink: 0; }
-			.ib-aa-pool-cust { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+			.ib-aa-pool-cust { flex: 1; display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
 			.ib-aa-pool-cust-name { font-weight: 600; font-size: 13px; color: var(--text-color); }
 			.ib-aa-pool-cust-code { font-size: 10px; color: var(--text-muted); font-family: monospace; }
+			.ib-aa-pool-cust-gstin {
+				display: inline-block;
+				margin-top: 3px;
+				font-size: 11px;
+				font-family: monospace;
+				font-weight: 600;
+				letter-spacing: 0.4px;
+				color: #1e40af;
+				background: #dbeafe;
+				border: 1px solid #93c5fd;
+				border-radius: 20px;
+				padding: 2px 8px;
+				white-space: nowrap;
+			}
+			.ib-aa-pool-cust-gstin::before { content: "GST  "; color: #3b82f6; }
 			.ib-aa-pool-terr { width: 140px; font-size: 12px; color: var(--text-muted); }
 			.ib-aa-pool-last { width: 120px; font-size: 12px; color: var(--text-muted); }
 
@@ -1209,14 +1248,21 @@ class IBAssignmentAdmin {
 			.ib-va-status--contacted { background: #d1fae5; color: #065f46; }
 			.ib-va-status--ordered   { background: #dbeafe; color: #1e40af; }
 			.ib-va-status--skipped   { background: #f3f4f6; color: #6b7280; }
-			.ib-va-add-btn {
-				margin-top: 8px; width: 100%; padding: 5px 0; border-radius: 5px;
-				border: 1px solid var(--ib-primary); background: #fdf6f3; color: var(--ib-primary);
+			.ib-va-card-btns { margin-top: 8px; display: flex; gap: 6px; }
+			.ib-va-add-btn, .ib-va-tmrw-btn {
+				flex: 1; padding: 5px 0; border-radius: 5px;
 				font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s;
 				display: inline-flex; align-items: center; justify-content: center; gap: 4px;
 			}
+			.ib-va-add-btn {
+				border: 1px solid var(--ib-primary); background: #fdf6f3; color: var(--ib-primary);
+			}
 			.ib-va-add-btn:hover { background: var(--ib-primary); color: #fff; }
-			.ib-va-add-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+			.ib-va-tmrw-btn {
+				border: 1px solid #93c5fd; background: #eff6ff; color: #1d4ed8;
+			}
+			.ib-va-tmrw-btn:hover { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+			.ib-va-add-btn:disabled, .ib-va-tmrw-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 			.ib-va-remove-btn {
 				margin-top: 8px; width: 100%; padding: 5px 0; border-radius: 5px;
 				border: 1px solid #fca5a5; background: #fff1f2; color: #b91c1c;
