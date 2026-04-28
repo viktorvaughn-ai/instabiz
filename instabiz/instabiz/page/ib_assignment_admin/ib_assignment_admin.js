@@ -99,7 +99,7 @@ class IBAssignmentAdmin {
 				<!-- ── View As Banner ── -->
 				<div id="ib-aa-view-as-bar" class="ib-aa-view-as-bar" style="display:none;">
 					<div class="ib-aa-view-as-inner">
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+						${IB_ICONS.svg("eye", 14)}
 						<span id="ib-aa-view-as-label"></span>
 					</div>
 					<button class="ib-aa-exit-view-btn" id="ib-aa-exit-view">✕ Exit</button>
@@ -365,7 +365,7 @@ class IBAssignmentAdmin {
 		// Update hidden strip
 		const $strip = $("#ib-aa-hidden-strip");
 		if (hidden_count > 0) {
-			$strip.html(`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg> ${hidden_count} user${hidden_count > 1 ? "s" : ""} hidden &mdash; <a href="#" class="ib-aa-show-all-link">Show all</a>`).show();
+			$strip.html(`${IB_ICONS.svg("eye_off", 13)} ${hidden_count} user${hidden_count > 1 ? "s" : ""} hidden &mdash; <a href="#" class="ib-aa-show-all-link">Show all</a>`).show();
 			$strip.find(".ib-aa-show-all-link").on("click", (e) => {
 				e.preventDefault();
 				self._excluded_users.clear();
@@ -409,12 +409,13 @@ class IBAssignmentAdmin {
 							<div class="ib-aa-user-name">${frappe.utils.escape_html(u.full_name || u.user)}</div>
 							${u.team ? `<div style="margin-top:4px;"><span class="ib-aa-team-chip" style="background:${av_color}18;color:${av_color};border-color:${av_color}40;">${frappe.utils.escape_html(u.team)}</span></div>` : ""}
 						</div>
-						<button class="ib-aa-btn-hide" title="Hide from overview"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button>
+						<button class="ib-aa-btn-hide" title="Hide from overview">${IB_ICONS.svg("eye_off", 14)}</button>
 					</div>
 					<div class="ib-aa-card-actions">
 						${no_tomorrow ? `<span class="ib-aa-no-tmrw-badge" title="No customers queued for tomorrow">⚠ No tomorrow</span>` : ""}
 						<button class="ib-aa-btn-view">View</button>
 						<button class="ib-aa-btn-auto">Auto-fill</button>
+						<button class="ib-aa-btn-transfer" title="Transfer today's Pending to another user">Transfer</button>
 					</div>
 					<div class="ib-aa-card-stats">
 						<div class="ib-aa-stat-chip ib-aa-stat-done">
@@ -444,6 +445,7 @@ class IBAssignmentAdmin {
 
 			$card.find(".ib-aa-btn-view").on("click", () => self._view_as(u.user, u.full_name));
 			$card.find(".ib-aa-btn-auto").on("click", () => self._bulk_auto_assign(u.user, u.full_name));
+			$card.find(".ib-aa-btn-transfer").on("click", () => self._transfer_assignments(u.user, u.full_name, u.pending));
 			$card.find(".ib-aa-btn-hide").on("click", () => {
 				self._excluded_users.add(u.user);
 				self._save_excluded();
@@ -497,24 +499,21 @@ class IBAssignmentAdmin {
 				<div class="ib-va-columns">
 					<div class="ib-va-col">
 						<div class="ib-va-col-header">
-							<svg class="ib-va-col-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-							<span class="ib-va-col-title">Dormant</span>
+							${IB_ICONS.svg("moon", 13)}<span class="ib-va-col-title">Dormant</span>
 							<span class="ib-va-badge" id="ib-va-dormant-count">0</span>
 						</div>
 						<div class="ib-va-cards" id="ib-va-dormant-cards"></div>
 					</div>
 					<div class="ib-va-col">
 						<div class="ib-va-col-header">
-							<svg class="ib-va-col-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-							<span class="ib-va-col-title">Regular</span>
+							${IB_ICONS.svg("users", 13)}<span class="ib-va-col-title">Regular</span>
 							<span class="ib-va-badge" id="ib-va-regular-count">0</span>
 						</div>
 						<div class="ib-va-cards" id="ib-va-regular-cards"></div>
 					</div>
 					<div class="ib-va-col ib-va-col--today">
 						<div class="ib-va-col-header">
-							<svg class="ib-va-col-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-							<span class="ib-va-col-title">Today</span>
+							${IB_ICONS.svg("calendar", 13)}<span class="ib-va-col-title">Today</span>
 							<span class="ib-va-col-date">${frappe.datetime.str_to_user(data.date)}</span>
 							<span class="ib-va-badge ib-va-badge--today" id="ib-va-today-count">0</span>
 						</div>
@@ -522,8 +521,7 @@ class IBAssignmentAdmin {
 					</div>
 					<div class="ib-va-col ib-va-col--tomorrow">
 						<div class="ib-va-col-header">
-							<svg class="ib-va-col-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="3" y2="18"/><line x1="21" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/><polyline points="8 6 12 2 16 6"/></svg>
-							<span class="ib-va-col-title">Tomorrow</span>
+							${IB_ICONS.svg("sunrise", 13)}<span class="ib-va-col-title">Tomorrow</span>
 							<span class="ib-va-col-date">${frappe.datetime.str_to_user(data.tomorrow_date)}</span>
 							<span class="ib-va-badge ib-va-badge--tmrw" id="ib-va-tomorrow-count">0</span>
 						</div>
@@ -596,8 +594,8 @@ class IBAssignmentAdmin {
 				<div class="ib-va-card-meta">${frappe.utils.escape_html(r.territory || "")}</div>
 				<div class="ib-va-card-last">${last}</div>
 				<div class="ib-va-card-btns">
-					<button class="ib-va-add-btn" data-customer="${frappe.utils.escape_html(r.customer)}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Today</button>
-					<button class="ib-va-tmrw-btn" data-customer="${frappe.utils.escape_html(r.customer)}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Tomorrow</button>
+					<button class="ib-va-add-btn" data-customer="${frappe.utils.escape_html(r.customer)}">${IB_ICONS.svg("plus", 11)} Today</button>
+					<button class="ib-va-tmrw-btn" data-customer="${frappe.utils.escape_html(r.customer)}">${IB_ICONS.svg("plus", 11)} Tomorrow</button>
 				</div>
 			</div>
 		`);
@@ -658,7 +656,7 @@ class IBAssignmentAdmin {
 				</div>
 				<div class="ib-va-card-meta">${frappe.utils.escape_html(r.territory || "")}</div>
 				<div class="ib-va-card-last">${last}</div>
-				${is_pending ? `<button class="ib-va-remove-btn" data-id="${frappe.utils.escape_html(r.name)}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg> Remove</button>` : ""}
+				${is_pending ? `<button class="ib-va-remove-btn" data-id="${frappe.utils.escape_html(r.name)}">${IB_ICONS.svg("trash", 11)} Remove</button>` : ""}
 			</div>
 		`);
 
@@ -739,6 +737,52 @@ class IBAssignmentAdmin {
 				}
 			},
 		});
+	}
+
+	_transfer_assignments(from_user, from_name, pending_count) {
+		const self = this;
+		if (!pending_count) {
+			frappe.show_alert({ message: `${from_name || from_user} has no Pending assignments to transfer`, indicator: "orange" });
+			return;
+		}
+		const d = new frappe.ui.Dialog({
+			title: `Transfer ${from_name || from_user}'s assignments`,
+			fields: [
+				{
+					fieldname: "to_user",
+					fieldtype: "Link",
+					label: "Transfer to",
+					options: "User",
+					reqd: 1,
+					get_query: () => ({
+						query: "frappe.core.doctype.user.user.user_query",
+						filters: { ignore_user_type: 1 },
+					}),
+				},
+			],
+			primary_action_label: "Transfer",
+			primary_action(values) {
+				if (values.to_user === from_user) {
+					frappe.show_alert({ message: "Cannot transfer to the same user", indicator: "red" });
+					return;
+				}
+				frappe.call({
+					method: "instabiz.overrides.customer_assignment.transfer_assignments",
+					args: { from_user, to_user: values.to_user, date: self._date },
+					callback(r) {
+						if (r.message != null) {
+							d.hide();
+							frappe.show_alert({
+								message: `${r.message.transferred} assignments transferred to ${values.to_user}`,
+								indicator: r.message.transferred > 0 ? "green" : "orange",
+							});
+							self.refresh();
+						}
+					},
+				});
+			},
+		});
+		d.show();
 	}
 
 	// ── Pool ─────────────────────────────────────────────────────────────────
@@ -987,6 +1031,13 @@ class IBAssignmentAdmin {
 				transition: all 0.15s; white-space: nowrap;
 			}
 			.ib-aa-btn-auto:hover { background: var(--ib-primary); color: #fff; }
+			.ib-aa-btn-transfer {
+				padding: 5px 12px; border-radius: 5px;
+				border: 1px solid #a7f3d0; background: #ecfdf5;
+				font-size: 11px; font-weight: 600; cursor: pointer; color: #059669;
+				transition: all 0.15s; white-space: nowrap;
+			}
+			.ib-aa-btn-transfer:hover { background: #059669; color: #fff; border-color: #059669; }
 			.ib-aa-btn-hide {
 				width: 24px; height: 24px; border-radius: 50%;
 				border: 1px solid var(--border-color); background: transparent;

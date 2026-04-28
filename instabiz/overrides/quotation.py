@@ -20,6 +20,59 @@ from instabiz.overrides.naming import autoname_quotation
 
 DEFAULT_TERMS = "Quotation Terms"
 
+# Address records may store gst_category in uppercase (legacy data).
+# india_compliance's GSTIN_FORMATS uses title-case keys — normalize before validation fires.
+_GST_CATEGORY_NORMALIZE = {v.upper(): v for v in [
+	"Registered Regular", "Registered Composition", "Unregistered",
+	"SEZ", "Overseas", "Deemed Export", "UIN Holders",
+	"Tax Deductor", "Tax Collector", "Input Service Distributor",
+]}
+
+_LOCATION_WAREHOUSE = {
+	"MAHARASHTRA": "MAHARASHTRA - IB",
+	"GUJARAT":     "GUJARAT - IB",
+	"CHENNAI":     "CHENNAI - IB",
+}
+
+
+def _set_company_gstin_from_warehouse(doc):
+	warehouse_name = _LOCATION_WAREHOUSE.get((doc.custom_location or "").upper())
+	if not warehouse_name:
+		return
+	gstin = frappe.get_cached_value("Warehouse", warehouse_name, "custom_gstin")
+	if gstin:
+		doc.company_gstin = gstin
+
+
+_GST_INSTATE_TEMPLATE  = "Output GST In-state - IB"
+_GST_OUTSTATE_TEMPLATE = "Output GST Out-state - IB"
+
+
+def _auto_correct_gst_template(doc):
+	"""Swap to correct in/out-state template based on GSTIN state codes."""
+	if doc.get("custom_sale_type") == "Export":
+		return
+	company_gstin  = (doc.company_gstin or "")[:2]
+	customer_gstin = (doc.billing_address_gstin or "")[:2]
+	if not customer_gstin and doc.get("customer_address"):
+		customer_gstin = (frappe.db.get_value("Address", doc.customer_address, "gstin") or "")[:2]
+	if not company_gstin or not customer_gstin:
+		return
+	correct = _GST_INSTATE_TEMPLATE if company_gstin == customer_gstin else _GST_OUTSTATE_TEMPLATE
+	if doc.taxes_and_charges == correct:
+		return
+	doc.taxes_and_charges = correct
+	template_doc = frappe.get_cached_doc("Sales Taxes and Charges Template", correct)
+	doc.set("taxes", [])
+	for row in template_doc.taxes:
+		doc.append("taxes", {
+			"charge_type":            row.charge_type,
+			"account_head":           row.account_head,
+			"description":            row.description,
+			"rate":                   row.rate,
+			"included_in_print_rate": row.included_in_print_rate,
+		})
+
 
 # ── Hook entry point ──────────────────────────────────────────────────────────
 
@@ -90,6 +143,12 @@ class CustomQuotation(IbStatusMixin, Quotation):
         if self.get("custom_sale_type") == "Export":
             self.taxes_and_charges = None
             self.set("taxes", [])
+        _set_company_gstin_from_warehouse(self)
+        _auto_correct_gst_template(self)
+        if self.gst_category:
+            self.gst_category = _GST_CATEGORY_NORMALIZE.get(
+                self.gst_category.upper(), self.gst_category
+            )
         set_sales_person(self)
         sync_sales_team(self)
         recalculate_items(self)

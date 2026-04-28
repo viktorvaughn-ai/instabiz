@@ -1,3 +1,4 @@
+import re
 import frappe
 from frappe import _
 import urllib.request
@@ -37,6 +38,45 @@ def has_permission(doc, ptype, user):
     if assigned:
         return assigned == user
     return doc.owner == user
+
+
+def check_duplicate_lead(doc, method=None):
+    """Block lead creation if same mobile_no or email_id already exists."""
+    existing = None
+    if doc.mobile_no:
+        existing = frappe.db.get_value(
+            "Lead", {"mobile_no": doc.mobile_no}, ["name", "lead_name"], as_dict=True
+        )
+    if not existing and doc.email_id:
+        existing = frappe.db.get_value(
+            "Lead", {"email_id": doc.email_id}, ["name", "lead_name"], as_dict=True
+        )
+    if existing:
+        link = f'<a href="/app/lead/{existing.name}">{existing.lead_name or existing.name}</a>'
+        frappe.throw(
+            f"Duplicate lead: {link} already exists with this phone or email.",
+            title=_("Duplicate Lead"),
+        )
+
+
+def set_territory_from_pincode(doc, method=None):
+    """If territory not set but custom_pincode is, derive territory from pincode via India Post."""
+    if doc.territory or not doc.get("custom_pincode"):
+        return
+    pincode = str(doc.custom_pincode).strip()
+    if not re.match(r"^\d{6}$", pincode):
+        return
+    try:
+        url = f"https://api.postalpincode.in/pincode/{pincode}"
+        with urllib.request.urlopen(url, timeout=3) as resp:
+            data = _json.loads(resp.read().decode())
+        if data and data[0].get("Status") == "Success" and data[0].get("PostOffice"):
+            state = data[0]["PostOffice"][0].get("State", "")
+            territory = frappe.db.get_value("Territory", state) or None
+            if territory:
+                doc.territory = territory
+    except Exception:
+        pass  # silent — pincode lookup is best-effort on insert
 
 
 def assign_lead_owner(doc, method=None):

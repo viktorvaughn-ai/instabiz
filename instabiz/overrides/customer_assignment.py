@@ -1,7 +1,24 @@
 import random
+import datetime
 import frappe
 from frappe import _
 from frappe.utils import today, now, add_days
+
+
+# ── WA Templates ─────────────────────────────────────────────────────────────
+
+@frappe.whitelist()
+def get_wa_templates():
+	rows = frappe.db.sql(
+		"""
+		SELECT template_name, message
+		FROM `tabIB WA Template`
+		WHERE is_active = 1
+		ORDER BY display_order ASC, creation ASC
+		""",
+		as_dict=True,
+	)
+	return [{"name": r.template_name, "message": r.message} for r in rows]
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -73,15 +90,45 @@ def classify_customer(customer, threshold_days):
 # ── Pool queries ──────────────────────────────────────────────────────────────
 
 def _already_assigned_customers(date):
-	"""Return set of customer names with active assignment on date."""
+	"""Return set of customers that must not be assigned on `date`.
+
+	Excluded if:
+	  - Currently Pending (any date) — no double assignment
+	  - Contacted within last 7 days (outcome != Not Interested)
+	  - Contacted within last 30 days (outcome = Not Interested)
+	  - Skipped within last 1 day — prevent same-day re-skip cycle
+	"""
+	cutoff_default        = add_days(date, -7)
+	cutoff_not_interested = add_days(date, -30)
+	cutoff_skipped        = add_days(date, -1)
 	rows = frappe.db.sql(
 		"""
 		SELECT DISTINCT customer
 		FROM `tabIB Customer Assignment`
-		WHERE assigned_date = %(date)s
-		  AND status IN ('Pending', 'Contacted')
+		WHERE status = 'Pending'
+		UNION
+		SELECT DISTINCT customer
+		FROM `tabIB Customer Assignment`
+		WHERE status = 'Contacted'
+		  AND (outcome IS NULL OR outcome != 'Not Interested')
+		  AND completed_at >= %(cutoff_default)s
+		UNION
+		SELECT DISTINCT customer
+		FROM `tabIB Customer Assignment`
+		WHERE status = 'Contacted'
+		  AND outcome = 'Not Interested'
+		  AND completed_at >= %(cutoff_not_interested)s
+		UNION
+		SELECT DISTINCT customer
+		FROM `tabIB Customer Assignment`
+		WHERE status = 'Skipped'
+		  AND completed_at >= %(cutoff_skipped)s
 		""",
-		{"date": date},
+		{
+			"cutoff_default": cutoff_default,
+			"cutoff_not_interested": cutoff_not_interested,
+			"cutoff_skipped": cutoff_skipped,
+		},
 		as_dict=True,
 	)
 	return {r.customer for r in rows}
@@ -119,6 +166,7 @@ def get_dormant_pool(territories, exclude_customers, threshold_days, limit=50, o
 	rows = frappe.db.sql(
 		f"""
 		SELECT c.name AS customer, c.customer_name, c.territory, c.gstin,
+		       c.mobile_no, c.custom_contact_person_name, c.custom_primary_contact_person,
 		       MAX(so.transaction_date) AS last_so_date
 		FROM `tabCustomer` c
 		LEFT JOIN `tabSales Order` so
@@ -170,6 +218,7 @@ def get_regular_pool(territories, exclude_customers, threshold_days, limit=50, o
 	rows = frappe.db.sql(
 		f"""
 		SELECT c.name AS customer, c.customer_name, c.territory, c.gstin,
+		       c.mobile_no, c.custom_contact_person_name, c.custom_primary_contact_person,
 		       MAX(so.transaction_date) AS last_so_date
 		FROM `tabCustomer` c
 		INNER JOIN `tabSales Order` so
@@ -223,11 +272,14 @@ def auto_assign_for_user(user, date):
 	regular_slots = slots - dormant_slots
 
 	dormant = get_dormant_pool(territories, exclude, config["dormant_threshold_days"], limit=dormant_slots * 3)
-	regular = get_regular_pool(territories, exclude, config["dormant_threshold_days"], limit=regular_slots * 3)
-
-	# Pick and shuffle within each pool
 	dormant_pick = dormant[:dormant_slots]
-	regular_pick = regular[:regular_slots]
+
+	# Backfill regular slots if dormant pool was short
+	leftover = dormant_slots - len(dormant_pick)
+	effective_regular_slots = regular_slots + leftover
+	regular = get_regular_pool(territories, exclude, config["dormant_threshold_days"], limit=effective_regular_slots * 3)
+	regular_pick = regular[:effective_regular_slots]
+
 	batch = dormant_pick + regular_pick
 	random.shuffle(batch)
 
@@ -248,21 +300,27 @@ def auto_assign_for_user(user, date):
 
 def run_daily_assignment():
 	"""
-	1. Roll over today's Pending assignments.
-	2. Auto-assign tomorrow's batch for each active sales user.
+	1. Roll over yesterday's Pending assignments.
+	2. Auto-assign tomorrow's batch for each active sales user (skips Sunday).
 	"""
 	today_date = today()
+	yesterday_date = add_days(today_date, -1)
 	tomorrow_date = add_days(today_date, 1)
 
-	# Roll over today's Pending → Rolled Over
+	# Skip Sunday — bump to Monday so users never get Sunday assignments
+	tomorrow_dt = datetime.date.fromisoformat(str(tomorrow_date))
+	if tomorrow_dt.weekday() == 6:
+		tomorrow_date = add_days(tomorrow_date, 1)
+
+	# Roll over YESTERDAY's Pending → Rolled Over (not today's — those are still in progress)
 	frappe.db.sql(
 		"""
 		UPDATE `tabIB Customer Assignment`
 		SET status = 'Rolled Over', completed_at = %(now)s, modified = %(now)s
-		WHERE assigned_date = %(today)s
+		WHERE assigned_date = %(yesterday)s
 		  AND status = 'Pending'
 		""",
-		{"today": today_date, "now": now()},
+		{"yesterday": yesterday_date, "now": now()},
 	)
 	frappe.db.commit()
 
@@ -312,9 +370,18 @@ def get_customer_board_data(date=None):
 	# Today's assignments
 	today_assignments = frappe.db.sql(
 		"""
-		SELECT ca.name, ca.customer, ca.status, ca.source_pool, ca.territory,
+		SELECT ca.name, ca.customer, ca.status, ca.outcome, ca.source_pool, ca.territory,
 		       c.customer_name, c.territory AS cust_territory, c.mobile_no,
-		       MAX(so.transaction_date) AS last_so_date
+		       c.custom_contact_person_name, c.custom_primary_contact_person,
+		       MAX(so.transaction_date) AS last_so_date,
+		       (SELECT prev.outcome FROM `tabIB Customer Assignment` prev
+		        WHERE prev.customer = ca.customer AND prev.status = 'Contacted'
+		          AND prev.name != ca.name
+		        ORDER BY prev.completed_at DESC LIMIT 1) AS last_outcome,
+		       (SELECT DATE(prev.completed_at) FROM `tabIB Customer Assignment` prev
+		        WHERE prev.customer = ca.customer AND prev.status = 'Contacted'
+		          AND prev.name != ca.name
+		        ORDER BY prev.completed_at DESC LIMIT 1) AS last_contacted_at
 		FROM `tabIB Customer Assignment` ca
 		INNER JOIN `tabCustomer` c ON c.name = ca.customer
 		LEFT JOIN `tabSales Order` so ON so.customer = ca.customer AND so.docstatus = 1
@@ -461,6 +528,32 @@ def add_customer_to_today(customer, date=None, target_user=None):
 
 
 @frappe.whitelist()
+def move_assignment(assignment_id, new_date):
+	"""Move a Pending assignment to a different date (today ↔ tomorrow drag)."""
+	doc = frappe.get_doc("IB Customer Assignment", assignment_id)
+	if doc.assigned_to != frappe.session.user:
+		_require_manager()
+	if doc.status != "Pending":
+		frappe.throw(_("Only Pending assignments can be moved."))
+	duplicate = frappe.db.get_value(
+		"IB Customer Assignment",
+		{
+			"customer": doc.customer,
+			"assigned_date": new_date,
+			"status": ["in", ["Pending", "Contacted"]],
+			"name": ["!=", assignment_id],
+		},
+		"name",
+	)
+	if duplicate:
+		frappe.throw(_(f"Customer already has an active assignment on {new_date}."))
+	doc.assigned_date = new_date
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"status": "ok"}
+
+
+@frappe.whitelist()
 def remove_assignment(assignment_id, force=False):
 	"""Remove a Pending assignment. Owner can always remove their own; managers can force-remove any."""
 	doc = frappe.get_doc("IB Customer Assignment", assignment_id)
@@ -490,11 +583,12 @@ def get_admin_overview(date=None, territory=None, view_as_user=None):
 	date = date or today()
 
 	if view_as_user:
-		# Return same data as get_customer_board_data but for another user
 		original_user = frappe.session.user
 		frappe.session.user = view_as_user
-		data = get_customer_board_data(date)
-		frappe.session.user = original_user
+		try:
+			data = get_customer_board_data(date)
+		finally:
+			frappe.session.user = original_user
 		return {"view_as": view_as_user, "board": data}
 
 	# Build roster of all sales users with counts
@@ -588,6 +682,34 @@ def bulk_auto_assign(user, date=None, count=None):
 	date = date or today()
 	created = auto_assign_for_user(user, date)
 	return {"created": created}
+
+
+@frappe.whitelist()
+def transfer_assignments(from_user, to_user, date=None):
+	"""Transfer all Pending assignments from from_user to to_user on date."""
+	_require_manager()
+	if from_user == to_user:
+		frappe.throw(_("Cannot transfer to the same user."))
+	date = date or today()
+
+	assignments = frappe.db.sql(
+		"""
+		SELECT name FROM `tabIB Customer Assignment`
+		WHERE assigned_to = %(from_user)s
+		  AND assigned_date = %(date)s
+		  AND status = 'Pending'
+		""",
+		{"from_user": from_user, "date": date},
+		as_dict=True,
+	)
+	if not assignments:
+		return {"transferred": 0}
+
+	for a in assignments:
+		frappe.db.set_value("IB Customer Assignment", a.name, "assigned_to", to_user, update_modified=True)
+
+	frappe.db.commit()
+	return {"transferred": len(assignments)}
 
 
 @frappe.whitelist()

@@ -17,6 +17,10 @@ from instabiz.overrides.utils import (
     COMMON_CHILD_FIELD_MAP,
 )
 from instabiz.overrides.naming import autoname_sales_order
+from instabiz.overrides.quotation import (
+    _set_company_gstin_from_warehouse,
+    _auto_correct_gst_template,
+)
 
 
 # ── Hook entry point ──────────────────────────────────────────────────────────
@@ -46,10 +50,65 @@ class CustomSalesOrder(IbStatusMixin, SalesOrder):
     def validate(self):
         if not self.custom_location or self.custom_location == "Select":
             frappe.throw(_("Please select a Location before saving."))
+        _set_company_gstin_from_warehouse(self)
+        _auto_correct_gst_template(self)
         set_sales_person(self)
         sync_sales_team(self)
         recalculate_items(self)
         super().validate()
+
+    def before_submit(self):
+        _check_credit_limit(self)
+
+
+# ── Credit limit ──────────────────────────────────────────────────────────────
+
+def _check_credit_limit(doc):
+    """Block submit if customer exceeds credit limit AND oldest unpaid invoice
+    is older than the configured credit days. Both conditions must be met."""
+    row = frappe.db.get_value(
+        "Customer Credit Limit",
+        {"parent": doc.customer, "company": doc.company},
+        ["credit_limit", "bypass_credit_limit_check", "custom_days"],
+        as_dict=True,
+    )
+    if not row:
+        return
+    if row.bypass_credit_limit_check:
+        return
+    if not row.credit_limit or not row.custom_days:
+        return
+
+    result = frappe.db.sql(
+        """
+        SELECT
+            SUM(outstanding_amount) AS total_outstanding,
+            MIN(posting_date)       AS oldest_date
+        FROM `tabSales Invoice`
+        WHERE customer    = %(customer)s
+          AND company     = %(company)s
+          AND docstatus   = 1
+          AND outstanding_amount > 0
+        """,
+        {"customer": doc.customer, "company": doc.company},
+        as_dict=True,
+    )
+    if not result or not result[0].oldest_date:
+        return
+
+    from frappe.utils import date_diff, fmt_money, today
+    total_outstanding = result[0].total_outstanding or 0
+    overdue_days = date_diff(today(), result[0].oldest_date)
+
+    if total_outstanding > row.credit_limit and overdue_days > row.custom_days:
+        name = doc.customer_name or doc.customer
+        outstanding_fmt = fmt_money(total_outstanding, currency="INR")
+        limit_fmt = fmt_money(row.credit_limit, currency="INR")
+        frappe.throw(
+            f"Cannot submit: {name} has outstanding {outstanding_fmt} "
+            f"(limit {limit_fmt}) with an invoice unpaid for {overdue_days} days "
+            f"(allowed {row.custom_days} days). Clear dues or contact your manager."
+        )
 
 
 # ── Reopen ────────────────────────────────────────────────────────────────────
@@ -87,6 +146,25 @@ def _so_extra_steps(doc):
     for q_name in set(d.prevdoc_docname for d in doc.get("items") if d.prevdoc_docname):
         if frappe.db.get_value("Quotation", q_name, "docstatus") != 2:
             frappe.get_doc("Quotation", q_name).set_status(update=True)
+
+
+@frappe.whitelist()
+def get_so_rounded_total(filters=None):
+	from frappe.utils import flt
+	raw = frappe.parse_json(filters or "[]")
+	# List view sends [[doctype, field, op, value]] — strip doctype prefix
+	clean = []
+	for f in raw:
+		if isinstance(f, (list, tuple)) and len(f) == 4:
+			clean.append([f[1], f[2], f[3]])
+		elif isinstance(f, (list, tuple)) and len(f) == 3:
+			clean.append(list(f))
+	result = frappe.db.get_all(
+		"Sales Order",
+		filters=clean,
+		fields=["sum(rounded_total) as total"],
+	)
+	return flt((result[0].get("total") or 0) if result else 0)
 
 
 @frappe.whitelist()

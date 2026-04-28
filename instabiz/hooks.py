@@ -110,6 +110,10 @@ doc_events = {
         ],
     },
     "Lead": {
+        "before_insert": [
+            "instabiz.overrides.lead.check_duplicate_lead",
+            "instabiz.overrides.lead.set_territory_from_pincode",
+        ],
         "after_insert": "instabiz.overrides.lead.assign_lead_owner",
         "on_update":    "instabiz.overrides.lead.assign_lead_owner",
     },
@@ -178,6 +182,7 @@ app_include_css = ["/assets/instabiz/css/instabiz.css"]
 app_include_js  = [
     "https://cdn.jsdelivr.net/npm/iconify-icon@2.1.0/dist/iconify-icon.min.js",  # Iconify icons (CDN)
     "/assets/instabiz/js/ib_color_map.js",            # item color name → hex mapping
+    "/assets/instabiz/js/ib_icons.js",                # shared SVG icon registry (IB_ICONS.svg)
     "/assets/instabiz/js/ib_stock_common.js",         # shared stock page utilities (IBStock.*)
     "/assets/instabiz/js/pincode.js",               # shared pincode autofill utility
     "/assets/instabiz/js/recalc.js",                # dimension → qty → amount helpers

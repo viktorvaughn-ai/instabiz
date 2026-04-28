@@ -5,7 +5,7 @@
 
 frappe.listview_settings["Sales Order"] = {
 
-    add_fields: ["custom_sales_person"],
+    add_fields: ["custom_sales_person", "rounded_total"],
 
     button: {
         show: () => true,
@@ -46,6 +46,7 @@ frappe.listview_settings["Sales Order"] = {
     onload(listview) {
         ib_hide_sidebar();
         ib_setup_sales_order_status_multiselect(listview);
+        ib_setup_so_total_bar(listview);
         const _orig_render_list = listview.render_list.bind(listview);
         listview.render_list = function () {
             _orig_render_list();
@@ -149,4 +150,40 @@ function ib_disable_sales_order_status_click_filter(listview) {
                 e.stopPropagation();
             });
     });
+}
+
+// ── SO List: sticky selection total bar ──────────────────────────────────────
+
+function ib_setup_so_total_bar(listview) {
+    $(".ib-so-total-bar").remove();
+    const $bar = $("<div>").attr("id", "ib-so-total-bar").addClass("ib-so-total-bar");
+    const $pill = $("<span>").attr("id", "ib-so-sel-count").addClass("ib-so-sel-pill").text("0 selected");
+    const $label = $("<span>").addClass("ib-so-total-label").text("Total");
+    const $value = $("<span>").attr("id", "ib-so-total-value").addClass("ib-so-total-value").text("—");
+    $bar.append($pill, $label, $value);
+    $("body").append($bar);
+
+    // Event delegation — survives render_list DOM rebuild
+    listview.$result.on("change.ib_so_total", "input[type=checkbox]", function () {
+        // Defer so Frappe's check-all propagation runs first
+        setTimeout(() => ib_update_so_total_bar(listview), 0);
+    });
+
+    frappe.router.on("change", function () {
+        const route = frappe.get_route();
+        if (!route || route[0] !== "List" || route[1] !== "Sales Order") {
+            $(".ib-so-total-bar").remove();
+        }
+    });
+}
+
+function ib_update_so_total_bar(listview) {
+    const checked = listview.get_checked_items();
+    const count   = checked.length;
+    const total   = checked.reduce((s, r) => s + (r.rounded_total || 0), 0);
+
+    $("#ib-so-sel-count").text(`${count} order${count !== 1 ? "s" : ""} selected`);
+    const formatted = $("<div>").html(frappe.format(total, { fieldtype: "Currency" })).text().trim();
+    $("#ib-so-total-value").text(formatted);
+    $("#ib-so-total-bar").toggleClass("ib-so-total-bar--active", count > 0);
 }
