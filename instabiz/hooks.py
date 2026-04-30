@@ -7,6 +7,12 @@ scheduler_events = {
         "instabiz.overrides.employee_exit.run_user_disable_daily",
         # Rolls over pending assignments and generates tomorrow's customer board
         "instabiz.overrides.customer_assignment.run_daily_assignment",
+        # Sends bell notifications for leads with overdue follow-up dates
+        "instabiz.overrides.follow_up.run_follow_up_reminders",
+        # Quotation expiry alerts (15/7/1 day email) and auto-expire
+        "instabiz.overrides.quotation_expiry.run_quotation_expiry",
+        # Compute daily customer health scores (payment/orders/complaints/CSAT)
+        "instabiz.overrides.customer_score.run_customer_score",
     ],
 }
 
@@ -210,4 +216,5 @@ doctype_js = {
     "Quotation":               "public/js/ib_sales_common.js",
     "Sales Order":             "public/js/ib_sales_common.js",
     "Employee Exit Handover":  "public/js/employee_exit_handover.js",
+    "IB Sample Request":       "public/js/sample_request.js",
 }
