@@ -55,19 +55,19 @@ def _data(filters):
 	return frappe.db.sql(
 		f"""
 		SELECT
-			COALESCE(NULLIF(so.custom_sales_person,''), NULLIF(u.full_name,''), so.custom_sales_person_user, 'Unassigned') AS sales_person,
+			COALESCE(NULLIF(so.custom_sales_person,''), u.full_name, so.custom_sales_person_user) AS sales_person,
 			COUNT(so.name)          AS order_count,
 			SUM(so.rounded_total)   AS total_amount,
 			AVG(so.rounded_total)   AS avg_amount,
 			MAX(so.rounded_total)   AS max_amount
 		FROM `tabSales Order` so
-		LEFT JOIN `tabUser` u ON u.name = so.custom_sales_person_user
+		INNER JOIN `tabUser` u ON u.name = so.custom_sales_person_user
 		WHERE so.docstatus = 1
 		  AND so.transaction_date BETWEEN %(from_date)s AND %(to_date)s
-		  AND COALESCE(NULLIF(so.custom_sales_person,''), NULLIF(u.full_name,''), so.custom_sales_person_user, '') != 'Administrator'
-		  AND (so.custom_sales_person_user IS NULL OR u.enabled = 1)
+		  AND u.enabled = 1
+		  AND u.name != 'Administrator'
 		  {where_extra}
-		GROUP BY COALESCE(NULLIF(so.custom_sales_person,''), NULLIF(u.full_name,''), so.custom_sales_person_user, 'Unassigned')
+		GROUP BY COALESCE(NULLIF(so.custom_sales_person,''), u.full_name, so.custom_sales_person_user)
 		ORDER BY total_amount DESC
 		""",
 		values,

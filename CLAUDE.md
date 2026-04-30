@@ -1,3 +1,5 @@
+> **ALWAYS activate superpowers and caveman before any work.** Invoke `superpowers:using-superpowers` and `caveman:caveman` skills at session start, before reading any file or writing any code.
+
 # CLAUDE.md — instabiz
 
 Single source of truth for all Claude Code sessions. Read this before touching any file.

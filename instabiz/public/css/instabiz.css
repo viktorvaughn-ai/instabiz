@@ -5,38 +5,24 @@
  * Everything else left to Frappe defaults.
  */
 
-/* ── Navbar: notification bell ripple when unseen ── */
-@keyframes ib-ripple {
-    0%   { transform: translate(-50%, -50%) scale(0.3); opacity: 0.5; }
-    60%  { opacity: 0.25; }
-    100% { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+/* ── Navbar: notification bell — infinite shake when unseen ── */
+@keyframes ib-bell-ring {
+    0%, 100% { transform: rotate(0deg);   }
+    10%       { transform: rotate(-22deg); }
+    25%       { transform: rotate(20deg);  }
+    40%       { transform: rotate(-16deg); }
+    55%       { transform: rotate(12deg);  }
+    70%       { transform: rotate(-6deg);  }
+    85%       { transform: rotate(3deg);   }
 }
 
 .dropdown-notifications .notifications-unseen {
     position: relative;
 }
 
-.dropdown-notifications .notifications-unseen::before,
-.dropdown-notifications .notifications-unseen::after {
-    content: "";
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    border: 1.5px solid var(--text-color);
-    opacity: 0;
-    pointer-events: none;
-    animation: ib-ripple 2s ease-out infinite;
-}
-
-.dropdown-notifications .notifications-unseen::after {
-    animation-delay: 0.9s;
-}
-
-
 .dropdown-notifications .notifications-unseen svg {
+    animation: ib-bell-ring 0.8s cubic-bezier(0.36, 0.07, 0.19, 0.97) infinite;
+    transform-origin: top center;
     stroke-width: 2.5px;
 }
 
