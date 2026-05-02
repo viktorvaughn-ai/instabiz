@@ -119,6 +119,11 @@ These rules are mandatory for all agents working on this repo. Do not skip them.
 9. **IB Stock Dashboard** — custom page (`ib-stock-dashboard`); live stock across 3 warehouses; filter chips; multi-token search + highlight; breakdown popover; CSV export; WebSocket live-updates
 10. **IB Customer Board** — sales pipeline state machine; `ib-customer-board` (4-column kanban: Dormant/Regular/Today/Tomorrow); `ib-assignment-admin` (roster + view-as kanban + pool assign); 12am scheduler auto-assigns tomorrow's batch per user territory; SO submit auto-marks assignment done; `IB Customer Assignment` doctype + `IB Assignment Config` singleton
 11. **Instabiz Workspace** — sidebar workspace with shortcuts: Customer Board, Stock Dashboard, Assignment Admin, Attendance Terminal, Employee Check-in
+12. **IB Item Price List** — custom page `ib-price-list` (NOT the doctype list); table with search, spec rendering (identical to stock dashboard: color dots, spec tags, UOM chips), row click popover showing rates; workspace shortcut points to the page; doctype list view redirects to the page via `ib_item_price_list_list.js`
+13. **Dormant Customer Detection** — `instabiz/overrides/dormant.py`; daily scheduler; customers with no submitted SO in 60+ days → ToDo assigned to sales person + bell Notification Log with wa.me deep-link; dedup via `[ib-dormant-reminder]` marker in ToDo description; uses `transaction_date` not `posting_date`
+14. **Sales Target Setting** — `IB Sales Target` doctype (sales_user, month, target_amount); `instabiz/overrides/sales_target.py`; `get_my_target()` / `get_all_targets()` whitelisted; Customer Board shows target progress card for current month (hidden when no target set); Assignment Admin roster shows Sales Target bar per user; daily scheduler sends bell notifications at 50%/75% month elapsed if behind pace + end-of-month if target not met; Sales Manager+ creates/edits targets
+15. **Customer Health Score** — `instabiz/overrides/customer_score.py`; daily scheduler (`run_customer_score`); computes weighted score per active customer: payment punctuality 35%, order frequency 30%, complaint count 20%, CSAT rating 15%; stores in `IB Customer Score` doctype; status: Green ≥70, Amber ≥40, Red <40; if score drops ≥15 pts, emails all Sales Manager/System Manager; skips customers already scored today
+16. **IB Sample Request** — doctype `IB Sample Request` (IB-SR-.YYYY.-#####); tracks sample dispatch lifecycle; fields: customer, contact_person, request_date, status (Draft/Work Order Created/Sent/Feedback Received/Converted/Closed), assigned_to, sample_type (Free/Paid), related_sales_order, item, qty, uom, is_paid, feedback, outcome (Converted/Not Interested/Follow Up/No Response), notes; validate() defaults request_date=today, assigned_to=session user
 
 ---
 
@@ -183,6 +188,9 @@ tail -f logs/web.error.log
 | `item.py` | item_query — multi-token search for item select fields |
 | `employee_exit.py` | run_exit_handover_daily, run_user_disable_daily |
 | `stock_events.py` | publish_stock_update — fires `ib_stock_update` realtime event on Bin changes |
+| `dormant.py` | run_dormant_check — daily; flags customers with no SO in 60+ days; creates ToDo + Notification Log with wa.me link; dedup via `[ib-dormant-reminder]` marker |
+| `sales_target.py` | get_my_target(month), get_all_targets(month), get_target_map(month_first), run_target_notifications — daily milestone alerts at 50%/75% elapsed + end-of-month |
+| `customer_score.py` | run_customer_score — daily; computes weighted health score (payment 35%, order 30%, complaint 20%, CSAT 15%); saves IB Customer Score; emails managers on ≥15pt drop |
 
 ### JavaScript (`instabiz/public/js/`)
 | File | Purpose |
@@ -195,6 +203,13 @@ tail -f logs/web.error.log
 | `employee_exit_handover.js` | Quick Assign All, Execute Reassignment |
 | `*_list.js` | List view customizations per doctype |
 | `ib_color_map.js` | window.IB_COLOR_MAP — color name → hex (70+ entries); null = transparent/checkerboard; loaded globally |
+| `ib_item_price_list_list.js` | Doctype list view for IB Item Price List — immediately redirects to `ib-price-list` page |
+
+### SO List total bar
+- `sales_order_list.js` has a sticky selection total bar (`ib-so-total-bar`) appended to `body`.
+- `onload` fires only once. Navigate away → `frappe.router.on("change")` removes bar. Navigate back → Frappe calls `listview.refresh()`.
+- Fix: patch `listview.refresh` in `onload` to re-call `ib_setup_so_total_bar(listview)` when bar is missing.
+- **Do NOT use `before_render`** in `frappe.listview_settings` — `this` context is the settings object, not the listview; accessing `this.$result` throws and breaks all rendering.
 
 ### Latest list-view update (2026-04)
 - Lead, Quotation, and Sales Order list views now use a **custom compact MultiSelectList status filter** in the standard filter row.
@@ -223,9 +238,10 @@ tail -f logs/web.error.log
 |---|---|---|
 | `ib-stock-dashboard` | `ib_stock_dashboard.js`, `ib_stock_dashboard.py` | Live stock across 3 warehouses — see Stock Dashboard section |
 | `ib-stock-ledger` | `ib_stock_ledger.js`, `ib_stock_ledger.py` | Filterable stock ledger per item/warehouse/date range; deep-links from stock dashboard |
-| `ib-customer-board` | `ib_customer_board.js`, `ib_customer_board.py` | 4-column kanban (Dormant / Regular / Today / Tomorrow) for sales users; date picker; add/remove with undo toast |
-| `ib-assignment-admin` | `ib_assignment_admin.js`, `ib_assignment_admin.py` | Manager view: roster overview (avatar + stats + progress), view-as-user kanban, customer pool assign panel with server-side pagination |
+| `ib-customer-board` | `ib_customer_board.js`, `ib_customer_board.py` | 4-column kanban (Dormant / Regular / Today / Tomorrow) for sales users; date picker; add/remove with undo toast; current-month sales target card in stats row |
+| `ib-assignment-admin` | `ib_assignment_admin.js`, `ib_assignment_admin.py` | Manager view: roster overview (avatar + stats + progress + sales target bar), view-as-user kanban, customer pool assign panel with server-side pagination |
 | `attendance-terminal` | `attendance_terminal.js`, `attendance_terminal.py` | Bulk check-in/absent marking; factory vs office filter |
+| `ib-price-list` | `ib_price_list.js`, `ib_price_list.py` | Item price list table; spec rendering (color dots, spec tags, UOM chips); row click popover with rates; search with multi-token highlight; manager can edit via toolbar button |
 
 #### IB Stock Ledger (`ib-stock-ledger`)
 - Backend: `get_ledger(item_code, warehouse, from_date, to_date, ...)` — @whitelist
@@ -265,6 +281,10 @@ tail -f logs/web.error.log
 | IB Transport | (simple master) | |
 | IB Assignment Config | (singleton) | fields: assignments_per_day (Int), dormant_threshold_days (Int), dormant_ratio (Percent) |
 | IB Customer Assignment | ICA-.YYYY.-.##### | fields: customer, assigned_to (User), assigned_date, status (Pending/Contacted/Order Placed/Skipped/Rolled Over), source_pool (Dormant/Regular), territory, notes, outcome (Interested/Not Interested/Follow Up/No Response), completed_at |
+| IB Sales Target | IB-ST-.YYYY.-.##### | fields: sales_user (Link→User), month (Date — always first of month, normalized in validate()), target_amount (Currency); unique on (sales_user, month) enforced in validate(); Sales Manager+ create/edit, Sales User read-only |
+| IB Item Price List | (simple master) | fields: item_code, item_name, uom, rate1–4, specification (computed read-only); validate() computes specification from linked Item; doctype list view redirects to `ib-price-list` page |
+| IB Customer Score | IB-CS-.YYYY.-.##### | daily health score per customer; fields: customer, score_date, health_status (Green/Amber/Red), total_score, previous_score, score_change, payment_score, order_score, complaint_score, csat_score |
+| IB Sample Request | IB-SR-.YYYY.-.##### | sample dispatch tracker; status: Draft→Work Order Created→Sent→Feedback Received→Converted/Closed; outcome: Converted/Not Interested/Follow Up/No Response; validate() defaults date + assigned_to |
 
 ### Fixtures
 - `instabiz/fixtures/custom_field.json` — ~85 custom fields

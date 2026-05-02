@@ -25,6 +25,9 @@ class IBCustomerBoard {
 		this._highlight_customer = null;
 		this._highlight_color = "#22c55e";
 		this._pending_on_timeout = null;
+		this._is_manager = frappe.user.has_role("Sales Manager") || frappe.user.has_role("System Manager");
+		this._last_data = null;
+		this._search_timers = {};
 		this._init();
 	}
 
@@ -86,12 +89,32 @@ class IBCustomerBoard {
 						<span class="ib-cb-stat-num" id="ib-cb-stat-skipped-val">0</span>
 						<span class="ib-cb-stat-lbl">Skipped</span>
 					</div>
+					<div class="ib-cb-target-card" id="ib-cb-target-card" style="display:none">
+						<div class="ib-cb-target-hdr">
+							<span class="ib-cb-target-lbl">Monthly Target</span>
+							<span class="ib-cb-target-month" id="ib-cb-target-month"></span>
+						</div>
+						<div class="ib-cb-target-amounts">
+							<span class="ib-cb-target-actual" id="ib-cb-target-actual">₹0</span>
+							<span class="ib-cb-target-sep">/</span>
+							<span class="ib-cb-target-goal" id="ib-cb-target-goal">₹0</span>
+						</div>
+						<div class="ib-cb-target-bar-wrap">
+							<div class="ib-cb-target-bar-track">
+								<div class="ib-cb-target-bar-fill" id="ib-cb-target-bar-fill"></div>
+							</div>
+							<span class="ib-cb-target-pct" id="ib-cb-target-pct">0%</span>
+						</div>
+					</div>
 				</div>
 				<div class="ib-cb-columns">
 					<div class="ib-cb-col" id="ib-cb-dormant">
 						<div class="ib-cb-col-header">
 							${IB_ICONS.svg("moon", 13)}<span class="ib-cb-col-title">Dormant</span>
 							<span class="ib-cb-col-badge" id="ib-cb-dormant-count">0</span>
+						</div>
+						<div class="ib-cb-col-search">
+							<input class="ib-cb-pool-search" id="ib-cb-dormant-search" placeholder="Search…" autocomplete="off">
 						</div>
 						<div class="ib-cb-cards" id="ib-cb-dormant-cards"></div>
 					</div>
@@ -100,7 +123,20 @@ class IBCustomerBoard {
 							${IB_ICONS.svg("users", 13)}<span class="ib-cb-col-title">Regular</span>
 							<span class="ib-cb-col-badge" id="ib-cb-regular-count">0</span>
 						</div>
+						<div class="ib-cb-col-search">
+							<input class="ib-cb-pool-search" id="ib-cb-regular-search" placeholder="Search…" autocomplete="off">
+						</div>
 						<div class="ib-cb-cards" id="ib-cb-regular-cards"></div>
+					</div>
+					<div class="ib-cb-col ib-cb-col--claimed" id="ib-cb-claimed" style="display:none">
+						<div class="ib-cb-col-header">
+							${IB_ICONS.svg("star", 13)}<span class="ib-cb-col-title">Claimed</span>
+							<span class="ib-cb-col-badge ib-cb-col-badge--claimed" id="ib-cb-claimed-count">0</span>
+						</div>
+						<div class="ib-cb-col-search">
+							<input class="ib-cb-pool-search" id="ib-cb-claimed-search" placeholder="Search…" autocomplete="off">
+						</div>
+						<div class="ib-cb-cards" id="ib-cb-claimed-cards"></div>
 					</div>
 					<div class="ib-cb-col ib-cb-col--today" id="ib-cb-today">
 						<div class="ib-cb-col-header">
@@ -111,6 +147,9 @@ class IBCustomerBoard {
 						<div class="ib-cb-today-prog-wrap">
 							<div class="ib-cb-today-prog-fill" id="ib-cb-today-prog-fill"></div>
 						</div>
+						<div class="ib-cb-col-search">
+							<input class="ib-cb-pool-search" id="ib-cb-today-search" placeholder="Search…" autocomplete="off">
+						</div>
 						<div class="ib-cb-cards" id="ib-cb-today-cards"></div>
 					</div>
 					<div class="ib-cb-col ib-cb-col--tomorrow" id="ib-cb-tomorrow">
@@ -118,6 +157,9 @@ class IBCustomerBoard {
 							${IB_ICONS.svg("sunrise", 13)}<span class="ib-cb-col-title">Tomorrow</span>
 							<span class="ib-cb-col-date" id="ib-cb-tomorrow-date"></span>
 							<span class="ib-cb-col-badge" id="ib-cb-tomorrow-count">0</span>
+						</div>
+						<div class="ib-cb-col-search">
+							<input class="ib-cb-pool-search" id="ib-cb-tomorrow-search" placeholder="Search…" autocomplete="off">
 						</div>
 						<div class="ib-cb-cards" id="ib-cb-tomorrow-cards"></div>
 					</div>
@@ -137,23 +179,51 @@ class IBCustomerBoard {
 
 	refresh() {
 		const self = this;
+		$(".ib-cb-board").css("opacity", "0.6");
 		frappe.call({
 			method: "instabiz.overrides.customer_assignment.get_customer_board_data",
 			args: { date: this._selected_date },
 			callback(r) {
+				$(".ib-cb-board").css("opacity", "");
 				if (r.message) self._render(r.message);
 			},
+			error() {
+				$(".ib-cb-board").css("opacity", "");
+				frappe.show_alert({ message: "Failed to load board data", indicator: "red" });
+			},
 		});
+		frappe.call({
+			method: "instabiz.overrides.sales_target.get_my_target",
+			callback(r) { if (r.message) self._render_target(r.message); },
+		});
+	}
+
+	_render_target(t) {
+		if (!t.has_target) { $("#ib-cb-target-card").hide(); return; }
+		const fmt = (v) => "₹" + Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+		const pct = t.pct || 0;
+		const bar_color = pct >= 100 ? "#22c55e" : pct >= 60 ? "var(--ib-primary)" : "#f59e0b";
+		const d = frappe.datetime.str_to_user(t.month);
+		const month_label = d ? d.slice(3) : t.month;  // "May 2026" from "01-05-2026"
+		$("#ib-cb-target-month").text(month_label);
+		$("#ib-cb-target-actual").text(fmt(t.actual));
+		$("#ib-cb-target-goal").text(fmt(t.target));
+		$("#ib-cb-target-pct").text(pct + "%");
+		$("#ib-cb-target-bar-fill").css({ width: pct + "%", background: bar_color });
+		$("#ib-cb-target-card").show();
 	}
 
 	// ── Render ────────────────────────────────────────────────────────────────
 
 	_render(data) {
+		this._last_data = data;
 		this._tomorrow_date = data.tomorrow_date;
+		if (data.is_manager !== undefined) this._is_manager = data.is_manager;
 		$("#ib-cb-today-date").text(frappe.datetime.str_to_user(data.date));
 		$("#ib-cb-tomorrow-date").text(frappe.datetime.str_to_user(data.tomorrow_date));
 		this._render_pool("dormant", data.dormant, data.dormant_total);
 		this._render_pool("regular", data.regular, data.regular_total);
+		this._render_claimed(data.claimed || []);
 		this._render_today(data.today);
 		this._render_tomorrow(data.tomorrow);
 		this._init_sortable();
@@ -165,18 +235,97 @@ class IBCustomerBoard {
 	}
 
 	_render_pool(col, rows, total) {
+		$(`#ib-cb-${col}-search`).val("");
 		const $cards = $(`#ib-cb-${col}-cards`).empty();
 		const badge = total !== undefined && total > rows.length ? `${rows.length} / ${total}` : rows.length;
 		$(`#ib-cb-${col}-count`).text(badge);
 		if (!rows.length) {
 			$cards.append(`<div class="ib-cb-empty">No customers</div>`);
+		} else {
+			rows.forEach((r) => $cards.append(this._make_card(r, "pool")));
+		}
+		this._bind_search(col, "backend");
+	}
+
+	// ── Unified search binding ────────────────────────────────────────────────
+
+	_bind_search(col, mode) {
+		// mode: "backend" → hits search_customer_pool API
+		//       "local"   → filters this._last_data[col] client-side
+		const self = this;
+		$(`#ib-cb-${col}-search`).off("input").on("input", function () {
+			const q = $(this).val().trim();
+			clearTimeout(self._search_timers[col]);
+			if (!q) {
+				self._restore_col(col);
+				return;
+			}
+			self._search_timers[col] = setTimeout(() => {
+				if (mode === "backend") {
+					frappe.call({
+						method: "instabiz.overrides.customer_assignment.search_customer_pool",
+						args: { pool_type: col, search: q },
+						callback(r) { self._apply_search_results(col, r.message || [], "pool"); },
+					});
+				} else {
+					const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
+					const rows = (self._last_data?.[col] || []).filter((r) => {
+						const hay = [r.customer_name, r.customer, r.territory, r.custom_contact_person_name]
+							.join(" ").toLowerCase();
+						return tokens.every((t) => hay.includes(t));
+					});
+					const ctx = col === "today" ? "today"
+						: col === "claimed" ? "claimed"
+						: "tomorrow";
+					self._apply_search_results(col, rows, ctx);
+				}
+			}, 250);
+		});
+	}
+
+	_restore_col(col) {
+		const data = this._last_data;
+		if (!data) return;
+		if (col === "dormant") this._render_pool("dormant", data.dormant, data.dormant_total);
+		else if (col === "regular") this._render_pool("regular", data.regular, data.regular_total);
+		else if (col === "claimed") this._render_claimed(data.claimed || []);
+		else if (col === "today") this._render_today(data.today);
+		else if (col === "tomorrow") this._render_tomorrow(data.tomorrow);
+	}
+
+	_apply_search_results(col, rows, ctx) {
+		const $cards = $(`#ib-cb-${col}-cards`).empty();
+		$(`#ib-cb-${col}-count`).text(rows.length);
+		if (!rows.length) {
+			$cards.append(`<div class="ib-cb-empty">No results</div>`);
 			return;
 		}
-		rows.forEach((r) => $cards.append(this._make_card(r, "pool")));
+		if (col === "today") {
+			rows.filter((r) => r.status === "Pending").forEach((r) => $cards.prepend(this._make_card(r, "today")));
+			rows.filter((r) => r.status !== "Pending").forEach((r) => $cards.append(this._make_card(r, "today_done")));
+		} else {
+			rows.forEach((r) => $cards.append(this._make_card(r, ctx)));
+		}
+	}
+
+	_render_claimed(rows) {
+		const $col = $("#ib-cb-claimed");
+		if (!this._is_manager) { $col.hide(); return; }
+		$col.show();
+		$("#ib-cb-claimed-search").val("");
+		const $cards = $("#ib-cb-claimed-cards").empty();
+		$("#ib-cb-claimed-count").text(rows.length);
+		if (!rows.length) {
+			$cards.append(`<div class="ib-cb-empty">No claimed customers</div>`);
+		} else {
+			rows.forEach((r) => $cards.append(this._make_card(r, "claimed")));
+		}
+		this._bind_search("claimed", "local");
 	}
 
 	_render_today(rows) {
 		const self = this;
+		$("#ib-cb-today-search").val("");
 		const $cards = $("#ib-cb-today-cards").empty();
 		const pending = rows.filter((r) => r.status === "Pending");
 		const done    = rows.filter((r) => r.status !== "Pending");
@@ -202,30 +351,37 @@ class IBCustomerBoard {
 
 		if (!total) {
 			$cards.append(`<div class="ib-cb-empty">No assignments today</div>`);
-			return;
+		} else {
+			// Build cards with opacity:0 so GSAP animates them in without flash
+			const make_hidden = (r, ctx) => {
+				const $c = self._make_card(r, ctx);
+				$c.css("opacity", "0");
+				return $c;
+			};
+			// Most-recent assignment first so drag-dropped cards surface at top
+			[...pending].reverse().forEach((r) => $cards.prepend(make_hidden(r, "today")));
+			done.forEach((r) => $cards.append(make_hidden(r, "today_done")));
 		}
 
-		// Most-recent assignment first so drag-dropped cards surface at top
-		[...pending].reverse().forEach((r) => $cards.prepend(self._make_card(r, "today")));
-		done.forEach((r) => $cards.append(self._make_card(r, "today_done")));
-
-		// Stagger cards in
+		// Stagger cards in — opacity already 0, no flash
 		this._gsap_ready.then(() => {
-			gsap.fromTo("#ib-cb-today-cards .ib-cb-card",
-				{ opacity: 0, y: 6 },
-				{ opacity: 1, y: 0, stagger: 0.035, duration: 0.22, ease: "power2.out" }
+			gsap.to("#ib-cb-today-cards .ib-cb-card",
+				{ opacity: 1, y: 0, stagger: 0.035, duration: 0.22, ease: "power2.out", clearProps: "transform" }
 			);
 		});
+		this._bind_search("today", "local");
 	}
 
 	_render_tomorrow(rows) {
+		$("#ib-cb-tomorrow-search").val("");
 		const $cards = $("#ib-cb-tomorrow-cards").empty();
 		$("#ib-cb-tomorrow-count").text(rows.length);
 		if (!rows.length) {
 			$cards.append(`<div class="ib-cb-empty">No assignments yet — scheduler runs at midnight</div>`);
-			return;
+		} else {
+			[...rows].reverse().forEach((r) => $cards.prepend(this._make_card(r, "tomorrow")));
 		}
-		[...rows].reverse().forEach((r) => $cards.prepend(this._make_card(r, "tomorrow")));
+		this._bind_search("tomorrow", "local");
 	}
 
 	// ── Unified card builder ──────────────────────────────────────────────────
@@ -266,6 +422,11 @@ class IBCustomerBoard {
 		let inner_html = "";
 
 		if (ctx === "pool") {
+			const claim_btn = this._is_manager
+				? `<button class="ib-cb-pill ib-cb-pill--claim ib-cb-btn-claim" data-customer="${frappe.utils.escape_html(r.customer)}">
+						${IB_ICONS.svg("star", 10)} Claim
+					</button>`
+				: "";
 			inner_html = `
 				<div class="ib-cb-card-top">
 					<div class="ib-cb-card-name">${name_html}</div>
@@ -280,10 +441,36 @@ class IBCustomerBoard {
 					<button class="ib-cb-pill ib-cb-pill--tomorrow ib-cb-btn-add-tomorrow" data-customer="${frappe.utils.escape_html(r.customer)}">
 						${IB_ICONS.svg("plus", 10)} Tomorrow
 					</button>
+					${claim_btn}
+					${wa_btn}
+				</div>
+			`;
+		} else if (ctx === "claimed") {
+			inner_html = `
+				<div class="ib-cb-card-top">
+					<div class="ib-cb-card-name">${name_html}</div>
+					<span class="ib-cb-claimed-tag">CLAIMED</span>
+				</div>
+				${territory_line}
+				${contact_line}
+				${last_line}
+				<div class="ib-cb-card-actions">
+					<button class="ib-cb-pill ib-cb-pill--add ib-cb-btn-add-today" data-customer="${frappe.utils.escape_html(r.customer)}">
+						${IB_ICONS.svg("plus", 10)} Add to Today
+					</button>
+					<button class="ib-cb-pill ib-cb-pill--tomorrow ib-cb-btn-add-tomorrow" data-customer="${frappe.utils.escape_html(r.customer)}">
+						${IB_ICONS.svg("plus", 10)} Tomorrow
+					</button>
+					<button class="ib-cb-pill ib-cb-pill--unclaim ib-cb-btn-unclaim" data-customer="${frappe.utils.escape_html(r.customer)}">
+						Unclaim
+					</button>
 					${wa_btn}
 				</div>
 			`;
 		} else if (ctx === "today" || ctx === "today_done") {
+			const claimed_tag = r.ib_claimed_by
+				? `<span class="ib-cb-claimed-tag">CLAIMED</span>`
+				: "";
 			const skip_btn = !is_done
 				? `<button class="ib-cb-skip-btn ib-cb-btn-skip" title="Skip">&#x2715;</button>`
 				: "";
@@ -321,6 +508,7 @@ class IBCustomerBoard {
 			inner_html = `
 				<div class="ib-cb-card-top">
 					<div class="ib-cb-card-name">${name_html}</div>
+					${claimed_tag}
 					${done_badge}
 					${skip_btn}
 				</div>
@@ -332,8 +520,14 @@ class IBCustomerBoard {
 				${actions}
 			`;
 		} else if (ctx === "tomorrow") {
+			const claimed_tag_tmrw = r.ib_claimed_by
+				? `<span class="ib-cb-claimed-tag">CLAIMED</span>`
+				: "";
 			inner_html = `
-				<div class="ib-cb-card-name">${name_html}</div>
+				<div class="ib-cb-card-top">
+					<div class="ib-cb-card-name">${name_html}</div>
+					${claimed_tag_tmrw}
+				</div>
 				${territory_line}
 				${contact_line}
 				${last_line}
@@ -347,6 +541,7 @@ class IBCustomerBoard {
 			: "";
 
 		const card_cls = ctx === "pool" ? "ib-cb-card--pool"
+			: ctx === "claimed" ? "ib-cb-card--pool ib-cb-card--claimed-pool"
 			: (ctx === "today" || ctx === "today_done")
 				? `ib-cb-card--today${is_done ? " ib-cb-card--done" : ""} ${outcome_cls}`.trim()
 			: "ib-cb-card--tomorrow";
@@ -362,6 +557,19 @@ class IBCustomerBoard {
 			});
 			$card.find(".ib-cb-btn-add-tomorrow").on("click", function () {
 				self._add_to_tomorrow($(this).data("customer"), $(this));
+			});
+			$card.find(".ib-cb-btn-claim").on("click", function () {
+				self._claim_customer($(this).data("customer"), $card);
+			});
+		} else if (ctx === "claimed") {
+			$card.find(".ib-cb-btn-add-today").on("click", function () {
+				self._add_to_today($(this).data("customer"), $(this));
+			});
+			$card.find(".ib-cb-btn-add-tomorrow").on("click", function () {
+				self._add_to_tomorrow($(this).data("customer"), $(this));
+			});
+			$card.find(".ib-cb-btn-unclaim").on("click", function () {
+				self._unclaim_customer($(this).data("customer"), $card);
 			});
 		} else if (ctx === "today") {
 			$card.find(".ib-cb-btn-contact").on("click", () => self._show_contact_modal(r.name, r.customer));
@@ -750,6 +958,38 @@ class IBCustomerBoard {
 				{ boxShadow: `0 0 0 2px ${color}, 0 0 18px rgba(${rgb},0.45)` },
 				{ boxShadow: `0 0 0 0px ${color}, 0 0 0px rgba(${rgb},0)`, duration: 1.6, ease: "power3.out", clearProps: "boxShadow" }
 			);
+		});
+	}
+
+	// ── Claim / Unclaim ───────────────────────────────────────────────────────
+
+	_claim_customer(customer, $card) {
+		const self = this;
+		frappe.call({
+			method: "instabiz.overrides.customer_assignment.claim_customer",
+			args: { customer },
+			callback(r) {
+				if (r.message && r.message.status === "ok") {
+					frappe.show_alert({ message: `${customer} claimed`, indicator: "blue" });
+					self.refresh();
+				}
+			},
+		});
+	}
+
+	_unclaim_customer(customer, $card) {
+		const self = this;
+		frappe.confirm(`Release ${customer} back to the general pool?`, () => {
+			frappe.call({
+				method: "instabiz.overrides.customer_assignment.unclaim_customer",
+				args: { customer },
+				callback(r) {
+					if (r.message && r.message.status === "ok") {
+						frappe.show_alert({ message: `${customer} released`, indicator: "orange" });
+						self.refresh();
+					}
+				},
+			});
 		});
 	}
 

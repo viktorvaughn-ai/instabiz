@@ -1,0 +1,116 @@
+{
+    "actions": [],
+    "autoname": "field:item_code",
+    "creation": "2026-05-02 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "item_code",
+        "item_name",
+        "specification",
+        "uom",
+        "rate1",
+        "rate2",
+        "rate3",
+        "rate4"
+    ],
+    "fields": [
+        {
+            "fieldname": "item_code",
+            "fieldtype": "Link",
+            "label": "Item Code",
+            "options": "Item",
+            "reqd": 1,
+            "unique": 1,
+            "in_list_view": 1,
+            "search_index": 1
+        },
+        {
+            "fieldname": "item_name",
+            "fieldtype": "Data",
+            "label": "Item Name",
+            "fetch_from": "item_code.item_name",
+            "read_only": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "specification",
+            "fieldtype": "Data",
+            "label": "Specification",
+            "read_only": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "uom",
+            "fieldtype": "Link",
+            "label": "UOM",
+            "options": "UOM",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "rate1",
+            "fieldtype": "Currency",
+            "label": "Rate 1",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "rate2",
+            "fieldtype": "Currency",
+            "label": "Rate 2",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "rate3",
+            "fieldtype": "Currency",
+            "label": "Rate 3",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "rate4",
+            "fieldtype": "Currency",
+            "label": "Rate 4",
+            "in_list_view": 1
+        }
+    ],
+    "issingle": 0,
+    "links": [],
+    "modified": "2026-05-02 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Instabiz",
+    "name": "IB Item Price List",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "read": 1,
+            "select": 1,
+            "export": 1,
+            "create": 0,
+            "write": 0,
+            "delete": 0,
+            "role": "Sales User"
+        },
+        {
+            "read": 1,
+            "select": 1,
+            "create": 1,
+            "write": 1,
+            "delete": 1,
+            "export": 1,
+            "import": 1,
+            "role": "Sales Manager"
+        },
+        {
+            "read": 1,
+            "select": 1,
+            "create": 1,
+            "write": 1,
+            "delete": 1,
+            "export": 1,
+            "import": 1,
+            "role": "System Manager"
+        }
+    ],
+    "sort_field": "item_name",
+    "sort_order": "ASC",
+    "track_changes": 1
+}

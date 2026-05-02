@@ -1,0 +1,92 @@
+{
+  "actions": [],
+  "allow_rename": 0,
+  "autoname": "IB-ST-.YYYY.-.#####",
+  "creation": "2026-05-02 00:00:00",
+  "doctype": "DocType",
+  "editable_grid": 1,
+  "engine": "InnoDB",
+  "field_order": [
+    "sales_user",
+    "month",
+    "target_amount"
+  ],
+  "fields": [
+    {
+      "fieldname": "sales_user",
+      "fieldtype": "Link",
+      "in_list_view": 1,
+      "label": "Sales User",
+      "options": "User",
+      "reqd": 1,
+      "search_index": 1
+    },
+    {
+      "fieldname": "month",
+      "fieldtype": "Date",
+      "in_list_view": 1,
+      "label": "Month",
+      "reqd": 1,
+      "search_index": 1,
+      "description": "Set to the first day of the target month (e.g. 2026-05-01)"
+    },
+    {
+      "fieldname": "target_amount",
+      "fieldtype": "Currency",
+      "in_list_view": 1,
+      "label": "Target Amount",
+      "reqd": 1
+    }
+  ],
+  "icon": "fa fa-bar-chart",
+  "in_create": 0,
+  "links": [],
+  "modified": "2026-05-02 00:00:00",
+  "modified_by": "Administrator",
+  "module": "Instabiz",
+  "name": "IB Sales Target",
+  "naming_rule": "Expression (old style)",
+  "owner": "Administrator",
+  "permissions": [
+    {
+      "create": 1,
+      "delete": 1,
+      "email": 1,
+      "export": 1,
+      "print": 1,
+      "read": 1,
+      "report": 1,
+      "role": "System Manager",
+      "share": 1,
+      "write": 1
+    },
+    {
+      "create": 1,
+      "delete": 1,
+      "email": 0,
+      "export": 1,
+      "print": 0,
+      "read": 1,
+      "report": 1,
+      "role": "Sales Manager",
+      "share": 0,
+      "write": 1
+    },
+    {
+      "create": 0,
+      "delete": 0,
+      "email": 0,
+      "export": 0,
+      "print": 0,
+      "read": 1,
+      "report": 0,
+      "role": "Sales User",
+      "share": 0,
+      "write": 0
+    }
+  ],
+  "sort_field": "month",
+  "sort_order": "DESC",
+  "states": [],
+  "track_changes": 0
+}

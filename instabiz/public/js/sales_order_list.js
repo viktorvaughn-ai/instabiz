@@ -47,11 +47,28 @@ frappe.listview_settings["Sales Order"] = {
         ib_hide_sidebar();
         ib_setup_sales_order_status_multiselect(listview);
         ib_setup_so_total_bar(listview);
+
+        // Re-add bar on navigate-back (Frappe calls refresh() on page re-show)
+        const _orig_refresh = listview.refresh.bind(listview);
+        listview.refresh = function () {
+            if (!$(".ib-so-total-bar").length) {
+                ib_setup_so_total_bar(listview);
+            }
+            return _orig_refresh();
+        };
+
         const _orig_render_list = listview.render_list.bind(listview);
         listview.render_list = function () {
             _orig_render_list();
             ib_disable_sales_order_status_click_filter(listview);
         };
+
+        frappe.router.on("change", function () {
+            const route = frappe.get_route();
+            if (!route || route[0] !== "List" || route[1] !== "Sales Order") {
+                $(".ib-so-total-bar").remove();
+            }
+        });
     },
 };
 
@@ -163,17 +180,9 @@ function ib_setup_so_total_bar(listview) {
     $bar.append($pill, $label, $value);
     $("body").append($bar);
 
-    // Event delegation — survives render_list DOM rebuild
-    listview.$result.on("change.ib_so_total", "input[type=checkbox]", function () {
-        // Defer so Frappe's check-all propagation runs first
+    // .off().on() keeps binding idempotent across before_render calls
+    listview.$result.off("change.ib_so_total").on("change.ib_so_total", "input[type=checkbox]", function () {
         setTimeout(() => ib_update_so_total_bar(listview), 0);
-    });
-
-    frappe.router.on("change", function () {
-        const route = frappe.get_route();
-        if (!route || route[0] !== "List" || route[1] !== "Sales Order") {
-            $(".ib-so-total-bar").remove();
-        }
     });
 }
 

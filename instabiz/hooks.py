@@ -13,6 +13,10 @@ scheduler_events = {
         "instabiz.overrides.quotation_expiry.run_quotation_expiry",
         # Compute daily customer health scores (payment/orders/complaints/CSAT)
         "instabiz.overrides.customer_score.run_customer_score",
+        # Flag customers with no SO in 60 days → ToDo + bell notification
+        "instabiz.overrides.dormant.run_dormant_check",
+        # Monthly sales target milestone notifications (50%/75% elapsed + end-of-month)
+        "instabiz.overrides.sales_target.run_target_notifications",
     ],
 }
 
@@ -206,7 +210,8 @@ doctype_list_js = {
     "Quotation":        "public/js/quotation_list.js",
     "Sales Order":      "public/js/sales_order_list.js",
     "Delivery Note":    "public/js/delivery_note_list.js",
-    "Sales Invoice":    "public/js/sales_invoice_list.js",
+    "Sales Invoice":        "public/js/sales_invoice_list.js",
+    "IB Item Price List":   "public/js/ib_item_price_list_list.js",
 }
 
 doctype_js = {

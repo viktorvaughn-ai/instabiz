@@ -2030,6 +2030,39 @@ mark.ib-search-hl {
 }
 .ib-cb-col--tomorrow .ib-cb-col-badge  { background: var(--blue-500, #3b82f6); }
 .ib-cb-col--today .ib-cb-col-badge     { background: var(--ib-primary-dark, #b45e3e); }
+.ib-cb-col-badge--claimed              { background: #7c3aed; }
+.ib-cb-col-search {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--subtle-bg);
+    flex-shrink: 0;
+}
+.ib-cb-pool-search {
+    width: 100%; box-sizing: border-box;
+    padding: 5px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 12px;
+    background: var(--card-bg);
+    color: var(--text-color);
+    outline: none;
+    transition: border-color 0.15s;
+}
+.ib-cb-pool-search::placeholder { color: var(--text-muted); }
+.ib-cb-pool-search:focus {
+    border-color: var(--ib-primary);
+    box-shadow: 0 0 0 2px rgba(217, 119, 87, 0.12);
+}
+.ib-cb-pill--claim   { background: #ede9fe; color: #4c1d95; }
+.ib-cb-pill--unclaim { background: #fee2e2; color: #991b1b; }
+.ib-cb-card--claimed-pool { border-left: 3px solid #7c3aed; }
+.ib-cb-claimed-tag {
+    display: inline-flex; align-items: center;
+    background: #7c3aed; color: #fff;
+    border-radius: 4px; padding: 1px 6px;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.05em;
+    margin-left: 4px; flex-shrink: 0;
+}
 
 .ib-cb-col-header svg { opacity: 0.55; flex-shrink: 0; }
 
@@ -2284,3 +2317,133 @@ mark.ib-search-hl {
 .ib-so-total-value {
     font-weight: 700; font-size: 15px; color: var(--ib-primary);
 }
+
+/* ── IB Price List page ── */
+.ib-pl-root { padding: 16px 0; }
+
+.ib-pl-search-bar {
+    display: flex; align-items: flex-end; gap: 12px;
+    padding: 6px 10px 8px; margin-bottom: 14px;
+    border-bottom: 1px solid var(--border-color);
+}
+.ib-pl-search-field { display: flex; flex-direction: column; gap: 3px; }
+.ib-pl-search-label {
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-muted); margin: 0;
+}
+.ib-pl-search-input {
+    border: 1px solid rgba(217,119,87,0.28) !important;
+    border-radius: 5px !important; background: var(--card-bg) !important;
+    font-size: 12px !important; height: 28px !important;
+    padding: 0 8px !important; width: 220px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+.ib-pl-search-input:focus {
+    border-color: rgba(217,119,87,0.65) !important;
+    box-shadow: 0 0 0 3px rgba(217,119,87,0.12) !important;
+    outline: none;
+}
+
+
+.ib-pl-table-wrap { overflow-x: auto; padding: 0; border-radius: 8px; border: 1px solid var(--border-color); }
+.ib-pl-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ib-pl-th {
+    padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color); background: var(--subtle-fg, var(--control-bg));
+    white-space: nowrap; position: sticky; top: 0; z-index: 1;
+}
+.ib-pl-th--spec, .ib-pl-td--spec { color: var(--text-muted); font-size: 12px; max-width: 260px; }
+.ib-pl-th--rate, .ib-pl-td--rate { text-align: right; }
+.ib-pl-th--actions, .ib-pl-td--actions { width: 40px; text-align: center; }
+
+.ib-pl-row { transition: background 0.1s; cursor: pointer; }
+.ib-pl-row:hover { background: var(--fg-hover-color, rgba(0,0,0,0.02)); }
+.ib-pl-row--alt { background: var(--subtle-fg, rgba(0,0,0,0.015)); }
+.ib-pl-row--alt:hover { background: var(--fg-hover-color, rgba(0,0,0,0.035)); }
+.ib-pl-row.ib-row-active td { background: color-mix(in srgb, var(--ib-primary) 7%, transparent) !important; }
+.ib-pl-td { padding: 9px 14px; border-bottom: 1px solid var(--border-color); vertical-align: middle; color: var(--text-color); }
+.ib-pl-row:last-child .ib-pl-td { border-bottom: none; }
+
+.ib-pl-code { font-family: var(--monospace-font, monospace); font-size: 11.5px; color: var(--ib-primary); font-weight: 500; }
+.ib-pl-td--name { font-weight: 500; }
+.ib-pl-rate { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--text-color); }
+.ib-pl-rate--empty { color: var(--text-muted); font-size: 12px; }
+
+.ib-pl-edit-btn {
+    background: none; border: none; cursor: pointer; padding: 4px; color: var(--text-muted);
+    border-radius: 4px; display: inline-flex; align-items: center; transition: color 0.15s, background 0.15s;
+}
+.ib-pl-edit-btn:hover {
+    color: var(--ib-primary);
+    background: color-mix(in srgb, var(--ib-primary) 10%, transparent);
+}
+
+.ib-pl-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 48px 16px; color: var(--text-muted); }
+.ib-pl-empty svg { opacity: 0.25; }
+.ib-pl-empty p { font-size: 13px; margin: 0; }
+
+.ib-pl-loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 48px 16px; color: var(--text-muted); font-size: 13px; }
+.ib-pl-spinner {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid var(--border-color); border-top-color: var(--ib-primary);
+    animation: ib-pl-spin 0.7s linear infinite;
+}
+@keyframes ib-pl-spin { to { transform: rotate(360deg); } }
+
+.ib-pl-breakdown { min-width: 300px; max-width: 340px; }
+.ib-pl-pop-spec { font-size: 11px; color: var(--text-muted); margin-top: 2px; line-height: 1.4; }
+.ib-pl-pop-rates { padding: 8px 0; }
+.ib-pl-pop-rate-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 7px 14px; border-bottom: 1px solid var(--ib-border-soft);
+}
+.ib-pl-pop-rate-row:last-child { border-bottom: none; }
+.ib-pl-pop-rate-row--empty .ib-pl-pop-rate-label,
+.ib-pl-pop-rate-row--empty .ib-pl-pop-rate-val { color: var(--text-muted); }
+.ib-pl-pop-rate-label { font-size: 12px; font-weight: 500; color: var(--text-color); }
+.ib-pl-pop-rate-val { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ib-primary-dark, #b45e3e); }
+
+/* ── Sales Target widget (Customer Board) ─────────────────────────────────── */
+.ib-cb-target-card {
+    display: flex; flex-direction: column; gap: 6px;
+    background: var(--card-bg); border: 1px solid var(--border-color);
+    border-radius: 8px; padding: 12px 16px; min-width: 220px; flex: 1;
+}
+.ib-cb-target-hdr {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px;
+}
+.ib-cb-target-lbl {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-muted);
+}
+.ib-cb-target-month { font-size: 11px; color: var(--text-muted); }
+.ib-cb-target-amounts {
+    display: flex; align-items: baseline; gap: 4px;
+}
+.ib-cb-target-actual {
+    font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums;
+    color: var(--ib-primary);
+}
+.ib-cb-target-sep { font-size: 13px; color: var(--text-muted); }
+.ib-cb-target-goal { font-size: 13px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.ib-cb-target-bar-wrap {
+    display: flex; align-items: center; gap: 8px;
+}
+.ib-cb-target-bar-track {
+    flex: 1; height: 6px; border-radius: 3px;
+    background: var(--border-color, #e2e8f0); overflow: hidden;
+}
+.ib-cb-target-bar-fill {
+    height: 100%; border-radius: 3px;
+    background: var(--ib-primary); transition: width 0.4s ease;
+}
+.ib-cb-target-pct {
+    font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums;
+    color: var(--text-muted); white-space: nowrap; min-width: 30px; text-align: right;
+}
+
+/* ── Assignment Admin: target column in roster ────────────────────────────── */
+.ib-aa-row-target-bar { min-width: 100px; }
+.ib-aa-no-target { font-size: 12px; color: var(--text-muted); }
