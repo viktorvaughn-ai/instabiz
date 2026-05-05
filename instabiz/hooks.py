@@ -17,6 +17,12 @@ scheduler_events = {
         "instabiz.overrides.dormant.run_dormant_check",
         # Monthly sales target milestone notifications (50%/75% elapsed + end-of-month)
         "instabiz.overrides.sales_target.run_target_notifications",
+        # Alert rep when SO has no DN after 48h
+        "instabiz.overrides.fulfillment_sla.run_fulfillment_sla",
+        # Stale quotation + cold lead win-back nudges
+        "instabiz.overrides.winback.run_winback",
+        # Alert purchase team when bin qty <= reorder level
+        "instabiz.overrides.reorder_alert.run_reorder_alert",
     ],
 }
 
@@ -123,9 +129,13 @@ doc_events = {
         "before_insert": [
             "instabiz.overrides.lead.check_duplicate_lead",
             "instabiz.overrides.lead.set_territory_from_pincode",
+            "instabiz.overrides.lead.compute_lead_score",
         ],
         "after_insert": "instabiz.overrides.lead.assign_lead_owner",
-        "on_update":    "instabiz.overrides.lead.assign_lead_owner",
+        "on_update":    [
+            "instabiz.overrides.lead.assign_lead_owner",
+            "instabiz.overrides.lead.compute_lead_score",
+        ],
     },
     "Comment": {
         "after_insert": "instabiz.overrides.comment.notify_owner_on_comment",
@@ -177,7 +187,7 @@ override_whitelisted_methods = {
     "erpnext.selling.doctype.quotation.quotation.make_sales_order":
         "instabiz.overrides.quotation.custom_make_sales_order",
 
-    # Sales Order → Delivery Note  ← THIS WAS MISSING
+    # Sales Order → Delivery Note
     "erpnext.selling.doctype.sales_order.sales_order.make_delivery_note":
         "instabiz.overrides.sales_order.custom_make_delivery_note",
 
@@ -185,6 +195,9 @@ override_whitelisted_methods = {
     "erpnext.stock.doctype.delivery_note.delivery_note.make_sales_invoice":
         "instabiz.overrides.delivery_note.custom_make_sales_invoice",
 
+    # Lead → Customer (carry territory, pincode, sales person)
+    "erpnext.crm.doctype.lead.lead.make_customer":
+        "instabiz.overrides.lead.custom_make_customer",
 }
 
 # ── Frontend assets ───────────────────────────────────────────────────────────

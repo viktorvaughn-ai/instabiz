@@ -111,6 +111,37 @@ IB_DOCTYPES.forEach(function (doctype) {
     });
 });
 
+// ── Quotation: Margin % on item rows ─────────────────────────────────────────
+
+function _ib_update_margin(frm, cdt, cdn) {
+    const row = locals[cdt][cdn];
+    if (!row) return;
+    const rate = flt(row.rate);
+    const cost = flt(row.custom_valuation_rate);
+    const margin = (rate && cost) ? flt((rate - cost) / rate * 100, 1) : 0;
+    if (Math.abs(flt(margin) - flt(row.custom_margin_pct)) > 0.05) {
+        frappe.model.set_value(cdt, cdn, "custom_margin_pct", margin);
+    }
+}
+
+frappe.ui.form.on("Quotation Item", {
+    item_code(frm, cdt, cdn) {
+        const row = locals[cdt][cdn];
+        if (!row || !row.item_code) return;
+        frappe.db.get_value("Item", row.item_code, "valuation_rate", (r) => {
+            if (!r || !r.valuation_rate) return;
+            frappe.model.set_value(cdt, cdn, "custom_valuation_rate", flt(r.valuation_rate));
+            _ib_update_margin(frm, cdt, cdn);
+        });
+    },
+    rate(frm, cdt, cdn) {
+        _ib_update_margin(frm, cdt, cdn);
+    },
+    custom_valuation_rate(frm, cdt, cdn) {
+        _ib_update_margin(frm, cdt, cdn);
+    },
+});
+
 // ── Quotation: Sale Type → clear taxes when Export ───────────────────────────
 
 frappe.ui.form.on("Quotation", {

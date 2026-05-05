@@ -11,14 +11,21 @@ frappe.pages["ib-price-list"].on_page_show = function (wrapper) {
 	if (wrapper.page_obj) wrapper.page_obj.refresh();
 };
 
+frappe.pages["ib-price-list"].on_page_hide = function (wrapper) {
+	if (wrapper.page_obj) wrapper.page_obj._cleanup();
+};
+
 class IBPriceList {
 	constructor(page, wrapper) {
 		this.page    = page;
 		this.wrapper = wrapper;
 		this.$main   = $(wrapper).find(".page-content");
 		this._all_rows      = [];
+		this._filtered_rows = [];
 		this._row_map       = new Map();
 		this._search_tokens = [];
+		this._page          = 1;
+		this._page_size     = 50;
 		this._is_manager    = frappe.user.has_role("Sales Manager") || frappe.user.has_role("System Manager");
 		this._$popover      = null;
 		this._$backdrop     = null;
@@ -71,11 +78,23 @@ class IBPriceList {
 					</table>
 					<div class="ib-pl-empty" id="ib-pl-empty" style="display:none;">
 						${IB_ICONS.svg("search", 32)}
-						<p>No items match your search</p>
+						<p id="ib-pl-empty-msg">No entries found</p>
 					</div>
 					<div class="ib-pl-loading" id="ib-pl-loading">
 						<div class="ib-pl-spinner"></div>
 						<span>Loading prices…</span>
+					</div>
+					<div class="ib-pl-pagination" id="ib-pl-pagination" style="display:none;">
+						<div class="ib-pl-pg-info" id="ib-pl-pg-info"></div>
+						<div class="ib-pl-pg-controls">
+							<select class="ib-pl-pg-size" id="ib-pl-pg-size" title="Rows per page">
+								<option value="20">20 / page</option>
+								<option value="50" selected>50 / page</option>
+								<option value="100">100 / page</option>
+							</select>
+							<button class="ib-pl-pg-btn" id="ib-pl-pg-prev" title="Previous page">‹ Prev</button>
+							<button class="ib-pl-pg-btn" id="ib-pl-pg-next" title="Next page">Next ›</button>
+						</div>
 					</div>
 				</div>
 			</div>
@@ -99,12 +118,30 @@ class IBPriceList {
 				frappe.set_route("Form", "IB Item Price List", $(e.currentTarget).closest("tr").attr("data-item"));
 			});
 		}
+
+		this.$main.on("click", "#ib-pl-pg-prev", () => {
+			if (this._page > 1) { this._page--; this._render_page(); }
+		});
+		this.$main.on("click", "#ib-pl-pg-next", () => {
+			const total_pages = Math.ceil(this._filtered_rows.length / this._page_size);
+			if (this._page < total_pages) { this._page++; this._render_page(); }
+		});
+		this.$main.on("change", "#ib-pl-pg-size", (e) => {
+			this._page_size = parseInt(e.target.value) || 50;
+			this._page = 1;
+			this._render_page();
+		});
 	}
 
 	_bind_keyboard() {
 		$(document).on("keydown.ib-pl", (e) => {
 			if (e.key === "Escape" && this._$popover) this._close_popover();
 		});
+	}
+
+	_cleanup() {
+		$(document).off("keydown.ib-pl");
+		this._close_popover();
 	}
 
 	refresh() {
@@ -133,17 +170,41 @@ class IBPriceList {
 		const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
 		this._search_tokens = tokens;
 
-		const visible = tokens.length
+		this._filtered_rows = tokens.length
 			? this._all_rows.filter(r => {
 				const hay = [r.item_code, r.item_name, r.uom, r.specification].join(" ").toLowerCase();
 				return tokens.every(t => hay.includes(t));
 			})
 			: this._all_rows;
 
-		this._render(visible);
+		this._page = 1;
+		this._render_page();
 	}
 
-	_render(rows) {
+	_render_page() {
+		const total      = this._filtered_rows.length;
+		const page_size  = this._page_size;
+		const page       = this._page;
+		const start      = (page - 1) * page_size;
+		const page_rows  = this._filtered_rows.slice(start, start + page_size);
+		const total_pages = Math.ceil(total / page_size);
+
+		this._render(page_rows, start);
+
+		const $pg = this.$main.find("#ib-pl-pagination");
+		if (total <= page_size) {
+			$pg.hide();
+			return;
+		}
+
+		const end = Math.min(start + page_size, total);
+		this.$main.find("#ib-pl-pg-info").text(`${start + 1}–${end} of ${total}`);
+		this.$main.find("#ib-pl-pg-prev").prop("disabled", page <= 1);
+		this.$main.find("#ib-pl-pg-next").prop("disabled", page >= total_pages);
+		$pg.show();
+	}
+
+	_render(rows, start_idx = 0) {
 		const $tbody = this.$main.find("#ib-pl-tbody");
 		const $empty = this.$main.find("#ib-pl-empty");
 
@@ -151,7 +212,10 @@ class IBPriceList {
 
 		if (!rows.length) {
 			$tbody.empty();
+			const q = (this.$main.find("#ib-pl-search").val() || "").trim();
+			this.$main.find("#ib-pl-empty-msg").text(q ? "No items match your search" : "No entries found");
 			$empty.show();
+			this.$main.find("#ib-pl-pagination").hide();
 			return;
 		}
 
@@ -168,7 +232,7 @@ class IBPriceList {
 			: "";
 
 		const html = rows.map((r, idx) => `
-			<tr class="ib-pl-row${idx % 2 ? " ib-pl-row--alt" : ""}" data-item="${esc(r.item_code)}">
+			<tr class="ib-pl-row${(start_idx + idx) % 2 ? " ib-pl-row--alt" : ""}" data-item="${esc(r.item_code)}">
 				<td class="ib-pl-td ib-pl-td--code"><span class="ib-pl-code">${IBStock.highlight(r.item_code, this._search_tokens)}</span></td>
 				<td class="ib-pl-td ib-pl-td--name">${IBStock.highlight(r.item_name, this._search_tokens)}</td>
 				<td class="ib-pl-td ib-pl-td--spec">${this._spec_cell(r)}</td>

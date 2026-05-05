@@ -6,6 +6,28 @@ import json as _json
 
 from instabiz.overrides.permissions import _is_privileged
 
+# ── Lead scoring ──────────────────────────────────────────────────────────────
+_TEMP_SCORE  = {"Hot": 60, "Warm": 30, "Cold": 0}
+_STATUS_BONUS = {
+	"Negotiation": 30, "Proposal": 20, "Qualified": 15,
+	"Contacted": 5, "Hot Lead": 10,
+}
+
+
+def compute_lead_score(doc, method=None):
+	"""Auto-compute custom_lead_score (0–100) on every save."""
+	score = _TEMP_SCORE.get(doc.get("custom_lead_temperature") or "Cold", 0)
+	score += _STATUS_BONUS.get(doc.get("custom_status") or "", 0)
+	if doc.get("mobile_no"):
+		score += 5
+	if doc.get("email_id"):
+		score += 5
+	if doc.get("custom_product_of_interest") or doc.get("custom_poi"):
+		score += 10
+	if doc.get("custom_next_follow_up_date"):
+		score += 10
+	doc.custom_lead_score = min(score, 100)
+
 
 def get_permission_query_conditions(user):
     """Limit Lead list to rows owned by or assigned to the current user.
@@ -188,8 +210,48 @@ def set_lead_status(lead, status):
 	doc = frappe.get_doc("Lead", lead)
 	if not has_permission(doc, "write", frappe.session.user):
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	old_status = doc.custom_status or ""
 	frappe.db.set_value("Lead", lead, "custom_status", status)
+	if old_status != status:
+		actor = frappe.db.get_value("User", frappe.session.user, "full_name") or frappe.session.user
+		frappe.get_doc({
+			"doctype": "Comment",
+			"comment_type": "Info",
+			"reference_doctype": "Lead",
+			"reference_name": lead,
+			"content": f"Status changed: <b>{old_status or '—'}</b> → <b>{status}</b> by {actor}",
+			"owner": frappe.session.user,
+		}).insert(ignore_permissions=True)
 	return status
+
+
+@frappe.whitelist()
+def custom_make_customer(source_name, target_doc=None):
+	"""Wrap ERPNext make_customer and carry instabiz custom fields to Customer."""
+	from erpnext.crm.doctype.lead.lead import _make_customer
+	customer_doc = _make_customer(source_name, target_doc)
+
+	lead = frappe.get_doc("Lead", source_name)
+
+	# Carry territory
+	if lead.territory and not customer_doc.territory:
+		customer_doc.territory = lead.territory
+
+	# Carry pincode → billing pincode on Customer
+	if lead.get("custom_pincode"):
+		customer_doc.custom_bt_pincode = lead.custom_pincode
+
+	# Carry city / district / state from lead custom fields
+	if lead.get("city"):
+		customer_doc.custom_bt_city = lead.city
+	if lead.get("custom_district"):
+		customer_doc.custom_district = lead.custom_district
+
+	# Wire the sales person user so permissions work immediately
+	if lead.lead_owner:
+		customer_doc.custom_sales_person_user = lead.lead_owner
+
+	return customer_doc
 
 
 @frappe.whitelist()

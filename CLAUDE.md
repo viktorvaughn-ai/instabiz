@@ -1,4 +1,5 @@
-> **ALWAYS activate superpowers and caveman before any work.** Invoke `superpowers:using-superpowers` and `caveman:caveman` skills at session start, before reading any file or writing any code.
+> **ALWAYS caveman before any work.** Invoke 
+`caveman:caveman` skills at session start, before reading any file or writing any code.
 
 # CLAUDE.md — instabiz
 
@@ -124,6 +125,18 @@ These rules are mandatory for all agents working on this repo. Do not skip them.
 14. **Sales Target Setting** — `IB Sales Target` doctype (sales_user, month, target_amount); `instabiz/overrides/sales_target.py`; `get_my_target()` / `get_all_targets()` whitelisted; Customer Board shows target progress card for current month (hidden when no target set); Assignment Admin roster shows Sales Target bar per user; daily scheduler sends bell notifications at 50%/75% month elapsed if behind pace + end-of-month if target not met; Sales Manager+ creates/edits targets
 15. **Customer Health Score** — `instabiz/overrides/customer_score.py`; daily scheduler (`run_customer_score`); computes weighted score per active customer: payment punctuality 35%, order frequency 30%, complaint count 20%, CSAT rating 15%; stores in `IB Customer Score` doctype; status: Green ≥70, Amber ≥40, Red <40; if score drops ≥15 pts, emails all Sales Manager/System Manager; skips customers already scored today
 16. **IB Sample Request** — doctype `IB Sample Request` (IB-SR-.YYYY.-#####); tracks sample dispatch lifecycle; fields: customer, contact_person, request_date, status (Draft/Work Order Created/Sent/Feedback Received/Converted/Closed), assigned_to, sample_type (Free/Paid), related_sales_order, item, qty, uom, is_paid, feedback, outcome (Converted/Not Interested/Follow Up/No Response), notes; validate() defaults request_date=today, assigned_to=session user
+17. **Rate Contracts** — uses native ERPNext **Pricing Rules** (no custom code); one rule per customer+item; set "Applicable For = Customer", "Apply On = Item Code", "Price or Discount = Rate", valid_from/valid_upto for contract period; auto-applies on Quotation and SO in browser; `recalculate_items()` is safe — reads row rate as-is, never overwrites it; Q→SO mapper copies rate from Q row (if contract rate changes after Q submission, SO carries old rate — user must correct manually)
+18. **Lead Scoring** — `instabiz/overrides/lead.py` `compute_lead_score()`; fires on Lead before_insert + on_update; score 0–100 from temperature (0/30/60) + status bonus (up to 30) + mobile/email/POI/follow-up date presence; stored in `custom_lead_score`
+19. **Lead → Customer Conversion** — `custom_make_customer()` in lead.py overrides ERPNext make_customer; carries territory, custom_pincode→custom_bt_pincode, city, custom_district, lead_owner→custom_sales_person_user to new Customer; wired via override_whitelisted_methods
+20. **Lead Status Change Audit** — `set_lead_status()` now logs Comment (type=Info) on every status change: "Status changed: old → new by actor"; visible on Lead timeline
+21. **Fulfillment SLA** — `instabiz/overrides/fulfillment_sla.py`; daily scheduler; finds submitted SOs with no linked submitted DN after 48h; sends Notification Log to custom_sales_person_user; dedup via `[ib-sla-alert]` marker
+22. **Win-back Nudges** — `instabiz/overrides/winback.py`; daily scheduler; (1) Open/Replied quotations with no activity in 14+ days → alert rep; (2) Leads in Cold/Contacted/Warm status with no activity in 30+ days → alert lead_owner; dedup via `[ib-winback]` marker
+23. **IB Sales KPIs Report** — Script Report; per-rep metrics: Leads, Quotations, Orders, Lead→Q%, Q→SO%, Lead→SO%, Revenue, Avg Deal Size, Lost Deals; bar chart + summary cards; filters: date range, territory, sales person; NULL custom_sales_person_user rows excluded
+24. **IB Lost Deal Analysis Report** — Script Report; pulls lost Leads (custom_status=Lost) and lost Quotations (status=Lost); columns: source, loss_reason, sales_person, territory, month, count, value_lost, doc link; pie chart by loss reason; filters: date range, source, loss_reason, territory, sales person
+25. **SO Cancellation Enforcement** — `CustomSalesOrder.before_cancel()` throws if `custom_cancel_reason` is blank; field is Small Text, allow_on_submit=1, visible when docstatus≥1
+26. **Margin % on Quotation** — `custom_valuation_rate` (hidden) + `custom_margin_pct` (read-only Percent) on Quotation Item; JS in form.js fetches valuation_rate from Item on item_code change, recomputes margin on rate change: `(rate - cost)/rate * 100`
+27. **Floor Price Enforcement** — `_check_floor_price()` in utils.py; fires in Quotation.validate() + Sales Order.validate(); per-row: fetches `valuation_rate` + `custom_min_margin_pct` from Item; floor = valuation_rate × (1 + min_margin/100); Sales Manager/System Manager → msgprint warning; Sales User → frappe.throw blocks save
+28. **Item Reorder Alert** — `instabiz/overrides/reorder_alert.py`; daily scheduler; queries tabBin vs tabItem Reorder (per-warehouse level) or Item.reorder_level; sends Notification Log to all Purchase Manager/Purchase User/System Manager users; dedup via `[ib-reorder]` marker, 7-day cooldown
 
 ---
 

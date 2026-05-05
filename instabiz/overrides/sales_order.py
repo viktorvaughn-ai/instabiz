@@ -15,6 +15,7 @@ from instabiz.overrides.utils import (
     map_address_contact_fields,
     COMMON_PARENT_FIELD_MAP,
     COMMON_CHILD_FIELD_MAP,
+    _check_floor_price,
 )
 from instabiz.overrides.naming import autoname_sales_order
 from instabiz.overrides.quotation import (
@@ -55,7 +56,12 @@ class CustomSalesOrder(IbStatusMixin, SalesOrder):
         set_sales_person(self)
         sync_sales_team(self)
         recalculate_items(self)
+        _check_floor_price(self)
         super().validate()
+
+    def before_cancel(self):
+        if not (self.custom_cancel_reason or "").strip():
+            frappe.throw(_("Fill in Cancellation Reason before cancelling this Sales Order."))
 
     def before_submit(self):
         _check_credit_limit(self)

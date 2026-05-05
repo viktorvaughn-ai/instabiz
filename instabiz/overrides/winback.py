@@ -1,0 +1,112 @@
+"""instabiz.overrides.winback
+
+Daily scheduler: two win-back nudges for sales reps.
+
+1. Stale quotations — Open/Replied quotation with no update in QUOTE_STALE_DAYS.
+2. Cold leads — Lead in a non-progressing status with no activity in LEAD_STALE_DAYS.
+
+Deduplicates via [ib-winback] marker in Notification Log subject.
+"""
+import frappe
+from frappe.utils import add_days, nowdate
+
+QUOTE_STALE_DAYS = 14
+LEAD_STALE_DAYS  = 30
+_MARKER          = "[ib-winback]"
+_LEAD_STALE_STATUSES = ("Cold Lead", "Contacted", "Warm Lead")
+
+
+def run_winback():
+	_stale_quotations()
+	_cold_leads()
+	frappe.db.commit()
+
+
+# ── Stale quotations ──────────────────────────────────────────────────────────
+
+def _stale_quotations():
+	cutoff = add_days(nowdate(), -QUOTE_STALE_DAYS)
+
+	quotes = frappe.get_all(
+		"Quotation",
+		filters={
+			"status":   ["in", ["Open", "Replied"]],
+			"docstatus": 1,
+			"modified": ["<", cutoff],
+		},
+		fields=["name", "customer_name", "grand_total",
+		        "custom_sales_person_user", "valid_till", "modified"],
+	)
+
+	created = 0
+	for q in quotes:
+		if not q.custom_sales_person_user:
+			continue
+		if _already_notified("Quotation", q.name):
+			continue
+
+		subject = (
+			f"{_MARKER} Stale quotation: {q.name} ({q.customer_name}) — "
+			f"no activity in {QUOTE_STALE_DAYS}+ days"
+		)
+		frappe.get_doc({
+			"doctype":       "Notification Log",
+			"subject":       subject,
+			"for_user":      q.custom_sales_person_user,
+			"from_user":     "Administrator",
+			"type":          "Alert",
+			"document_type": "Quotation",
+			"document_name": q.name,
+		}).insert(ignore_permissions=True)
+		created += 1
+
+	frappe.logger().info(f"[winback] stale quotation alerts: {created}")
+
+
+# ── Cold / stalled leads ──────────────────────────────────────────────────────
+
+def _cold_leads():
+	cutoff = add_days(nowdate(), -LEAD_STALE_DAYS)
+
+	leads = frappe.get_all(
+		"Lead",
+		filters={
+			"custom_status": ["in", list(_LEAD_STALE_STATUSES)],
+			"status":        ["not in", ["Converted", "Do Not Contact"]],
+			"modified":      ["<", cutoff],
+		},
+		fields=["name", "lead_name", "lead_owner",
+		        "custom_status", "modified"],
+	)
+
+	created = 0
+	for lead in leads:
+		if not lead.lead_owner:
+			continue
+		if _already_notified("Lead", lead.name):
+			continue
+
+		subject = (
+			f"{_MARKER} Cold lead: {lead.lead_name or lead.name} — "
+			f"no activity in {LEAD_STALE_DAYS}+ days (status: {lead.custom_status})"
+		)
+		frappe.get_doc({
+			"doctype":       "Notification Log",
+			"subject":       subject,
+			"for_user":      lead.lead_owner,
+			"from_user":     "Administrator",
+			"type":          "Alert",
+			"document_type": "Lead",
+			"document_name": lead.name,
+		}).insert(ignore_permissions=True)
+		created += 1
+
+	frappe.logger().info(f"[winback] cold lead alerts: {created}")
+
+
+def _already_notified(doctype, docname):
+	return frappe.db.exists("Notification Log", {
+		"document_type": doctype,
+		"document_name": docname,
+		"subject":       ["like", f"%{_MARKER}%"],
+	})

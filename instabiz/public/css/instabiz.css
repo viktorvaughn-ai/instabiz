@@ -2404,6 +2404,26 @@ mark.ib-search-hl {
 .ib-pl-pop-rate-label { font-size: 12px; font-weight: 500; color: var(--text-color); }
 .ib-pl-pop-rate-val { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ib-primary-dark, #b45e3e); }
 
+.ib-pl-pagination {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; border-top: 1px solid var(--border-color);
+    gap: 8px;
+}
+.ib-pl-pg-info { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+.ib-pl-pg-controls { display: flex; align-items: center; gap: 6px; }
+.ib-pl-pg-size {
+    font-size: 12px; padding: 3px 6px; border: 1px solid var(--border-color);
+    border-radius: 4px; background: var(--card-bg); color: var(--text-color);
+    cursor: pointer;
+}
+.ib-pl-pg-btn {
+    font-size: 12px; padding: 3px 10px; border: 1px solid var(--border-color);
+    border-radius: 4px; background: var(--card-bg); color: var(--text-color);
+    cursor: pointer; transition: background 0.15s;
+}
+.ib-pl-pg-btn:hover:not(:disabled) { background: var(--bg-color); }
+.ib-pl-pg-btn:disabled { opacity: 0.4; cursor: default; }
+
 /* ── Sales Target widget (Customer Board) ─────────────────────────────────── */
 .ib-cb-target-card {
     display: flex; flex-direction: column; gap: 6px;

@@ -349,3 +349,40 @@ def transfer_documents(doctype, owner_field, names, to_user,
     )
 
     return len(names)
+
+
+# ── Floor price enforcement ───────────────────────────────────────────────────
+
+def _check_floor_price(doc):
+	"""Warn (privileged) or block (rep) when item rate is below cost + min margin."""
+	from frappe.utils import flt
+	from instabiz.overrides.permissions import _is_privileged
+
+	violations = []
+	for row in doc.get("items") or []:
+		if not row.item_code or not flt(row.rate):
+			continue
+		item = frappe.db.get_value(
+			"Item", row.item_code,
+			["valuation_rate", "custom_min_margin_pct"],
+			as_dict=True,
+		)
+		if not item or not flt(item.valuation_rate):
+			continue
+		min_margin = flt(item.custom_min_margin_pct or 0)
+		floor = flt(item.valuation_rate) * (1 + min_margin / 100)
+		if flt(row.rate) < floor:
+			violations.append(
+				f"Row {row.idx}: {row.item_code} — "
+				f"rate ₹{flt(row.rate):.2f} below floor ₹{floor:.2f} "
+				f"(cost ₹{flt(item.valuation_rate):.2f} + {min_margin:.0f}% min margin)"
+			)
+
+	if not violations:
+		return
+
+	msg = _("Floor price breach:") + "<br>" + "<br>".join(violations)
+	if _is_privileged():
+		frappe.msgprint(msg, title=_("Floor Price Warning"), indicator="orange")
+	else:
+		frappe.throw(msg, title=_("Floor Price Breach"))

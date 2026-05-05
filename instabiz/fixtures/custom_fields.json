@@ -45,7 +45,7 @@
     "insert_after": "length_mtr",
     "print_hide": 0,
     "permlevel": 0,
-    "precision": "0"
+    "precision": "2"
   },
   {
     "doctype": "Custom Field",
@@ -132,7 +132,7 @@
     "columns": 1,
     "print_hide": 0,
     "permlevel": 0,
-    "precision": "0"
+    "precision": "2"
   },
   {
     "doctype": "Custom Field",
@@ -146,7 +146,7 @@
     "columns": 1,
     "print_hide": 0,
     "permlevel": 0,
-    "precision": "3"
+    "precision": "2"
   },
   {
     "doctype": "Custom Field",
@@ -210,7 +210,7 @@
     "columns": 1,
     "print_hide": 0,
     "permlevel": 0,
-    "precision": "0"
+    "precision": "2"
   },
   {
     "doctype": "Custom Field",
@@ -224,7 +224,7 @@
     "columns": 1,
     "print_hide": 0,
     "permlevel": 0,
-    "precision": "3"
+    "precision": "2"
   },
   {
     "doctype": "Custom Field",
@@ -288,7 +288,7 @@
     "columns": 1,
     "print_hide": 0,
     "permlevel": 0,
-    "precision": "0"
+    "precision": "2"
   },
   {
     "doctype": "Custom Field",
@@ -302,7 +302,7 @@
     "columns": 1,
     "print_hide": 0,
     "permlevel": 0,
-    "precision": "3"
+    "precision": "2"
   },
   {
     "doctype": "Custom Field",
@@ -366,7 +366,7 @@
     "columns": 1,
     "print_hide": 0,
     "permlevel": 0,
-    "precision": "0"
+    "precision": "2"
   },
   {
     "doctype": "Custom Field",
@@ -380,7 +380,7 @@
     "columns": 1,
     "print_hide": 0,
     "permlevel": 0,
-    "precision": "3"
+    "precision": "2"
   },
   {
     "doctype": "Custom Field",
