@@ -404,3 +404,42 @@ def _check_item_lifecycle(doc):
 			_("Cannot save — the following items are discontinued:") + "<br>" + "<br>".join(discontinued),
 			title=_("Discontinued Item"),
 		)
+
+
+# ── Customer-specific item spec check ─────────────────────────────────────────
+
+def _check_customer_item_spec(doc):
+	"""Warn if any row deviates from a customer-agreed spec."""
+	customer = doc.get("customer")
+	if not customer:
+		return
+
+	warnings = []
+	for row in doc.get("items") or []:
+		if not row.item_code:
+			continue
+		spec = frappe.db.get_value(
+			"IB Customer Item Spec",
+			{"customer": customer, "item_code": row.item_code},
+			["custom_width_mm", "custom_thickness", "custom_adhesion_n25mm", "custom_core_mm"],
+			as_dict=True,
+		)
+		if not spec:
+			continue
+
+		mismatches = []
+		if spec.custom_width_mm and row.get("width_mm") and abs(row.width_mm - spec.custom_width_mm) > 0.01:
+			mismatches.append(f"Width: order {row.width_mm} mm vs agreed {spec.custom_width_mm} mm")
+		if spec.custom_thickness and row.get("custom_thickness") and row.custom_thickness != spec.custom_thickness:
+			mismatches.append(f"Thickness: order '{row.custom_thickness}' vs agreed '{spec.custom_thickness}'")
+
+		if mismatches:
+			warnings.append(f"Row {row.idx} ({row.item_code}): " + "; ".join(mismatches))
+
+	if warnings:
+		frappe.msgprint(
+			_("Customer spec mismatch — please verify before proceeding:")
+			+ "<br>" + "<br>".join(warnings),
+			title=_("Spec Mismatch"),
+			indicator="orange",
+		)

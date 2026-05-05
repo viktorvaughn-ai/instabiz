@@ -1,7 +1,7 @@
 frappe.pages["ib-price-list"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
-		title: "Item Price List",
+		title: "IB Rate Card",
 		single_column: true,
 	});
 	wrapper.page_obj = new IBPriceList(page, wrapper);
@@ -67,10 +67,10 @@ class IBPriceList {
 								<th class="ib-pl-th ib-pl-th--name">Item Name</th>
 								<th class="ib-pl-th ib-pl-th--spec">Specification</th>
 								<th class="ib-pl-th ib-pl-th--uom">UOM</th>
-								<th class="ib-pl-th ib-pl-th--rate">Rate 1</th>
-								<th class="ib-pl-th ib-pl-th--rate">Rate 2</th>
-								<th class="ib-pl-th ib-pl-th--rate">Rate 3</th>
-								<th class="ib-pl-th ib-pl-th--rate">Rate 4</th>
+								<th class="ib-pl-th ib-pl-th--rate" style="color:#0284c7">Rate 1</th>
+								<th class="ib-pl-th ib-pl-th--rate" style="color:#7c3aed">Rate 2</th>
+								<th class="ib-pl-th ib-pl-th--rate" style="color:#d97757">Rate 3</th>
+								<th class="ib-pl-th ib-pl-th--rate" style="color:#0d9488">Rate 4</th>
 								${this._is_manager ? '<th class="ib-pl-th ib-pl-th--actions"></th>' : ""}
 							</tr>
 						</thead>
@@ -222,10 +222,11 @@ class IBPriceList {
 		$empty.hide();
 
 		const esc      = frappe.utils.escape_html;
-		const fmt_rate = (v) => {
+		const RATE_COL = { rate1: "#0284c7", rate2: "#7c3aed", rate3: "#d97757", rate4: "#0d9488" };
+		const fmt_rate = (v, col) => {
 			const n = parseFloat(v);
 			if (!n) return `<span class="ib-pl-rate ib-pl-rate--empty">—</span>`;
-			return `<span class="ib-pl-rate">₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`;
+			return `<span class="ib-pl-rate" style="color:${col};font-weight:600">₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`;
 		};
 		const edit_td = this._is_manager
 			? `<td class="ib-pl-td ib-pl-td--actions"><button class="ib-pl-edit-btn" title="Edit">${IB_ICONS.svg("file", 13)}</button></td>`
@@ -233,14 +234,14 @@ class IBPriceList {
 
 		const html = rows.map((r, idx) => `
 			<tr class="ib-pl-row${(start_idx + idx) % 2 ? " ib-pl-row--alt" : ""}" data-item="${esc(r.item_code)}">
-				<td class="ib-pl-td ib-pl-td--code"><span class="ib-pl-code">${IBStock.highlight(r.item_code, this._search_tokens)}</span></td>
+				<td class="ib-pl-td ib-pl-td--code"><a class="ib-pl-code ib-pl-code--link" href="/app/item/${esc(r.item_code)}" onclick="event.stopPropagation()">${IBStock.highlight(r.item_code, this._search_tokens)}</a></td>
 				<td class="ib-pl-td ib-pl-td--name">${IBStock.highlight(r.item_name, this._search_tokens)}</td>
 				<td class="ib-pl-td ib-pl-td--spec">${this._spec_cell(r)}</td>
 				<td class="ib-pl-td ib-pl-td--uom">${r.uom ? `<span class="ib-chip ib-chip--uom-${r.uom.toLowerCase()}">${esc(r.uom)}</span>` : ""}</td>
-				<td class="ib-pl-td ib-pl-td--rate">${fmt_rate(r.rate1)}</td>
-				<td class="ib-pl-td ib-pl-td--rate">${fmt_rate(r.rate2)}</td>
-				<td class="ib-pl-td ib-pl-td--rate">${fmt_rate(r.rate3)}</td>
-				<td class="ib-pl-td ib-pl-td--rate">${fmt_rate(r.rate4)}</td>
+				<td class="ib-pl-td ib-pl-td--rate">${fmt_rate(r.rate1, RATE_COL.rate1)}</td>
+				<td class="ib-pl-td ib-pl-td--rate">${fmt_rate(r.rate2, RATE_COL.rate2)}</td>
+				<td class="ib-pl-td ib-pl-td--rate">${fmt_rate(r.rate3, RATE_COL.rate3)}</td>
+				<td class="ib-pl-td ib-pl-td--rate">${fmt_rate(r.rate4, RATE_COL.rate4)}</td>
 				${edit_td}
 			</tr>
 		`).join("");
@@ -313,16 +314,18 @@ class IBPriceList {
 					<button class="ib-breakdown-close" title="Close">×</button>
 				</div>
 				<div class="ib-pl-pop-rates">${rates_html}</div>
-				<div class="ib-pl-pop-footer">
-					<button class="ib-pl-history-btn" data-item="${esc(row.item_code)}">
-						Price History
-					</button>
+				<div class="ib-breakdown-footer">
+					<a class="ib-breakdown-report-link ib-pl-history-link" href="#" data-item="${esc(row.item_code)}">
+						${IB_ICONS.svg("clock", 12)} Price History
+					</a>
 				</div>
 			</div>
 		`).css({ visibility: "hidden", position: "fixed", left: 0, top: 0 }).appendTo("body");
 
-		$pop.find(".ib-pl-history-btn").on("click", (e) => {
+		$pop.find(".ib-pl-history-link").on("click", (e) => {
+			e.preventDefault();
 			e.stopPropagation();
+			this._close_popover();
 			this._show_price_history(row);
 		});
 
@@ -342,16 +345,85 @@ class IBPriceList {
 	}
 
 	_show_price_history(row) {
-		const fmt_rate = (v) => v ? `₹${parseFloat(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—";
-		const label_map = { rate1: "Rate 1", rate2: "Rate 2", rate3: "Rate 3", rate4: "Rate 4" };
+		const esc      = frappe.utils.escape_html;
+		const fmt_rate = (v) => {
+			const n = parseFloat(v) || 0;
+			return `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+		};
+		const LABELS     = { rate1: "Rate 1", rate2: "Rate 2", rate3: "Rate 3", rate4: "Rate 4" };
+		const RATE_COLOR = { rate1: "#0284c7", rate2: "#7c3aed", rate3: "#d97757", rate4: "#0d9488" };
+		const PAGE_SIZE  = 5;
 
 		const d = new frappe.ui.Dialog({
 			title: `Price History — ${row.item_name || row.item_code}`,
 			size: "large",
+			fields: [{ fieldtype: "HTML", fieldname: "ph" }],
 		});
-
-		d.$body.html(`<div class="ib-ph-loading" style="padding:2rem;text-align:center;color:var(--text-muted)">Loading…</div>`);
 		d.show();
+
+		const $modal_body = d.$wrapper.find(".modal-body").css({ padding: "0", overflow: "hidden" });
+		const $wrap = d.fields_dict.ph.$wrapper.css({ width: "100%" });
+		$wrap.html(`<p style="padding:2rem;text-align:center;color:var(--text-muted)">Loading…</p>`);
+
+		const make_row = (entry) => {
+			const m    = moment(entry.timestamp);
+			const date = esc(m.format("D MMM YYYY"));
+			const time = esc(m.format("h:mm A"));
+			const user = esc(entry.user || "Unknown");
+
+			const chips = entry.changes.map(([field, old_val, new_val]) => {
+				const old_n    = parseFloat(old_val) || 0;
+				const new_n    = parseFloat(new_val) || 0;
+				const is_new   = old_n === 0 && new_n > 0;
+				const is_up    = !is_new && new_n > old_n;
+				const is_down  = !is_new && new_n < old_n;
+				const lbl      = esc(LABELS[field] || field);
+				const rate_col = RATE_COLOR[field] || "#6b7280";
+
+				// label chip — always rate color
+				const label_chip = `<span style="display:inline-flex;align-items:center;padding:4px 9px;
+				    border-radius:6px 0 0 6px;background:${rate_col};color:#fff;
+				    font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+				    white-space:nowrap">${lbl}</span>`;
+
+				// value chip — directional color
+				let val_bg, val_bdr, arrow, val_txt_color;
+				if (is_new)       { val_bg="#e0f2fe"; val_bdr="#0284c7"; arrow=""; val_txt_color="#0369a1"; }
+				else if (is_up)   { val_bg="#dcfce7"; val_bdr="#16a34a"; arrow=`<span style="font-size:10px;font-weight:900;color:#16a34a;margin-left:4px">▲</span>`; val_txt_color="#111827"; }
+				else if (is_down) { val_bg="#fee2e2"; val_bdr="#dc2626"; arrow=`<span style="font-size:10px;font-weight:900;color:#dc2626;margin-left:4px">▼</span>`; val_txt_color="#111827"; }
+				else              { val_bg="#f3f4f6"; val_bdr="#9ca3af"; arrow=""; val_txt_color="#374151"; }
+
+				const price_content = is_new
+					? `<span style="font-weight:700;font-size:13px;font-variant-numeric:tabular-nums;color:${val_txt_color}">${esc(fmt_rate(new_val))}</span>
+					   <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;background:${rate_col};color:#fff;border-radius:3px;padding:1px 5px;margin-left:5px">new</span>`
+					: `<span style="color:#9ca3af;font-size:12px;font-variant-numeric:tabular-nums;text-decoration:line-through">${esc(fmt_rate(old_val))}</span>
+					   <span style="color:#d1d5db;font-size:11px;margin:0 4px">→</span>
+					   <span style="font-weight:700;font-size:13px;font-variant-numeric:tabular-nums;color:${val_txt_color}">${esc(fmt_rate(new_val))}</span>
+					   ${arrow}`;
+
+				const val_chip = `<span style="display:inline-flex;align-items:center;padding:4px 10px;
+				    border-radius:0 6px 6px 0;background:${val_bg};border:1px solid ${val_bdr};border-left:none;
+				    font-size:12px;white-space:nowrap">${price_content}</span>`;
+
+				return `<span style="display:inline-flex;align-items:stretch;margin-right:8px;margin-bottom:6px;
+				    border-radius:6px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+					${label_chip}${val_chip}
+				</span>`;
+			}).join("");
+
+			return `<tr>
+				<td style="width:150px;vertical-align:middle;padding:14px 20px;border-bottom:1px solid var(--border-color);white-space:nowrap;text-align:center">
+					<div style="font-size:12px;font-weight:600;color:var(--text-color)">${date}</div>
+					<div style="font-size:11px;color:var(--text-muted);margin-top:3px">${time}</div>
+				</td>
+				<td style="width:160px;vertical-align:middle;padding:14px 20px;border-bottom:1px solid var(--border-color);white-space:nowrap;text-align:center;border-left:1px solid var(--border-color)">
+					<span style="font-size:12px;color:var(--text-muted)">${user}</span>
+				</td>
+				<td style="vertical-align:middle;padding:14px 20px;border-bottom:1px solid var(--border-color);border-left:1px solid var(--border-color)">
+					<div style="display:flex;flex-wrap:wrap;gap:0">${chips}</div>
+				</td>
+			</tr>`;
+		};
 
 		frappe.call({
 			method: "instabiz.instabiz.page.ib_price_list.ib_price_list.get_price_history",
@@ -360,47 +432,86 @@ class IBPriceList {
 				const history = (r && r.message) || [];
 
 				if (!history.length) {
-					d.$body.html(`<div style="padding:2rem;text-align:center;color:var(--text-muted)">No rate changes recorded yet.</div>`);
+					$wrap.html(`
+						<div style="padding:3rem 1rem;text-align:center;color:var(--text-muted)">
+							${IB_ICONS.svg("clock", 28)}
+							<p style="margin:8px 0 0;font-size:13px">No rate changes recorded yet.</p>
+						</div>`);
 					return;
 				}
 
-				const rows_html = history.map(entry => {
-					const changes_html = entry.changes.map(([field, old_val, new_val]) => {
-						const arrow = old_val > new_val
-							? `<span class="ib-ph-arrow ib-ph-arrow--down">▼</span>`
-							: `<span class="ib-ph-arrow ib-ph-arrow--up">▲</span>`;
-						return `
-							<div class="ib-ph-change">
-								<span class="ib-ph-field">${label_map[field] || field}</span>
-								<span class="ib-ph-old">${fmt_rate(old_val)}</span>
-								<span class="ib-ph-to">→</span>
-								<span class="ib-ph-new">${fmt_rate(new_val)}</span>
-								${arrow}
-							</div>`;
-					}).join("");
+				let shown = Math.min(PAGE_SIZE, history.length);
 
-					const ts = frappe.datetime.str_to_user(entry.timestamp);
-					const user = entry.user || "";
-					return `
-						<tr class="ib-ph-row">
-							<td class="ib-ph-td ib-ph-td--ts">${frappe.utils.escape_html(ts)}</td>
-							<td class="ib-ph-td ib-ph-td--user">${frappe.utils.escape_html(user)}</td>
-							<td class="ib-ph-td ib-ph-td--changes">${changes_html}</td>
-						</tr>`;
-				}).join("");
+				const THEAD = `
+					<thead style="position:sticky;top:0;z-index:1">
+						<tr style="background:var(--fg-color)">
+							<th style="padding:10px 20px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);border-bottom:2px solid var(--border-color)">Date</th>
+							<th style="padding:10px 20px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);border-bottom:2px solid var(--border-color);border-left:1px solid var(--border-color)">Changed By</th>
+							<th style="padding:10px 20px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);border-bottom:2px solid var(--border-color);border-left:1px solid var(--border-color)">Rate Changes</th>
+						</tr>
+					</thead>`;
 
-				d.$body.html(`
-					<table class="ib-ph-table">
-						<thead>
-							<tr>
-								<th class="ib-ph-th">Date / Time</th>
-								<th class="ib-ph-th">Changed By</th>
-								<th class="ib-ph-th">Rate Changes</th>
-							</tr>
-						</thead>
-						<tbody>${rows_html}</tbody>
-					</table>
-				`);
+				const render = (append_from) => {
+					const has_more = shown < history.length;
+
+					if (append_from == null) {
+						// full initial render
+						const rows = history.slice(0, shown).map(make_row).join("");
+						const footer = _ph_footer(has_more, shown, history.length);
+						$wrap.html(`
+							<div id="ib-ph-scroll" style="max-height:60vh;overflow-y:auto;overflow-x:hidden">
+								<table style="width:100%;border-collapse:collapse">${THEAD}<tbody id="ib-ph-tbody">${rows}</tbody></table>
+							</div>
+							${footer}`);
+					} else {
+						// append new rows + animate them in
+						const new_rows = history.slice(append_from, shown).map(make_row).join("");
+						const $tbody = $wrap.find("#ib-ph-tbody");
+						const $new = $(new_rows).appendTo($tbody);
+
+						if (window.gsap) {
+							gsap.fromTo($new.toArray(), { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.25, stagger: 0.06, ease: "power2.out" });
+							const $scroll = $wrap.find("#ib-ph-scroll")[0];
+							gsap.to($scroll, { scrollTop: $scroll.scrollHeight, duration: 0.4, ease: "power2.inOut" });
+						}
+
+						// replace footer
+						$wrap.find("#ib-ph-footer").replaceWith(_ph_footer(has_more, shown, history.length));
+					}
+
+					$wrap.find("#ib-ph-more").on("click", () => {
+						const prev = shown;
+						shown = Math.min(shown + PAGE_SIZE, history.length);
+						render(prev);
+					});
+				};
+
+				const _ph_footer = (has_more, shown, total) => {
+					if (has_more) {
+						return `<div id="ib-ph-footer" style="padding:14px 20px;text-align:center;border-top:1px solid var(--border-color);background:var(--fg-color)">
+							<button id="ib-ph-more" style="display:inline-flex;align-items:center;gap:8px;padding:8px 22px;
+							    border-radius:8px;border:1.5px solid var(--ib-primary,#d97757);background:var(--card-bg);
+							    font-size:12px;font-weight:600;color:var(--ib-primary,#d97757);cursor:pointer;
+							    transition:background .15s,color .15s"
+							    onmouseover="this.style.background='#d97757';this.style.color='#fff'"
+							    onmouseout="this.style.background='var(--card-bg)';this.style.color='var(--ib-primary,#d97757)'">
+								${IB_ICONS.svg("clock", 12)} Load ${Math.min(PAGE_SIZE, total - shown)} more
+								<span style="font-size:10px;color:inherit;opacity:.7">&nbsp;· ${total - shown} remaining</span>
+							</button>
+						</div>`;
+					}
+					return `<div id="ib-ph-footer" style="padding:8px 20px;font-size:11px;color:var(--text-muted);background:var(--fg-color);border-top:1px solid var(--border-color);text-align:center">
+						All ${total} change${total === 1 ? "" : "s"} shown
+					</div>`;
+				};
+
+				render();
+				if (window.gsap) {
+					gsap.fromTo($wrap.find("#ib-ph-tbody tr").toArray(),
+						{ opacity: 0, y: 10 },
+						{ opacity: 1, y: 0, duration: 0.28, stagger: 0.06, ease: "power2.out", delay: 0.05 }
+					);
+				}
 			},
 		});
 	}

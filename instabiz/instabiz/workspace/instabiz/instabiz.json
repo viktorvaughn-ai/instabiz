@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"ib-h1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Quick Access</b></span>\",\"col\":12}},{\"id\":\"ib-sc-cb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Board\",\"col\":3}},{\"id\":\"ib-sc-aa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Assignment Admin\",\"col\":3}},{\"id\":\"ib-sc-at\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Attendance Terminal\",\"col\":3}},{\"id\":\"ib-sc-ci\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Employee Check-in\",\"col\":3}},{\"id\":\"ZXtm1iyCR6\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Item Price List\",\"col\":3}}]",
+ "content": "[{\"id\":\"ib-h1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Quick Access</b></span>\",\"col\":12}},{\"id\":\"ib-sc-cb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Board\",\"col\":3}},{\"id\":\"ib-sc-aa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Assignment Admin\",\"col\":3}},{\"id\":\"ib-sc-at\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Attendance Terminal\",\"col\":3}},{\"id\":\"ib-sc-ci\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Employee Check-in\",\"col\":3}},{\"id\":\"ZXtm1iyCR6\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"IB Rate Card\",\"col\":3}}]",
  "creation": "2026-04-25 11:15:33.281823",
  "custom_blocks": [],
  "docstatus": 0,
@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz",
  "links": [],
- "modified": "2026-05-02 15:41:21.739733",
+ "modified": "2026-05-05 15:40:32.748683",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz",
@@ -25,7 +25,7 @@
   {
    "color": "",
    "doc_view": "",
-   "label": "Item Price List",
+   "label": "IB Rate Card",
    "link_to": "ib-price-list",
    "stats_filter": "",
    "type": "Page"

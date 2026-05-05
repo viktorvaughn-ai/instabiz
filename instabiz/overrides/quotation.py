@@ -17,6 +17,7 @@ from instabiz.overrides.utils import (
     COMMON_CHILD_FIELD_MAP,
     _check_floor_price,
     _check_item_lifecycle,
+    _check_customer_item_spec,
 )
 from instabiz.overrides.naming import autoname_quotation
 
@@ -156,6 +157,7 @@ class CustomQuotation(IbStatusMixin, Quotation):
         recalculate_items(self)
         _check_floor_price(self)
         _check_item_lifecycle(self)
+        _check_customer_item_spec(self)
         super().validate()
 
 

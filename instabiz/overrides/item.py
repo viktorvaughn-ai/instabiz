@@ -1,14 +1,19 @@
 """instabiz.overrides.item
 
-Custom item search query — replaces ERPNext's default item_query for
-Quotation and Sales Order child tables.
-
-Shows: Item Code | Item Name | Color, Liner
-instead of the default: Item Code | Item Name | Item Group
+Custom item search query + batch-tracking auto-enable for FG item groups.
 """
 import frappe
 from erpnext.controllers.queries import get_filters_cond, get_match_cond
 from frappe.utils import nowdate
+
+# Finished-goods item groups that require batch tracking
+_FG_BATCH_GROUPS = {"BOPP", "CLOTH", "FOAM", "SPECIALTY"}
+
+
+def set_batch_no_for_fg(doc, method=None):
+	"""Auto-enable has_batch_no for items in FG item groups."""
+	if doc.item_group in _FG_BATCH_GROUPS:
+		doc.has_batch_no = 1
 
 
 @frappe.whitelist()

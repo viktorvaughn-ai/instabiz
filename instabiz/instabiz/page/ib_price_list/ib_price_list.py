@@ -1,7 +1,16 @@
+import re
 import frappe
 from frappe.utils import flt
 
 _RATE_FIELDS = {"rate1", "rate2", "rate3", "rate4"}
+
+
+def _parse_rate(val):
+    """Parse currency value from Version data — Frappe stores as '₹ 13.00'."""
+    if val is None:
+        return 0.0
+    cleaned = re.sub(r"[^\d.\-]", "", str(val))
+    return flt(cleaned) if cleaned else 0.0
 
 
 @frappe.whitelist()
@@ -26,7 +35,7 @@ def get_price_history(item_code):
 		history.append({
 			"timestamp": str(v.creation),
 			"user": v.owner,
-			"changes": [[c[0], flt(c[1], 2), flt(c[2], 2)] for c in changed],
+			"changes": [[c[0], _parse_rate(c[1]), _parse_rate(c[2])] for c in changed],
 		})
 	return history
 

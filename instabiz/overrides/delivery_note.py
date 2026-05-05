@@ -1,20 +1,21 @@
 """instabiz.overrides.delivery_note"""
 import frappe
+from erpnext.stock.doctype.delivery_note.delivery_note import (
+    DeliveryNote,  # pyright: ignore[reportMissingImports]
+)
 from frappe.model.mapper import get_mapped_doc  # pyright: ignore[reportMissingImports]
-from erpnext.stock.doctype.delivery_note.delivery_note import DeliveryNote  # pyright: ignore[reportMissingImports]
 
+from instabiz.overrides.naming import autoname_delivery_note
 from instabiz.overrides.utils import (
+    COMMON_PARENT_FIELD_MAP,
     IbStatusMixin,
+    item_postprocess,
+    map_address_contact_fields,
+    map_parent_fields,
     recalculate_items,
     set_sales_person,
     sync_sales_team,
-    item_postprocess,
-    map_parent_fields,
-    map_address_contact_fields,
-    COMMON_PARENT_FIELD_MAP,
 )
-from instabiz.overrides.naming import autoname_delivery_note
-
 
 # ── Document class ────────────────────────────────────────────────────────────
 
@@ -37,6 +38,20 @@ class CustomDeliveryNote(IbStatusMixin, DeliveryNote):
         sync_sales_team(self)
         recalculate_items(self)
         super().validate()
+
+    def before_submit(self):
+        missing = []
+        if not (self.get("lr_no") or self.get("custom_lr_number")):
+            missing.append("LR Number")
+        if not (self.get("custom_transport") or self.get("transporter")):
+            missing.append("Transporter / Transport Company")
+        if missing:
+            from frappe import _
+            frappe.throw(
+                _("Cannot submit — fill in before dispatch:") + "<br>"
+                + "<br>".join(f"• {m}" for m in missing),
+                title=_("Missing Dispatch Info"),
+            )
 
 
 # ── Mapper: Delivery Note → Sales Invoice ─────────────────────────────────────

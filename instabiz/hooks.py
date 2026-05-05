@@ -25,6 +25,8 @@ scheduler_events = {
         "instabiz.overrides.reorder_alert.run_reorder_alert",
         # Alert warehouse/purchase managers for batches expiring within 30 days
         "instabiz.overrides.expiry_alert.run_expiry_alert",
+        # Alert purchase team for submitted POs with no linked GRN after 7 days
+        "instabiz.overrides.po_followup.run_po_followup",
     ],
 }
 
@@ -139,6 +141,10 @@ doc_events = {
             "instabiz.overrides.lead.compute_lead_score",
         ],
     },
+    "Item": {
+        "before_insert": "instabiz.overrides.item.set_batch_no_for_fg",
+        "before_save":   "instabiz.overrides.item.set_batch_no_for_fg",
+    },
     "Comment": {
         "after_insert": "instabiz.overrides.comment.notify_owner_on_comment",
     },
@@ -150,7 +156,11 @@ doc_events = {
         "on_cancel": "instabiz.overrides.stock_events.publish_stock_update",
     },
     "Delivery Note": {
-        "on_submit": "instabiz.overrides.stock_events.publish_stock_update",
+        "on_submit": [
+            "instabiz.overrides.stock_events.publish_stock_update",
+            "instabiz.overrides.dispatch_notification.run_dispatch_notification",
+            "instabiz.overrides.ewaybill.run_ewaybill_on_submit",
+        ],
         "on_cancel": "instabiz.overrides.stock_events.publish_stock_update",
     },
     "Stock Entry": {
