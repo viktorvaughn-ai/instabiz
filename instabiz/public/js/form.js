@@ -179,7 +179,30 @@ frappe.ui.form.on("Quotation", {
             });
         }
     },
+
+    custom_tax_inclusive(frm) {
+        _ib_apply_tax_inclusive(frm);
+    },
+
+    customer(frm) {
+        if (!frm.doc.customer) return;
+        frappe.db.get_value("Customer", frm.doc.customer, "gst_category").then(r => {
+            const cat = r && r.message && r.message.gst_category;
+            if (cat === "Unregistered") {
+                frm.set_value("custom_tax_inclusive", 1);
+                _ib_apply_tax_inclusive(frm);
+            }
+        });
+    },
 });
+
+function _ib_apply_tax_inclusive(frm) {
+    const inclusive = frm.doc.custom_tax_inclusive ? 1 : 0;
+    (frm.doc.taxes || []).forEach(row => {
+        frappe.model.set_value(row.doctype, row.name, "included_in_print_rate", inclusive);
+    });
+    frm.refresh_field("taxes");
+}
 
 // ── List-view: Guard to prevent accidental bulk-cancellation of drafts ────────
 (function () {
