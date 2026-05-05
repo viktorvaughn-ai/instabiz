@@ -27,6 +27,8 @@ scheduler_events = {
         "instabiz.overrides.expiry_alert.run_expiry_alert",
         # Alert purchase team for submitted POs with no linked GRN after 7 days
         "instabiz.overrides.po_followup.run_po_followup",
+        # Auto-mark absent for employees with no attendance on previous working day
+        "instabiz.overrides.auto_absent.run_auto_absent",
     ],
 }
 

@@ -1,0 +1,209 @@
+{
+ "actions": [],
+ "autoname": "format:IB-FFS-{YYYY}-{#####}",
+ "creation": "2026-05-05 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "employee",
+  "employee_name",
+  "col1",
+  "last_working_day",
+  "resignation_date",
+  "status",
+  "employment_section",
+  "date_of_joining",
+  "years_of_service",
+  "col2",
+  "basic_salary_monthly",
+  "notice_period_days",
+  "notice_period_served",
+  "settlement_section",
+  "pending_leaves",
+  "leave_encashment",
+  "col3",
+  "gratuity_amount",
+  "pending_expenses",
+  "col4",
+  "total_payable",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "label": "Employee",
+   "options": "Employee",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "employee_name",
+   "fieldtype": "Data",
+   "label": "Employee Name",
+   "fetch_from": "employee.employee_name",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "col1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_working_day",
+   "fieldtype": "Date",
+   "label": "Last Working Day",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "resignation_date",
+   "fieldtype": "Date",
+   "label": "Resignation Date"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nIn Review\nApproved\nPaid\nCancelled",
+   "default": "Draft",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "employment_section",
+   "fieldtype": "Section Break",
+   "label": "Employment Details"
+  },
+  {
+   "fieldname": "date_of_joining",
+   "fieldtype": "Date",
+   "label": "Date of Joining",
+   "fetch_from": "employee.date_of_joining",
+   "read_only": 1
+  },
+  {
+   "fieldname": "years_of_service",
+   "fieldtype": "Float",
+   "label": "Years of Service",
+   "read_only": 1,
+   "precision": "2"
+  },
+  {
+   "fieldname": "col2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "basic_salary_monthly",
+   "fieldtype": "Currency",
+   "label": "Basic Salary (Monthly)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "notice_period_days",
+   "fieldtype": "Int",
+   "label": "Notice Period (Days)"
+  },
+  {
+   "fieldname": "notice_period_served",
+   "fieldtype": "Check",
+   "label": "Notice Period Served"
+  },
+  {
+   "fieldname": "settlement_section",
+   "fieldtype": "Section Break",
+   "label": "Settlement Amounts"
+  },
+  {
+   "fieldname": "pending_leaves",
+   "fieldtype": "Float",
+   "label": "Pending Leaves (Days)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "leave_encashment",
+   "fieldtype": "Currency",
+   "label": "Leave Encashment"
+  },
+  {
+   "fieldname": "col3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "gratuity_amount",
+   "fieldtype": "Currency",
+   "label": "Gratuity Amount",
+   "read_only": 1,
+   "description": "Auto-computed: (Basic/26)*15*years_of_service if >= 5 years"
+  },
+  {
+   "fieldname": "pending_expenses",
+   "fieldtype": "Currency",
+   "label": "Pending Expense Claims"
+  },
+  {
+   "fieldname": "col4",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "total_payable",
+   "fieldtype": "Currency",
+   "label": "Total Payable",
+   "read_only": 1,
+   "bold": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text Editor",
+   "label": "Notes"
+  }
+ ],
+ "icon": "fa fa-money",
+ "is_submittable": 0,
+ "links": [],
+ "modified": "2026-05-05 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "IB Full Final Settlement",
+ "naming_rule": "Expression (old-style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR User",
+   "share": 0,
+   "write": 1
+  }
+ ],
+ "sort_field": "last_working_day",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "employee_name",
+ "track_changes": 1
+}
