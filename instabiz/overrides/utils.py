@@ -386,3 +386,21 @@ def _check_floor_price(doc):
 		frappe.msgprint(msg, title=_("Floor Price Warning"), indicator="orange")
 	else:
 		frappe.throw(msg, title=_("Floor Price Breach"))
+
+
+# ── Item lifecycle enforcement ────────────────────────────────────────────────
+
+def _check_item_lifecycle(doc):
+	"""Block save if any row contains a discontinued item."""
+	discontinued = []
+	for row in doc.get("items") or []:
+		if not row.item_code:
+			continue
+		if frappe.db.get_value("Item", row.item_code, "custom_is_discontinued"):
+			discontinued.append(f"Row {row.idx}: {row.item_code}")
+
+	if discontinued:
+		frappe.throw(
+			_("Cannot save — the following items are discontinued:") + "<br>" + "<br>".join(discontinued),
+			title=_("Discontinued Item"),
+		)

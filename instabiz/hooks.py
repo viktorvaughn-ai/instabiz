@@ -23,6 +23,8 @@ scheduler_events = {
         "instabiz.overrides.winback.run_winback",
         # Alert purchase team when bin qty <= reorder level
         "instabiz.overrides.reorder_alert.run_reorder_alert",
+        # Alert warehouse/purchase managers for batches expiring within 30 days
+        "instabiz.overrides.expiry_alert.run_expiry_alert",
     ],
 }
 
