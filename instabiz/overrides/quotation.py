@@ -156,17 +156,7 @@ class CustomQuotation(IbStatusMixin, Quotation):
         recalculate_items(self)
         _check_floor_price(self)
         _check_item_lifecycle(self)
-        _enforce_tax_inclusive(self)
         super().validate()
-
-
-# ── GST inclusive enforcement ─────────────────────────────────────────────────
-
-def _enforce_tax_inclusive(doc):
-	"""Sync included_in_print_rate on all tax rows with custom_tax_inclusive flag."""
-	inclusive = 1 if doc.get("custom_tax_inclusive") else 0
-	for row in doc.get("taxes") or []:
-		row.included_in_print_rate = inclusive
 
 
 # ── Reopen ────────────────────────────────────────────────────────────────────
