@@ -313,8 +313,18 @@ class IBPriceList {
 					<button class="ib-breakdown-close" title="Close">×</button>
 				</div>
 				<div class="ib-pl-pop-rates">${rates_html}</div>
+				<div class="ib-pl-pop-footer">
+					<button class="ib-pl-history-btn" data-item="${esc(row.item_code)}">
+						Price History
+					</button>
+				</div>
 			</div>
 		`).css({ visibility: "hidden", position: "fixed", left: 0, top: 0 }).appendTo("body");
+
+		$pop.find(".ib-pl-history-btn").on("click", (e) => {
+			e.stopPropagation();
+			this._show_price_history(row);
+		});
 
 		const $backdrop = $('<div class="ib-breakdown-backdrop"></div>').appendTo("body");
 		$backdrop.on("click", () => this._close_popover());
@@ -329,6 +339,70 @@ class IBPriceList {
 		this._$active_row = $(e.currentTarget).addClass("ib-row-active");
 		this._$backdrop   = $backdrop;
 		this._$popover    = $pop;
+	}
+
+	_show_price_history(row) {
+		const fmt_rate = (v) => v ? `₹${parseFloat(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—";
+		const label_map = { rate1: "Rate 1", rate2: "Rate 2", rate3: "Rate 3", rate4: "Rate 4" };
+
+		const d = new frappe.ui.Dialog({
+			title: `Price History — ${row.item_name || row.item_code}`,
+			size: "large",
+		});
+
+		d.$body.html(`<div class="ib-ph-loading" style="padding:2rem;text-align:center;color:var(--text-muted)">Loading…</div>`);
+		d.show();
+
+		frappe.call({
+			method: "instabiz.instabiz.page.ib_price_list.ib_price_list.get_price_history",
+			args: { item_code: row.item_code },
+			callback: (r) => {
+				const history = (r && r.message) || [];
+
+				if (!history.length) {
+					d.$body.html(`<div style="padding:2rem;text-align:center;color:var(--text-muted)">No rate changes recorded yet.</div>`);
+					return;
+				}
+
+				const rows_html = history.map(entry => {
+					const changes_html = entry.changes.map(([field, old_val, new_val]) => {
+						const arrow = old_val > new_val
+							? `<span class="ib-ph-arrow ib-ph-arrow--down">▼</span>`
+							: `<span class="ib-ph-arrow ib-ph-arrow--up">▲</span>`;
+						return `
+							<div class="ib-ph-change">
+								<span class="ib-ph-field">${label_map[field] || field}</span>
+								<span class="ib-ph-old">${fmt_rate(old_val)}</span>
+								<span class="ib-ph-to">→</span>
+								<span class="ib-ph-new">${fmt_rate(new_val)}</span>
+								${arrow}
+							</div>`;
+					}).join("");
+
+					const ts = frappe.datetime.str_to_user(entry.timestamp);
+					const user = entry.user || "";
+					return `
+						<tr class="ib-ph-row">
+							<td class="ib-ph-td ib-ph-td--ts">${frappe.utils.escape_html(ts)}</td>
+							<td class="ib-ph-td ib-ph-td--user">${frappe.utils.escape_html(user)}</td>
+							<td class="ib-ph-td ib-ph-td--changes">${changes_html}</td>
+						</tr>`;
+				}).join("");
+
+				d.$body.html(`
+					<table class="ib-ph-table">
+						<thead>
+							<tr>
+								<th class="ib-ph-th">Date / Time</th>
+								<th class="ib-ph-th">Changed By</th>
+								<th class="ib-ph-th">Rate Changes</th>
+							</tr>
+						</thead>
+						<tbody>${rows_html}</tbody>
+					</table>
+				`);
+			},
+		});
 	}
 
 	_close_popover() {

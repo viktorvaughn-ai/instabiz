@@ -1,6 +1,35 @@
 import frappe
 from frappe.utils import flt
 
+_RATE_FIELDS = {"rate1", "rate2", "rate3", "rate4"}
+
+
+@frappe.whitelist()
+def get_price_history(item_code):
+	"""Return chronological rate-change log for an IB Item Price List record."""
+	versions = frappe.db.get_all(
+		"Version",
+		filters={"ref_doctype": "IB Item Price List", "docname": item_code},
+		fields=["creation", "owner", "data"],
+		order_by="creation desc",
+		limit=100,
+	)
+	history = []
+	for v in versions:
+		try:
+			data = frappe.parse_json(v.data or "{}")
+		except Exception:
+			continue
+		changed = [c for c in (data.get("changed") or []) if c[0] in _RATE_FIELDS]
+		if not changed:
+			continue
+		history.append({
+			"timestamp": str(v.creation),
+			"user": v.owner,
+			"changes": [[c[0], flt(c[1], 2), flt(c[2], 2)] for c in changed],
+		})
+	return history
+
 
 @frappe.whitelist()
 def get_item_price_list():

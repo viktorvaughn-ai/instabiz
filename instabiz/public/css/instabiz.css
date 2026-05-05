@@ -2404,6 +2404,34 @@ mark.ib-search-hl {
 .ib-pl-pop-rate-label { font-size: 12px; font-weight: 500; color: var(--text-color); }
 .ib-pl-pop-rate-val { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ib-primary-dark, #b45e3e); }
 
+/* ── Price list popover footer + history button ─────────────────────────────── */
+.ib-pl-pop-footer { padding: 6px 12px 10px; border-top: 1px solid var(--ib-border-soft); margin-top: 2px; }
+.ib-pl-history-btn {
+  background: none; border: 1px solid var(--ib-border-soft); border-radius: 4px;
+  font-size: 11px; font-weight: 500; color: var(--text-muted);
+  padding: 3px 8px; cursor: pointer; transition: border-color .15s, color .15s;
+}
+.ib-pl-history-btn:hover { border-color: var(--ib-primary); color: var(--ib-primary); }
+
+/* ── Price history dialog table ─────────────────────────────────────────────── */
+.ib-ph-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ib-ph-th { padding: 8px 10px; text-align: left; font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted);
+  border-bottom: 2px solid var(--border-color); }
+.ib-ph-row:nth-child(even) { background: var(--fg-color); }
+.ib-ph-td { padding: 8px 10px; vertical-align: top; border-bottom: 1px solid var(--border-color); }
+.ib-ph-td--ts { white-space: nowrap; font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.ib-ph-td--user { font-size: 12px; color: var(--text-muted); }
+.ib-ph-change { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.ib-ph-change:last-child { margin-bottom: 0; }
+.ib-ph-field { font-weight: 600; font-size: 12px; min-width: 48px; }
+.ib-ph-old { color: var(--text-muted); text-decoration: line-through; font-size: 12px; font-variant-numeric: tabular-nums; }
+.ib-ph-to { color: var(--text-muted); font-size: 11px; }
+.ib-ph-new { font-weight: 600; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--ib-primary-dark, #b45e3e); }
+.ib-ph-arrow { font-size: 10px; }
+.ib-ph-arrow--up { color: #2d8a3e; }
+.ib-ph-arrow--down { color: #c0392b; }
+
 .ib-pl-pagination {
     display: flex; align-items: center; justify-content: space-between;
     padding: 8px 12px; border-top: 1px solid var(--border-color);
