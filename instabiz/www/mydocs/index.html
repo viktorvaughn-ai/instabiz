@@ -1,0 +1,86 @@
+{% extends "templates/web.html" %}
+
+{% block title %}My Documents{% endblock %}
+
+{% block page_content %}
+<style>
+  .mydocs-wrap { max-width: 720px; margin: 32px auto; padding: 0 16px; font-family: var(--font-stack, 'Inter', sans-serif); }
+  .mydocs-header { margin-bottom: 24px; }
+  .mydocs-header h2 { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
+  .mydocs-header p { font-size: 13px; color: #666; margin: 0; }
+  .mydocs-table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+  .mydocs-table th { padding: 10px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; background: #f9fafb; color: #555; text-align: left; border-bottom: 2px solid #e5e7eb; }
+  .mydocs-table td { padding: 12px 14px; font-size: 13px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+  .mydocs-table tr:last-child td { border-bottom: none; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .badge-ok       { background: #d1fae5; color: #065f46; }
+  .badge-expiring { background: #fef3c7; color: #92400e; }
+  .badge-expired  { background: #fee2e2; color: #991b1b; }
+  .badge-none     { background: #f3f4f6; color: #9ca3af; }
+  .doc-link { color: #d97757; text-decoration: none; font-weight: 500; }
+  .doc-link:hover { text-decoration: underline; }
+  .empty-state { text-align: center; padding: 60px 20px; color: #aaa; }
+  .error-box { background: #fee2e2; color: #991b1b; padding: 16px 20px; border-radius: 8px; margin: 32px auto; max-width: 500px; }
+</style>
+
+<div class="mydocs-wrap">
+
+  {% if error %}
+    <div class="error-box">{{ error }}</div>
+
+  {% else %}
+    <div class="mydocs-header">
+      <h2>My Documents</h2>
+      <p>{{ employee_name }} &nbsp;·&nbsp; {{ designation }}{% if department %} &nbsp;·&nbsp; {{ department }}{% endif %}</p>
+    </div>
+
+    {% if docs %}
+      <table class="mydocs-table">
+        <thead>
+          <tr>
+            <th>Document Type</th>
+            <th>Number</th>
+            <th>Expiry</th>
+            <th>Status</th>
+            <th>File</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in docs %}
+          <tr>
+            <td><strong>{{ d.document_type }}</strong></td>
+            <td>{{ d.document_number or "—" }}</td>
+            <td>{{ d.expiry_date or "—" }}</td>
+            <td>
+              {% if d.expiry_status == "expired" %}
+                <span class="badge badge-expired">Expired</span>
+              {% elif d.expiry_status == "expiring" %}
+                <span class="badge badge-expiring">Expiring Soon</span>
+              {% elif d.expiry_status == "ok" %}
+                <span class="badge badge-ok">Valid</span>
+              {% else %}
+                <span class="badge badge-none">No Expiry</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if d.document_file %}
+                <a class="doc-link" href="{{ d.document_file }}" target="_blank">View</a>
+              {% else %}
+                <span style="color:#ccc;">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+    {% else %}
+      <div class="empty-state">
+        <div style="font-size:32px;margin-bottom:8px;">📄</div>
+        <div>No documents on file yet. Contact HR to upload your documents.</div>
+      </div>
+    {% endif %}
+
+  {% endif %}
+</div>
+{% endblock %}

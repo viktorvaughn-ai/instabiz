@@ -132,11 +132,39 @@ These rules are mandatory for all agents working on this repo. Do not skip them.
 21. **Fulfillment SLA** — `instabiz/overrides/fulfillment_sla.py`; daily scheduler; finds submitted SOs with no linked submitted DN after 48h; sends Notification Log to custom_sales_person_user; dedup via `[ib-sla-alert]` marker
 22. **Win-back Nudges** — `instabiz/overrides/winback.py`; daily scheduler; (1) Open/Replied quotations with no activity in 14+ days → alert rep; (2) Leads in Cold/Contacted/Warm status with no activity in 30+ days → alert lead_owner; dedup via `[ib-winback]` marker
 23. **IB Sales KPIs Report** — Script Report; per-rep metrics: Leads, Quotations, Orders, Lead→Q%, Q→SO%, Lead→SO%, Revenue, Avg Deal Size, Lost Deals; bar chart + summary cards; filters: date range, territory, sales person; NULL custom_sales_person_user rows excluded
-24. **IB Lost Deal Analysis Report** — Script Report; pulls lost Leads (custom_status=Lost) and lost Quotations (status=Lost); columns: source, loss_reason, sales_person, territory, month, count, value_lost, doc link; pie chart by loss reason; filters: date range, source, loss_reason, territory, sales person
+24. **IB Daily Sales Report** — Script Report; single-date filter (default today); per-rep breakdown: New Leads, Quotations (count+value), Orders (count+value), Dispatches (count+value), MTD Revenue, MTD Target, MTD %; summary cards: Orders Today, Order Value, Dispatched Today, Collections Today (company-wide from Payment Entry), New Leads, Order Backlog (outstanding SO value), MTD Revenue, MTD vs Target %; bar chart top reps by order value; `instabiz/instabiz/report/ib_daily_sales_report/`
+25. **IB Lost Deal Analysis Report** — Script Report; pulls lost Leads (custom_status=Lost) and lost Quotations (status=Lost); columns: source, loss_reason, sales_person, territory, month, count, value_lost, doc link; pie chart by loss reason; filters: date range, source, loss_reason, territory, sales person
 25. **SO Cancellation Enforcement** — `CustomSalesOrder.before_cancel()` throws if `custom_cancel_reason` is blank; field is Small Text, allow_on_submit=1, visible when docstatus≥1
 26. **Margin % on Quotation** — `custom_valuation_rate` (hidden) + `custom_margin_pct` (read-only Percent) on Quotation Item; JS in form.js fetches valuation_rate from Item on item_code change, recomputes margin on rate change: `(rate - cost)/rate * 100`
 27. **Floor Price Enforcement** — `_check_floor_price()` in utils.py; fires in Quotation.validate() + Sales Order.validate(); per-row: fetches `valuation_rate` + `custom_min_margin_pct` from Item; floor = valuation_rate × (1 + min_margin/100); Sales Manager/System Manager → msgprint warning; Sales User → frappe.throw blocks save
 28. **Item Reorder Alert** — `instabiz/overrides/reorder_alert.py`; daily scheduler; queries tabBin vs tabItem Reorder (per-warehouse level) or Item.reorder_level; sends Notification Log to all Purchase Manager/Purchase User/System Manager users; dedup via `[ib-reorder]` marker, 7-day cooldown
+29. **E-Way Bill Auto-Generate** — `instabiz/overrides/ewaybill.py`; fires on Delivery Note submit via doc_events; `_is_ewb_configured()` checks GST Settings API enabled + `enable_e_waybill` + `enable_e_waybill_from_dn` flags; `_sync_transporter_fields()` maps `custom_lr_number → lr_no`, IB Transport `custom_transport_gst → gst_transporter_id`; `run_ewaybill_on_submit(doc)` non-blocking — warns if not configured, skips DN returns, logs errors without throwing
+30. **PO Follow-Up Alert** — `instabiz/overrides/po_followup.py`; daily scheduler; finds submitted POs with no linked GRN (Purchase Receipt) after 7 days; sends Notification Log to Purchase Manager/Purchase User roles; dedup via `[ib-po-followup]` marker in Notification Log subject
+31. **Auto-Absent Marking** — `instabiz/overrides/auto_absent.py`; daily scheduler; marks yesterday's active employees Absent if no Attendance record exists; skips weekends (weekday 5/6), skips holidays (checks `Holiday` child rows per employee's holiday_list), skips approved Leave Applications
+32. **IB Overtime Request** — doctype `IB Overtime Request` (IB-OT-{YYYY}-{#####}); fields: employee (Link), employee_name (fetch), date, shift (Link→Shift Type), overtime_hours (Float), status (Draft/Pending Approval/Approved/Rejected), reason, approved_by (Link→User, read-only), approver_notes; validate() defaults date=today, throws if overtime_hours ≤ 0; roles: Employee create/write, HR Manager full
+33. **IB Full Final Settlement** — doctype `IB Full Final Settlement` (IB-FFS-{YYYY}-{#####}); auto-computes on validate: `years_of_service` (date_diff/365), `gratuity_amount` (if ≥5 yrs: `(basic/26)*15*yos`, else 0), `leave_encashment` (if not manually set: `(basic/26)*pending_leaves`), `total_payable` (leave_encashment + gratuity + pending_expenses); status: Draft/In Review/Approved/Paid/Cancelled; roles: HR Manager create/write, HR User write/read
+34. **Batch Tracking Auto-Set** — `instabiz/overrides/item.py` `set_batch_no_for_fg()`; fires on Item before_insert + before_save; sets `has_batch_no=1` when `item_group` is in `{BOPP, CLOTH, FOAM, SPECIALTY}`; 127 existing items backfilled via direct SQL on deploy
+35. **Employee Custom Fields** — added to Employee via `custom_field.json`: `custom_emergency_contact` (Data), `custom_emergency_phone` (Data), `custom_notice_period_days` (Int, default=30), `custom_previous_employer` (Data), `custom_previous_ctc` (Currency), `custom_current_ctc` (Currency), `custom_location_state` (Select: Maharashtra/Tamil Nadu/Gujarat, in_standard_filter=1); all in IB section on Employee form
+36. **Batch Expiry Alert** — `instabiz/overrides/expiry_alert.py`; daily scheduler; finds batches with expiry_date within 30 days where item has_expiry_date=1 and batch_qty > 0; sends Notification Log to Warehouse Manager/Stock User/Purchase Manager roles; dedup via `[ib-expiry]` marker, 7-day cooldown
+37. **Comment Notification on Q/SO** — `instabiz/overrides/comment.py`; fires on Comment.after_insert; when a Comment is added to a Quotation or Sales Order, sends in-app Notification Log to the `custom_sales_person_user` of that doc; skips if commenter is the same person as the doc owner
+38. **Dispatch Notification** — `instabiz/overrides/dispatch_notification.py`; fires on DN on_submit; sends bell notification to `custom_sales_person_user` with DN name, LR number (custom_lr_number or lr_no), and transporter name
+39. **Quotation Expiry** — `instabiz/overrides/quotation_expiry.py`; daily scheduler; (1) sends expiry-warning notifications at 15/7/1 days before `valid_till` for Open/Replied quotations; (2) auto-expires quotations past `valid_till` (sets status=Expired if no conversion); dedup via doc-level marker
+40. **Follow-Up Reminders** — `instabiz/overrides/follow_up.py`; daily scheduler; finds Leads with `custom_next_follow_up_date` < today in non-terminal status; sends bell notification to lead_owner; appends `custom_follow_up_note` if set
+41. **IB Sample Request Transitions** — `instabiz/overrides/sample_request.py`; whitelisted methods for status machine: `mark_work_order_created`, `mark_sent`, `record_feedback`, `close_request`, `convert_to_order`; each validates state before transition
+42. **Employee Setup Script** — `instabiz/overrides/create_employees.py`; one-time bench execute; creates HRMS Employee records from ERPNext Users; respects USER_OVERRIDE map for custom designations; dry_run mode supported
+43. **M6 HR Masters** — configured directly in DB (not fixtures): **Departments** (IB-suffixed): Administration, HR, Despatch, Factory Management, Factory Production, Factory Administration, Warehouse, Engineering, Admin, Quality, Digital Marketing; **Shifts**: Morning, Afternoon, Night, General, Factory Shift, Standard Shift; **Leave Types**: Casual Leave, Sick Leave, Privilege Leave, Compensatory Off, Leave Without Pay, Maternity Leave, Paternity Leave; **HRMS Payroll**: IB Payroll and Astro Payroll salary structures with PF/ESI/PT components; TDS as Salary Component pending
+44. **Item Lifecycle (Discontinued)** — `custom_is_discontinued` (Check) field on Item via `custom_field.json`; `_check_item_lifecycle()` in `utils.py` fires in Quotation + Sales Order `validate()`; throws if any row's item_code has `custom_is_discontinued=1`; blocks both Q and SO from saving
+45. **IB Jumbo Roll** — doctype for RM traceability; fields: supplier (Link), received_date, status (Select), batch_no, adhesive_lot, gsm, width_mm, length_mtr, liner_type (Select), notes; tracks each jumbo roll from receipt through production to consumption
+46. **Packaging Specification on Item** — custom fields via `custom_field.json`: `custom_rolls_per_box` (Int), `custom_carton_weight_kg` (Float), `custom_carton_marking` (Text — printed on carton label); used for packing list on DN
+47. **State-wise Holiday Lists** — three lists in HRMS: "Holiday List 2026 - Maharashtra", "Holiday List 2026 - Tamil Nadu", "Holiday List 2026 - Gujarat"; assign per employee by `holiday_list` field; `auto_absent.py` respects these when skipping absences
+48. **Customer Credit Limit Enforcement** — `_check_credit_limit()` in `instabiz/overrides/sales_order.py`; fires on `CustomSalesOrder.before_submit`; reads `Customer Credit Limit` child table (credit_limit, bypass_credit_limit_check, custom_days); blocks SO submit only when BOTH conditions hold simultaneously: total outstanding > credit_limit AND oldest unpaid invoice older than custom_days; `bypass_credit_limit_check` skips the check per customer; error message includes formatted outstanding, limit, and days overdue
+49. **Employee Drive Sync** — `instabiz/overrides/employee_drive.py`; Employee `after_save` enqueues background job; creates "HR Documents" Drive Team (once) + auto-adds all HR Manager/System Manager users as members; creates "Employee Documents" root folder → per-employee subfolder `{employee_name} ({employee_id})`; copies each `Employee Document` child row's attached file into the subfolder via `shutil.copy2`; stores Drive File entity name in `drive_file_id` field on child row (dedup guard); deleting row from ERPNext leaves Drive file intact; Employee form gets Drive → "Open in Drive" button (`instabiz/public/js/employee.js`) linking to `/drive/d/{folder_name}`; `get_employee_drive_folder()` whitelisted method powers the button; Drive hierarchy: HR Documents team → Employee Documents → {name} folder → {doc_type} - {filename}
+
+---
+
+## xlsx Status Discrepancies
+
+No outstanding discrepancies.
 
 ---
 
@@ -188,7 +216,7 @@ tail -f logs/web.error.log
 |---|---|
 | `utils.py` | IbStatusMixin, set_sales_person, sync_sales_team, recalculate_items, map_*_fields, reopen_sales_doc, transfer_documents |
 | `quotation.py` | CustomQuotation, custom_make_sales_order() |
-| `sales_order.py` | CustomSalesOrder, custom_make_delivery_note() |
+| `sales_order.py` | CustomSalesOrder, custom_make_delivery_note(); `_check_credit_limit()` fires on before_submit — blocks if outstanding > limit AND oldest invoice overdue > custom_days |
 | `delivery_note.py` | CustomDeliveryNote, custom_make_sales_invoice() |
 | `sales_invoice.py` | CustomSalesInvoice |
 | `customer.py` | CustomCustomer — protects customer_name from edits |
@@ -198,12 +226,23 @@ tail -f logs/web.error.log
 | `user.py` | create_sales_person_for_user, copy_admin_defaults, copy_admin_ui_settings |
 | `checkin.py` | get_my_status, self_checkin, get_daily_attendance |
 | `attendance_terminal.py` | get_employees_with_status, create_checkin, mark_absent |
-| `item.py` | item_query — multi-token search for item select fields |
+| `item.py` | `item_query` — multi-token search for item select fields; `set_batch_no_for_fg` — auto has_batch_no=1 for BOPP/CLOTH/FOAM/SPECIALTY on before_insert/before_save |
 | `employee_exit.py` | run_exit_handover_daily, run_user_disable_daily |
 | `stock_events.py` | publish_stock_update — fires `ib_stock_update` realtime event on Bin changes |
 | `dormant.py` | run_dormant_check — daily; flags customers with no SO in 60+ days; creates ToDo + Notification Log with wa.me link; dedup via `[ib-dormant-reminder]` marker |
 | `sales_target.py` | get_my_target(month), get_all_targets(month), get_target_map(month_first), run_target_notifications — daily milestone alerts at 50%/75% elapsed + end-of-month |
 | `customer_score.py` | run_customer_score — daily; computes weighted health score (payment 35%, order 30%, complaint 20%, CSAT 15%); saves IB Customer Score; emails managers on ≥15pt drop |
+| `ewaybill.py` | run_ewaybill_on_submit — fires on DN submit; auto-generates e-way bill via india_compliance; non-blocking |
+| `po_followup.py` | run_po_followup — daily; POs with no GRN after 7 days → Notification Log to Purchase roles; dedup via `[ib-po-followup]` |
+| `auto_absent.py` | run_auto_absent — daily; marks yesterday Absent for employees with no attendance; skips weekends, holidays, approved leaves |
+| `expiry_alert.py` | run_expiry_alert — daily; batch expiry within 30 days → Notification Log to Warehouse/Stock/Purchase roles; dedup via `[ib-expiry]`, 7-day cooldown |
+| `comment.py` | notify_owner_on_comment — Comment.after_insert; alerts custom_sales_person_user on Q/SO comments; skips self-comments |
+| `employee_drive.py` | sync_employee_docs_to_drive — Employee after_save enqueues `_do_sync`; creates HR Documents Drive Team + employee folders; copies files to Drive storage; `get_employee_drive_folder()` whitelisted for form button |
+| `dispatch_notification.py` | run_dispatch_notification — DN on_submit; bell notification to sales person with LR + transporter details |
+| `quotation_expiry.py` | run_quotation_expiry — daily; expiry alerts at 15/7/1 days; auto-expires past valid_till Open/Replied quotations |
+| `follow_up.py` | run_follow_up_reminders — daily; overdue lead follow-up dates → bell notification to lead_owner |
+| `sample_request.py` | Whitelisted state machine methods for IB Sample Request: mark_work_order_created, mark_sent, record_feedback, close_request, convert_to_order |
+| `create_employees.py` | One-time bench execute; creates Employee records from Users; USER_OVERRIDE map for custom designations; supports dry_run |
 
 ### JavaScript (`instabiz/public/js/`)
 | File | Purpose |
@@ -254,7 +293,7 @@ tail -f logs/web.error.log
 | `ib-customer-board` | `ib_customer_board.js`, `ib_customer_board.py` | 4-column kanban (Dormant / Regular / Today / Tomorrow) for sales users; date picker; add/remove with undo toast; current-month sales target card in stats row |
 | `ib-assignment-admin` | `ib_assignment_admin.js`, `ib_assignment_admin.py` | Manager view: roster overview (avatar + stats + progress + sales target bar), view-as-user kanban, customer pool assign panel with server-side pagination |
 | `attendance-terminal` | `attendance_terminal.js`, `attendance_terminal.py` | Bulk check-in/absent marking; factory vs office filter |
-| `ib-price-list` | `ib_price_list.js`, `ib_price_list.py` | Item price list table; spec rendering (color dots, spec tags, UOM chips); row click popover with rates; search with multi-token highlight; manager can edit via toolbar button |
+| `ib-price-list` | `ib_price_list.js`, `ib_price_list.py` | Item price list table; spec rendering (color dots, spec tags, UOM chips); row click popover with rates; search with multi-token highlight; manager can edit via toolbar button; Rate 1–4 columns color-coded (blue/purple/orange/teal) in headers + values; item code is a same-tab SPA link (`/app/item/...`) with hover underline; click stopPropagation prevents popover opening |
 
 #### IB Stock Ledger (`ib-stock-ledger`)
 - Backend: `get_ledger(item_code, warehouse, from_date, to_date, ...)` — @whitelist
@@ -298,6 +337,8 @@ tail -f logs/web.error.log
 | IB Item Price List | (simple master) | fields: item_code, item_name, uom, rate1–4, specification (computed read-only); validate() computes specification from linked Item; doctype list view redirects to `ib-price-list` page |
 | IB Customer Score | IB-CS-.YYYY.-.##### | daily health score per customer; fields: customer, score_date, health_status (Green/Amber/Red), total_score, previous_score, score_change, payment_score, order_score, complaint_score, csat_score |
 | IB Sample Request | IB-SR-.YYYY.-.##### | sample dispatch tracker; status: Draft→Work Order Created→Sent→Feedback Received→Converted/Closed; outcome: Converted/Not Interested/Follow Up/No Response; validate() defaults date + assigned_to |
+| IB Overtime Request | IB-OT-{YYYY}-{#####} | employee overtime tracking; fields: employee, employee_name, date, shift (Link→Shift Type), overtime_hours, status (Draft/Pending Approval/Approved/Rejected), reason, approved_by (read-only), approver_notes; Employee can create/write, HR Manager full access |
+| IB Full Final Settlement | IB-FFS-{YYYY}-{#####} | employee F&F settlement; auto-computes years_of_service, gratuity (≥5 yrs: basic/26×15×yos), leave_encashment (basic/26×pending_leaves if not set), total_payable; status: Draft/In Review/Approved/Paid/Cancelled |
 
 ### Fixtures
 - `instabiz/fixtures/custom_field.json` — ~85 custom fields

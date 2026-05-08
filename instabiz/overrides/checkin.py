@@ -2,6 +2,12 @@ import frappe
 from frappe import _
 from frappe.utils import now_datetime, today
 
+_PRIVILEGED_ROLES = {"System Manager", "HR Manager", "HR User"}
+
+
+def _is_privileged():
+	return bool(_PRIVILEGED_ROLES & set(frappe.get_roles(frappe.session.user)))
+
 
 @frappe.whitelist()
 def get_my_status():
@@ -216,6 +222,7 @@ def get_daily_attendance(date=None, department=None, search=None, limit=20, offs
 			"out_time":      str(out_time) if out_time else None,
 			"work_hours":    work_hours,
 			"last_in":       str(last_in)  if last_in  else None,
+			"can_undo":      bool(logs) or bool(att_by_emp.get(emp.name)),
 		})
 
 	# Summary counts across ALL employees (not just the current page)
@@ -237,14 +244,38 @@ def get_daily_attendance(date=None, department=None, search=None, limit=20, offs
 			still_in += 1
 
 	return {
-		"data":  data,
-		"total": total,
+		"data":       data,
+		"total":      total,
+		"privileged": _is_privileged(),
 		"summary": {
 			"present":  present,
 			"absent":   absent,
 			"still_in": still_in,
 		},
 	}
+
+
+@frappe.whitelist()
+def undo_attendance(employee, date):
+	"""Admin only: delete checkin logs and cancel submitted attendance for employee on date."""
+	if not _is_privileged():
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+	checkin_names = [r[0] for r in frappe.db.sql(
+		"SELECT name FROM `tabEmployee Checkin` WHERE employee = %s AND DATE(time) = %s",
+		(employee, date),
+	)]
+	for name in checkin_names:
+		frappe.delete_doc("Employee Checkin", name, ignore_permissions=True, force=True)
+
+	att_names = [r[0] for r in frappe.db.sql(
+		"SELECT name FROM `tabAttendance` WHERE employee = %s AND attendance_date = %s AND docstatus = 1",
+		(employee, date),
+	)]
+	for name in att_names:
+		frappe.get_doc("Attendance", name).cancel()
+
+	return {"checkins": len(checkin_names), "attendance": len(att_names)}
 
 
 def _get_employee_for_user():

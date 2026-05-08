@@ -29,6 +29,8 @@ scheduler_events = {
         "instabiz.overrides.po_followup.run_po_followup",
         # Auto-mark absent for employees with no attendance on previous working day
         "instabiz.overrides.auto_absent.run_auto_absent",
+        # Alert HR when employee documents (Passport, PAN, etc.) expire within 30/7 days
+        "instabiz.overrides.employee_docs.run_employee_doc_expiry",
     ],
 }
 
@@ -150,6 +152,9 @@ doc_events = {
     "Comment": {
         "after_insert": "instabiz.overrides.comment.notify_owner_on_comment",
     },
+    "Employee": {
+        "after_save": "instabiz.overrides.employee_drive.sync_employee_docs_to_drive",
+    },
     "Sales Order": {
         "on_submit": [
             "instabiz.overrides.stock_events.publish_stock_update",
@@ -249,4 +254,5 @@ doctype_js = {
     "Sales Order":             "public/js/ib_sales_common.js",
     "Employee Exit Handover":  "public/js/employee_exit_handover.js",
     "IB Sample Request":       "public/js/sample_request.js",
+    "Employee":                "public/js/employee.js",
 }

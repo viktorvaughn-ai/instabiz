@@ -4,7 +4,8 @@
  */
 
 (function () {
-    const API = "instabiz.overrides.checkin.get_daily_attendance";
+    const API        = "instabiz.overrides.checkin.get_daily_attendance";
+    const API_UNDO   = "instabiz.overrides.checkin.undo_attendance";
     const TZ  = "Asia/Kolkata";
 
     /* ── helpers ──────────────────────────────────────────────────────────── */
@@ -81,7 +82,7 @@
         if (s.status_filter === "IN")       rows = rows.filter(r => r.status === "IN");
         if (s.category === "factory")       rows = rows.filter(r => is_factory(r.department));
         if (s.category === "office")        rows = rows.filter(r => !is_factory(r.department));
-        render_table(s.$table_wrap, rows, s.all_rows_data.length);
+        render_table(s.$table_wrap, rows, s.all_rows_data.length, s);
     }
 
     /* ── data load ────────────────────────────────────────────────────────── */
@@ -97,9 +98,10 @@
             args: { date: s.date, department: s.dept, search: s.search, limit: 9999, offset: 0 },
             callback: function (r) {
                 if (!r || !r.message) return;
-                const { data, total, summary } = r.message;
+                const { data, total, summary, privileged } = r.message;
                 s.all_rows_data = data;
                 s.status_filter = null;
+                s.privileged    = !!privileged;
                 render_cards(s.$cards_wrap, summary, s);
                 apply_filter(s);
             },
@@ -108,7 +110,10 @@
 
     /* ── table render ─────────────────────────────────────────────────────── */
 
-    function render_table($wrap, data, total) {
+    function render_table($wrap, data, total, s) {
+        const priv = s && s.privileged;
+        const cols  = priv ? 9 : 8;
+
         const rows = data.map(emp => `
             <tr style="border-bottom:1px solid var(--border-color);vertical-align:middle;">
                 <td style="padding:10px 12px;">
@@ -124,9 +129,20 @@
                 <td style="padding:10px 12px;">${pill("gray",  fmt_time(emp.out_time))}</td>
                 <td style="padding:10px 12px;">${pill(emp.work_hours ? "green" : "gray", emp.work_hours || "—")}</td>
                 <td style="padding:10px 12px;min-width:150px;">${pill("gray", fmt_datetime(emp.last_in))}</td>
+                ${priv ? `<td style="padding:10px 12px;">
+                    ${emp.can_undo
+                        ? `<button class="eck-undo-btn"
+                                data-employee="${frappe.utils.escape_html(emp.employee)}"
+                                data-name="${frappe.utils.escape_html(emp.employee_name)}"
+                                title="${__("Undo attendance")}">
+                                <iconify-icon icon="mdi:undo-variant" width="13"></iconify-icon> ${__("Undo")}
+                           </button>`
+                        : ""}
+                </td>` : ""}
             </tr>`).join("");
 
-        const tbody = rows || `<tr><td colspan="8" style="text-align:center;color:#aaa;padding:50px 0;">No records found</td></tr>`;
+        const empty = `<tr><td colspan="${cols}" style="text-align:center;color:#aaa;padding:50px 0;">No records found</td></tr>`;
+        const tbody = rows || empty;
 
         $wrap.html(`
             <div style="border:1px solid var(--border-color);border-radius:var(--border-radius);overflow:hidden;background:#fff;">
@@ -141,6 +157,7 @@
                             <th class="eck-th">Out</th>
                             <th class="eck-th">Work Hours</th>
                             <th class="eck-th">Last In</th>
+                            ${priv ? `<th class="eck-th"></th>` : ""}
                         </tr>
                     </thead>
                     <tbody>${tbody}</tbody>
@@ -149,6 +166,29 @@
             <div style="margin-top:8px;font-size:12px;color:var(--text-muted);text-align:right;">
                 ${data.length} of ${total} employee${total !== 1 ? "s" : ""}
             </div>`);
+
+        if (priv) {
+            $wrap.find(".eck-undo-btn").on("click", function () {
+                const employee = $(this).data("employee");
+                const name     = $(this).data("name");
+                const date     = s.date;
+                frappe.confirm(
+                    __("Undo attendance for {0} on {1}? Check-in logs will be deleted and any attendance record cancelled.", [name, date]),
+                    () => {
+                        frappe.call({
+                            method: API_UNDO,
+                            args: { employee, date },
+                            callback: ({ exc }) => {
+                                if (!exc) {
+                                    frappe.show_alert({ message: __("Undone for {0}", [name]), indicator: "orange" });
+                                    load(s.listview);
+                                }
+                            },
+                        });
+                    }
+                );
+            });
+        }
     }
 
     /* ── listview hook ────────────────────────────────────────────────────── */
@@ -161,9 +201,11 @@
                 search:        "",
                 category:      null,
                 status_filter: null,
+                privileged:    false,
                 all_rows_data: [],
                 $cards_wrap:   null,
                 $table_wrap:   null,
+                listview:      listview,
             };
 
             listview.page.main.find(".standard-filter-section").hide();
@@ -187,6 +229,8 @@
                     .eck-card-value { font-size:22px;font-weight:800;line-height:1; }
                     .eck-card-label { font-size:11px;color:var(--text-muted);margin-top:4px;text-transform:uppercase;letter-spacing:0.4px; }
                     .eck-th { padding:10px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;white-space:nowrap; }
+                    .eck-undo-btn { display:inline-flex;align-items:center;gap:3px;padding:3px 9px;font-size:11px;font-weight:500;cursor:pointer;background:none;border:1px solid var(--border-color);border-radius:4px;color:var(--text-muted);transition:all 0.12s; }
+                    .eck-undo-btn:hover { border-color:#e74c3c;color:#e74c3c;background:#e74c3c12; }
                 `;
                 document.head.appendChild(s);
             }
