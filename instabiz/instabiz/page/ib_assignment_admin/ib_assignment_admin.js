@@ -38,6 +38,12 @@ class IBAssignmentAdmin {
 		return d.toISOString().split("T")[0];
 	}
 
+	_terr_abbr(name) {
+		const words = name.split(/\s+/).filter(w => w !== "&" && w !== "and");
+		if (words.length === 1) return words[0].slice(0, 3).toUpperCase();
+		return words.map(w => w[0]).join("").slice(0, 3).toUpperCase();
+	}
+
 	_avatar_color(_user, team) {
 		// Same team → same color; no team → primary brand color
 		if (!team) return "var(--ib-primary)";
@@ -54,6 +60,7 @@ class IBAssignmentAdmin {
 		this._build_toolbar();
 		this._build_layout();
 		this._inject_styles();
+		this._init_kebab();
 		this.refresh();
 	}
 
@@ -241,7 +248,7 @@ class IBAssignmentAdmin {
 			method: "instabiz.overrides.customer_assignment.get_admin_overview",
 			args: { date: this._date, territory: this._territory },
 			callback(r) {
-				if (r.message) self._render_roster(r.message.roster);
+				if (r.message) self._render_roster(r.message.roster, r.message.team_territories || {});
 			},
 		});
 		this._load_pool();
@@ -348,7 +355,7 @@ class IBAssignmentAdmin {
 	}
 
 	_refilter_roster() {
-		if (this._last_roster) this._render_roster(this._last_roster);
+		if (this._last_roster) this._render_roster(this._last_roster, this._last_team_territories);
 	}
 
 	_reload_pool() {
@@ -362,13 +369,14 @@ class IBAssignmentAdmin {
 			method: "instabiz.overrides.customer_assignment.get_admin_overview",
 			args: { date: self._date, territory: self._territory },
 			callback(r) {
-				if (r.message) self._render_roster(r.message.roster);
+				if (r.message) self._render_roster(r.message.roster, r.message.team_territories || {});
 			},
 		});
 	}
 
-	_render_roster(roster) {
+	_render_roster(roster, team_territories) {
 		this._last_roster = roster;
+		this._last_team_territories = team_territories || this._last_team_territories || {};
 		const self = this;
 		const $g = $("#ib-aa-roster").empty();
 		if (!roster || !roster.length) {
@@ -393,7 +401,7 @@ class IBAssignmentAdmin {
 				e.preventDefault();
 				self._excluded_users.clear();
 				self._save_excluded();
-				self._render_roster(roster);
+				self._render_roster(roster, team_territories);
 			});
 		} else {
 			$strip.hide();
@@ -408,7 +416,7 @@ class IBAssignmentAdmin {
 					e.preventDefault();
 					self._excluded_users.clear();
 					self._save_excluded();
-					self._render_roster(roster);
+					self._render_roster(roster, team_territories);
 				});
 			}
 			return;
@@ -430,7 +438,7 @@ class IBAssignmentAdmin {
 				<div class="ib-aa-rth ib-aa-rth--stat">Pending</div>
 				<div class="ib-aa-rth ib-aa-rth--stat">Tomorrow</div>
 				<div class="ib-aa-rth ib-aa-rth--bar">Assignments</div>
-				<div class="ib-aa-rth ib-aa-rth--bar">Sales Target</div>
+				<div class="ib-aa-rth ib-aa-rth--target">Sales Target</div>
 				<div class="ib-aa-rth ib-aa-rth--actions"></div>
 			</div>
 		`);
@@ -441,25 +449,40 @@ class IBAssignmentAdmin {
 			const avg_pct = Math.round(users.reduce((s, u) => s + (u.completion_pct || 0), 0) / users.length);
 			const is_collapsed = self._collapsed_teams.has(team_key);
 
+			const terr_list = (team_territories || {})[team_key] || [];
+			const terr_chips = terr_list.length
+				? terr_list.map(t => `<span class="ib-aa-terr-chip">${frappe.utils.escape_html(self._terr_abbr(t))}</span>`).join("")
+				: "";
+
 			const $group = $(`
 				<div class="ib-aa-team-group">
 					<div class="ib-aa-team-hdr" style="--team-color:${av_color}">
 						<svg class="ib-aa-team-chevron${is_collapsed ? " ib-aa-team-chevron--collapsed" : ""}" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
 						<span class="ib-aa-team-dot"></span>
 						<span class="ib-aa-team-label">${frappe.utils.escape_html(team_label)}</span>
+						${terr_chips ? `<span class="ib-aa-terr-chips">${terr_chips}</span>` : ""}
 						<span class="ib-aa-team-meta">${users.length} member${users.length > 1 ? "s" : ""} &middot; avg ${avg_pct}%</span>
+						${team_key !== "__none__" ? `<button class="ib-aa-btn-team-kebab" title="Manage team">⋮</button>` : ""}
 					</div>
 					<div class="ib-aa-team-body${is_collapsed ? " ib-aa-team-body--collapsed" : ""}"></div>
 				</div>
 			`);
 
-			$group.find(".ib-aa-team-hdr").on("click", () => {
+			$group.find(".ib-aa-team-hdr").on("click", (e) => {
+				if ($(e.target).closest(".ib-aa-btn-team-kebab").length) return;
 				const collapsed = !self._collapsed_teams.has(team_key);
 				collapsed ? self._collapsed_teams.add(team_key) : self._collapsed_teams.delete(team_key);
 				localStorage.setItem("ib_aa_collapsed_teams", JSON.stringify([...self._collapsed_teams]));
 				$group.find(".ib-aa-team-body").toggleClass("ib-aa-team-body--collapsed", collapsed);
 				$group.find(".ib-aa-team-chevron").toggleClass("ib-aa-team-chevron--collapsed", collapsed);
 			});
+
+			if (team_key !== "__none__") {
+				$group.find(".ib-aa-btn-team-kebab").on("click", function(e) {
+					e.stopPropagation();
+					self._show_team_kebab(this, team_key, team_label);
+				});
+			}
 
 			users.forEach(u => {
 				const pct = u.completion_pct || 0;
@@ -470,18 +493,19 @@ class IBAssignmentAdmin {
 				const is_today = self._date === frappe.datetime.get_today();
 				const no_tmrw = is_today && (u.tomorrow_count || 0) === 0;
 
+				const fmt_short = (v) => {
+					if (!v) return "₹0";
+					if (v >= 1e7) return "₹" + (v / 1e7).toFixed(1) + "Cr";
+					if (v >= 1e5) return "₹" + (v / 1e5).toFixed(1) + "L";
+					return "₹" + Math.round(v).toLocaleString("en-IN");
+				};
 				const tpct = u.target_pct || 0;
-				const t_bar_color = tpct >= 100 ? "#22c55e" : tpct >= 60 ? "var(--ib-primary)" : "#f59e0b";
 				const tpct_cls = tpct >= 80 ? "good" : tpct >= 40 ? "mid" : "low";
-				const fmt_inr = (v) => v ? "₹" + Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 }) : "—";
-				const target_html = u.target
-					? `<div class="ib-aa-row-bar-wrap ib-aa-row-target-bar">
-						<div class="ib-aa-row-bar-track">
-							<div class="ib-aa-row-bar-fill" style="width:${tpct}%;background:${t_bar_color}"></div>
-						</div>
-						<span class="ib-aa-row-pct ib-aa-pct--${tpct_cls}" title="${fmt_inr(u.actual)} / ${fmt_inr(u.target)}">${tpct}%</span>
-					</div>`
-					: `<span class="ib-aa-no-target">—</span>`;
+				const target_html = `<div class="ib-aa-row-target-text">
+					<span class="ib-aa-target-actual ib-aa-pct--${tpct_cls}">${fmt_short(u.actual || 0)}</span>
+					<span class="ib-aa-target-sep">/</span>
+					<span class="ib-aa-target-goal">${fmt_short(u.target || 0)}</span>
+				</div>`;
 
 				const $row = $(`
 					<div class="ib-aa-user-row">
@@ -495,31 +519,22 @@ class IBAssignmentAdmin {
 						<div class="ib-aa-row-stat ib-aa-row-stat--done">${u.done}</div>
 						<div class="ib-aa-row-stat ib-aa-row-stat--pending">${u.pending}</div>
 						<div class="ib-aa-row-stat ib-aa-row-stat--tmrw">${u.tomorrow_count}</div>
-						<div class="ib-aa-row-right">
-							<div class="ib-aa-row-bar-wrap">
-								<div class="ib-aa-row-bar-track">
-									<div class="ib-aa-row-bar-fill" style="width:${pct}%;background:${bar_color}"></div>
-								</div>
-								<span class="ib-aa-row-pct ib-aa-pct--${pct_cls}">${pct}%</span>
+						<div class="ib-aa-row-bar-wrap">
+							<span class="ib-aa-row-pct ib-aa-pct--${pct_cls}">${pct}%</span>
+							<div class="ib-aa-row-bar-track">
+								<div class="ib-aa-row-bar-fill" style="width:${pct}%;background:${bar_color}"></div>
 							</div>
-							${target_html}
-							<div class="ib-aa-row-actions">
-								<button class="ib-aa-btn-view">View</button>
-								<button class="ib-aa-btn-auto">Auto-fill</button>
-								<button class="ib-aa-btn-transfer">Transfer</button>
-								<button class="ib-aa-btn-hide" title="Hide">${IB_ICONS.svg("eye_off", 12)}</button>
-							</div>
+						</div>
+						${target_html}
+						<div class="ib-aa-row-actions">
+							<button class="ib-aa-btn-kebab" title="Actions">⋮</button>
 						</div>
 					</div>
 				`);
 
-				$row.find(".ib-aa-btn-view").on("click", () => self._view_as(u.user, u.full_name));
-				$row.find(".ib-aa-btn-auto").on("click", () => self._bulk_auto_assign(u.user, u.full_name));
-				$row.find(".ib-aa-btn-transfer").on("click", () => self._transfer_assignments(u.user, u.full_name, u.pending));
-				$row.find(".ib-aa-btn-hide").on("click", () => {
-					self._excluded_users.add(u.user);
-					self._save_excluded();
-					self._render_roster(roster);
+				$row.find(".ib-aa-btn-kebab").on("click", function(e) {
+					e.stopPropagation();
+					self._show_kebab(this, u);
 				});
 				$group.find(".ib-aa-team-body").append($row);
 			});
@@ -532,10 +547,370 @@ class IBAssignmentAdmin {
 		if (groups["__none__"]) render_group("__none__", groups["__none__"]);
 	}
 
+	// ── Kebab menu ───────────────────────────────────────────────────────────
+
+	_init_kebab() {
+		this._$kdrop = $('<div class="ib-aa-kdrop" style="display:none"></div>').appendTo("body");
+		$(document).on("click.ib_aa_kebab", (e) => {
+			if (!$(e.target).closest(".ib-aa-kdrop, .ib-aa-btn-kebab, .ib-aa-btn-team-kebab").length) {
+				this._$kdrop.hide();
+			}
+		});
+	}
+
+	_show_kebab(btn, u) {
+		const self = this;
+		const $d = this._$kdrop;
+		const rect = btn.getBoundingClientRect();
+		const fmt_inr = v => v ? "₹" + Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 }) : "—";
+
+		$d.html(`
+			<div class="ib-aa-kdrop-header">
+				<div class="ib-aa-kdrop-name">${frappe.utils.escape_html(u.full_name || u.user)}</div>
+				${u.target ? `<div class="ib-aa-kdrop-target">${fmt_inr(u.actual)} / ${fmt_inr(u.target)} &mdash; ${u.target_pct || 0}%</div>` : ""}
+			</div>
+			<button class="ib-aa-kdrop-item ib-aa-kdrop-view">View board</button>
+			<button class="ib-aa-kdrop-item ib-aa-kdrop-auto">Auto-fill</button>
+			<button class="ib-aa-kdrop-item ib-aa-kdrop-transfer">Transfer</button>
+			<button class="ib-aa-kdrop-item ib-aa-kdrop-set-target">Set target</button>
+			<div class="ib-aa-kdrop-sep"></div>
+			<button class="ib-aa-kdrop-item ib-aa-kdrop-hide">Hide user</button>
+		`);
+
+		const dropW = 210;
+		let left = rect.right - dropW + window.scrollX;
+		if (left < 8) left = 8;
+		$d.css({ top: rect.bottom + window.scrollY + 6, left, width: dropW, display: "block" });
+
+		$d.find(".ib-aa-kdrop-view").on("click", () => { $d.hide(); self._view_as(u.user, u.full_name, u); });
+		$d.find(".ib-aa-kdrop-auto").on("click", () => { $d.hide(); self._bulk_auto_assign(u.user, u.full_name); });
+		$d.find(".ib-aa-kdrop-transfer").on("click", () => { $d.hide(); self._transfer_assignments(u.user, u.full_name, u.pending); });
+		$d.find(".ib-aa-kdrop-set-target").on("click", () => { $d.hide(); self._show_set_target_dialog(u); });
+		$d.find(".ib-aa-kdrop-hide").on("click", () => {
+			$d.hide();
+			self._excluded_users.add(u.user);
+			self._save_excluded();
+			self._render_roster(self._last_roster, self._last_team_territories);
+		});
+	}
+
+	// ── Team kebab + manage modal ─────────────────────────────────────────────
+
+	_show_team_kebab(btn, team_key, team_label) {
+		const self = this;
+		const $d = this._$kdrop;
+		const rect = btn.getBoundingClientRect();
+
+		$d.html(`
+			<div class="ib-aa-kdrop-header">
+				<div class="ib-aa-kdrop-name">${frappe.utils.escape_html(team_label)}</div>
+			</div>
+			<button class="ib-aa-kdrop-item ib-aa-kdrop-manage-team">Manage Team</button>
+		`);
+
+		const dropW = 180;
+		let left = rect.right - dropW + window.scrollX;
+		if (left < 8) left = 8;
+		$d.css({ top: rect.bottom + window.scrollY + 6, left, width: dropW, display: "block" });
+
+		$d.find(".ib-aa-kdrop-manage-team").on("click", () => {
+			$d.hide();
+			self._show_team_manage_modal(team_key);
+		});
+	}
+
+	_show_set_target_dialog(u) {
+		const self = this;
+		const month_first = this._date.slice(0, 7) + "-01";
+		const month_label = frappe.datetime.str_to_user(month_first).slice(3); // "MMM YYYY"
+		const fmt_inr = v => v ? "₹" + Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 }) : "₹0";
+
+		const d = new frappe.ui.Dialog({
+			title: `Sales Target — ${frappe.utils.escape_html(u.full_name || u.user)}`,
+			fields: [
+				{
+					fieldtype: "HTML",
+					options: `<div class="ib-st-meta">
+						<span class="ib-st-month">${frappe.utils.escape_html(month_label)}</span>
+						${u.actual ? `<span class="ib-st-actual">Actual so far: <strong>${fmt_inr(u.actual)}</strong></span>` : ""}
+					</div>`,
+				},
+				{
+					fieldname: "target_amount",
+					fieldtype: "Currency",
+					label: "Target Amount",
+					default: u.target || 0,
+					reqd: 1,
+				},
+			],
+			primary_action_label: u.target ? "Update" : "Set Target",
+			primary_action(values) {
+				frappe.call({
+					method: "instabiz.overrides.sales_target.set_user_target",
+					args: {
+						sales_user: u.user,
+						month: month_first,
+						target_amount: values.target_amount,
+					},
+					callback(r) {
+						if (r.message && r.message.status === "ok") {
+							d.hide();
+							frappe.show_alert({
+								message: `Target set for ${u.full_name || u.user}`,
+								indicator: "green",
+							});
+							// Patch the roster row in-place for instant feedback
+							u.target = r.message.target;
+							u.actual = r.message.actual;
+							u.target_pct = r.message.pct;
+							self._reload_roster();
+						}
+					},
+				});
+			},
+		});
+		d.show();
+	}
+
+	_show_team_manage_modal(team_name) {
+		const self = this;
+		const d = new frappe.ui.Dialog({
+			title: `Manage Team: ${frappe.utils.escape_html(team_name)}`,
+			fields: [{
+				fieldtype: "HTML",
+				fieldname: "body",
+				options: `<div class="ib-tm-body"><div class="ib-tm-loading">Loading…</div></div>`,
+			}],
+			primary_action_label: "Close",
+			primary_action() { d.hide(); },
+		});
+		d.show();
+		const $body = d.get_field("body").$wrapper.find(".ib-tm-body");
+		self._load_team_modal(d, $body, team_name);
+	}
+
+	_load_team_modal(d, $body, team_name) {
+		const self = this;
+		$body.html('<div class="ib-tm-loading">Loading…</div>');
+
+		const render_with_team = (team) => {
+			if (d._all_territories !== undefined) {
+				self._render_team_modal(d, $body, team_name, team, d._all_territories);
+				return;
+			}
+			frappe.call({
+				method: "frappe.client.get_list",
+				args: { doctype: "Territory", fields: ["name"], limit: 500 },
+				callback(r) {
+					d._all_territories = (r.message || []).map(t => t.name).sort();
+					self._render_team_modal(d, $body, team_name, team, d._all_territories);
+				},
+			});
+		};
+
+		frappe.call({
+			method: "instabiz.overrides.customer_assignment.get_team_details",
+			args: { team_name },
+			callback(r) {
+				render_with_team(r.message || { members: [], territories: [] });
+			},
+		});
+	}
+
+	_render_team_modal(d, $body, team_name, team, all_territories) {
+		const self = this;
+		const existing_users = new Set(team.members.map(m => m.user));
+		const existing_territories = new Set(team.territories.map(t => t.territory));
+
+		// Build user→team map from last roster (all sales users' team assignments)
+		const user_team_map = {};
+		(self._last_roster || []).forEach(u => { if (u.team) user_team_map[u.user] = u.team; });
+
+		const available_users = (self._dropdown_users_cache || []).filter(u => !existing_users.has(u.name));
+		const available_territories = all_territories.filter(t => !existing_territories.has(t));
+
+		// Existing member rows (read-only + remove)
+		const member_rows = team.members.length
+			? team.members.map(m => {
+				const color = self._avatar_color(m.user, user_team_map[m.user] || team_name);
+				const initials = (m.full_name || m.user).split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
+				return `
+				<div class="ib-tm-row">
+					<div class="ib-tm-row-av" style="background:${color}">${initials}</div>
+					<div class="ib-tm-row-info">
+						<span class="ib-tm-row-name">${frappe.utils.escape_html(m.full_name || m.user)}</span>
+						<span class="ib-tm-row-sub">${frappe.utils.escape_html(m.user)}</span>
+					</div>
+					<button class="ib-tm-remove-btn" data-user="${frappe.utils.escape_html(m.user)}">Remove</button>
+				</div>`;
+			}).join("")
+			: `<div class="ib-tm-empty">No members yet</div>`;
+
+		// Available user picker rows with team badge
+		const picker_rows = available_users.map(u => {
+			const other_team = user_team_map[u.name];
+			const color = self._avatar_color(u.name, other_team || "");
+			const initials = (u.full_name || u.name).split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
+			const team_badge = other_team
+				? `<span class="ib-tm-team-badge" style="--badge-color:${color}">${frappe.utils.escape_html(other_team)}</span>`
+				: `<span class="ib-tm-team-badge ib-tm-team-badge--none">No team</span>`;
+			return `
+			<div class="ib-tm-picker-row" data-user="${frappe.utils.escape_html(u.name)}" data-search="${frappe.utils.escape_html((u.full_name || "") + " " + u.name).toLowerCase()}">
+				<div class="ib-tm-row-av" style="background:${color}">${initials}</div>
+				<div class="ib-tm-row-info">
+					<span class="ib-tm-row-name">${frappe.utils.escape_html(u.full_name || u.name)}</span>
+					<span class="ib-tm-row-sub">${frappe.utils.escape_html(u.name)}</span>
+				</div>
+				${team_badge}
+				<button class="ib-tm-picker-add-btn" data-user="${frappe.utils.escape_html(u.name)}">+ Add</button>
+			</div>`;
+		}).join("") || `<div class="ib-tm-empty">All users already in this team</div>`;
+
+		// Territory rows
+		const territory_rows = team.territories.length
+			? team.territories.map(t => `
+				<div class="ib-tm-row">
+					<div class="ib-tm-row-info">
+						<span class="ib-tm-row-name">${frappe.utils.escape_html(t.territory)}</span>
+					</div>
+					<button class="ib-tm-remove-btn" data-territory="${frappe.utils.escape_html(t.territory)}">Remove</button>
+				</div>`).join("")
+			: `<div class="ib-tm-empty">No territories yet</div>`;
+
+		$body.html(`
+			<div class="ib-tm-section">
+				<div class="ib-tm-section-label">Members <span class="ib-tm-count">${team.members.length}</span></div>
+				<div class="ib-tm-list">${member_rows}</div>
+				<div class="ib-tm-picker-head">
+					<span class="ib-tm-picker-title">Add member</span>
+					<input class="ib-tm-picker-search" id="ib-tm-member-search" placeholder="Search users…" autocomplete="off">
+				</div>
+				<div class="ib-tm-picker-list" id="ib-tm-picker-list">${picker_rows}</div>
+			</div>
+			<div class="ib-tm-section">
+				<div class="ib-tm-section-label">Territories <span class="ib-tm-count">${team.territories.length}</span></div>
+				<div class="ib-tm-list">${territory_rows}</div>
+				<div class="ib-tm-add-row">
+					<select class="ib-tm-select" id="ib-tm-territory-sel">
+						<option value="">Select territory to add…</option>
+						${available_territories.map(t => `<option value="${frappe.utils.escape_html(t)}">${frappe.utils.escape_html(t)}</option>`).join("")}
+					</select>
+					<button class="ib-tm-add-btn" id="ib-tm-add-territory">Add</button>
+				</div>
+			</div>
+		`);
+
+		// Picker search filter
+		$body.find("#ib-tm-member-search").on("input", function() {
+			const q = this.value.trim().toLowerCase();
+			$body.find(".ib-tm-picker-row").each(function() {
+				const hay = $(this).data("search") || "";
+				$(this).toggle(!q || hay.includes(q));
+			});
+		});
+
+		// Per-row add member
+		$body.find(".ib-tm-picker-add-btn").on("click", function() {
+			const user = $(this).data("user");
+			const $btn = $(this).prop("disabled", true).text("…");
+			frappe.call({
+				method: "instabiz.overrides.customer_assignment.add_team_member",
+				args: { team_name, user },
+				freeze: true,
+				freeze_message: "Saving…",
+				callback(r) {
+					if (r.message && r.message.status === "ok") {
+						frappe.show_alert({ message: `Added to ${team_name}`, indicator: "green" });
+						// Reload roster first so _last_roster has fresh team data before modal re-renders
+						frappe.call({
+							method: "instabiz.overrides.customer_assignment.get_admin_overview",
+							args: { date: self._date, territory: self._territory },
+							callback(rr) {
+								if (rr.message) self._render_roster(rr.message.roster, rr.message.team_territories || {});
+								self._load_team_modal(d, $body, team_name);
+							},
+						});
+					} else {
+						$btn.prop("disabled", false).text("+ Add");
+					}
+				},
+				error() { $btn.prop("disabled", false).text("+ Add"); },
+			});
+		});
+
+		// Remove member
+		$body.find(".ib-tm-remove-btn[data-user]").on("click", function() {
+			const user = $(this).data("user");
+			const $btn = $(this).prop("disabled", true).text("…");
+			frappe.call({
+				method: "instabiz.overrides.customer_assignment.remove_team_member",
+				args: { team_name, user },
+				freeze: true,
+				freeze_message: "Saving…",
+				callback(r) {
+					if (r.message && r.message.status === "ok") {
+						frappe.show_alert({ message: `Removed from ${team_name}`, indicator: "orange" });
+						frappe.call({
+							method: "instabiz.overrides.customer_assignment.get_admin_overview",
+							args: { date: self._date, territory: self._territory },
+							callback(rr) {
+								if (rr.message) self._render_roster(rr.message.roster, rr.message.team_territories || {});
+								self._load_team_modal(d, $body, team_name);
+							},
+						});
+					} else {
+						$btn.prop("disabled", false).text("Remove");
+					}
+				},
+				error() { $btn.prop("disabled", false).text("Remove"); },
+			});
+		});
+
+		// Remove territory
+		$body.find(".ib-tm-remove-btn[data-territory]").on("click", function() {
+			const territory = $(this).data("territory");
+			const $btn = $(this).prop("disabled", true).text("…");
+			frappe.call({
+				method: "instabiz.overrides.customer_assignment.remove_team_territory",
+				args: { team_name, territory },
+				callback(r) {
+					if (r.message && r.message.status === "ok") {
+						frappe.show_alert({ message: `${territory} removed`, indicator: "orange" });
+						self._load_team_modal(d, $body, team_name);
+					} else {
+						$btn.prop("disabled", false).text("Remove");
+					}
+				},
+				error() { $btn.prop("disabled", false).text("Remove"); },
+			});
+		});
+
+		// Add territory
+		$body.find("#ib-tm-add-territory").on("click", function() {
+			const territory = $body.find("#ib-tm-territory-sel").val();
+			if (!territory) { frappe.show_alert({ message: "Select a territory first", indicator: "orange" }); return; }
+			const $btn = $(this).prop("disabled", true).text("Adding…");
+			frappe.call({
+				method: "instabiz.overrides.customer_assignment.add_team_territory",
+				args: { team_name, territory },
+				callback(r) {
+					if (r.message && r.message.status === "ok") {
+						frappe.show_alert({ message: `${territory} added`, indicator: "green" });
+						self._load_team_modal(d, $body, team_name);
+					} else {
+						$btn.prop("disabled", false).text("Add");
+					}
+				},
+				error() { $btn.prop("disabled", false).text("Add"); },
+			});
+		});
+	}
+
 	// ── View As ──────────────────────────────────────────────────────────────
 
-	_view_as(user, full_name) {
+	_view_as(user, full_name, user_data = null) {
 		this._view_as_user = user;
+		this._view_as_user_data = user_data;
 		this._va_undo_timer = null;
 		$("#ib-aa-view-as-label").text(`Viewing board as ${full_name || user}`);
 		$("#ib-aa-view-as-bar").show();
@@ -626,9 +1001,24 @@ class IBAssignmentAdmin {
 		const self = this;
 		const user = this._view_as_user;
 		const $wrap = $("#ib-aa-board-wrap");
+		const ud = this._view_as_user_data;
+		const fmt_inr = v => v ? "₹" + Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 }) : "—";
+		const target_strip = ud && ud.target ? (() => {
+			const tpct = Math.min(ud.target_pct || 0, 100);
+			const bar_color = tpct >= 100 ? "#22c55e" : tpct >= 60 ? "var(--ib-primary)" : "#f59e0b";
+			return `<div class="ib-va-target-strip">
+				<span class="ib-va-ts-label">Sales Target</span>
+				<div class="ib-va-ts-track">
+					<div class="ib-va-ts-fill" style="width:${tpct}%;background:${bar_color}"></div>
+				</div>
+				<span class="ib-va-ts-amt">${fmt_inr(ud.actual)} <span class="ib-va-ts-sep">/</span> ${fmt_inr(ud.target)}</span>
+				<span class="ib-va-ts-pct" style="color:${bar_color}">${ud.target_pct || 0}%</span>
+			</div>`;
+		})() : "";
 
 		$wrap.html(`
 			<div class="ib-va-board">
+				${target_strip}
 				<div class="ib-va-columns">
 					<div class="ib-va-col">
 						<div class="ib-va-col-header">
@@ -1118,8 +1508,9 @@ class IBAssignmentAdmin {
 				letter-spacing: 0.5px; color: var(--text-muted);
 			}
 			.ib-aa-rth--name    { flex: 1; min-width: 0; }
-			.ib-aa-rth--stat    { width: 72px; text-align: center; }
-			.ib-aa-rth--bar     { width: 210px; padding-left: 4px; }
+			.ib-aa-rth--stat    { width: 72px; text-align: center; border-left: 1px solid var(--border-color); }
+			.ib-aa-rth--bar     { width: 210px; padding-left: 8px; border-left: 1px solid var(--border-color); }
+			.ib-aa-rth--target  { width: 150px; padding-left: 8px; border-left: 1px solid var(--border-color); }
 
 			/* Team group */
 			.ib-aa-team-group { border-bottom: 2px solid var(--border-color); }
@@ -1146,6 +1537,15 @@ class IBAssignmentAdmin {
 			}
 			.ib-aa-team-label { font-size: 12px; font-weight: 700; }
 			.ib-aa-team-meta  { font-size: 11px; color: var(--text-muted); }
+			.ib-aa-terr-chips { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; }
+			.ib-aa-terr-chip {
+				font-size: 9px; font-weight: 700; letter-spacing: 0.3px;
+				padding: 1px 5px; border-radius: 3px;
+				background: color-mix(in srgb, var(--team-color) 15%, transparent);
+				color: var(--team-color);
+				border: 1px solid color-mix(in srgb, var(--team-color) 35%, transparent);
+				white-space: nowrap;
+			}
 			.ib-aa-team-body--collapsed { display: none; }
 
 			/* User row */
@@ -1181,20 +1581,33 @@ class IBAssignmentAdmin {
 			.ib-aa-row-stat {
 				width: 72px; text-align: center;
 				font-size: 15px; font-weight: 700;
+				border-left: 1px solid var(--border-color);
 			}
 			.ib-aa-row-stat--done    { color: #15803d; }
 			.ib-aa-row-stat--pending { color: #b45309; }
 			.ib-aa-row-stat--tmrw    { color: #1d4ed8; }
 
-			/* Right cell — bar and actions share the same fixed-width slot */
-			.ib-aa-row-right {
-				width: 210px; flex-shrink: 0; position: relative; height: 28px;
-			}
+			/* Bar cells — each 210px, always visible */
 			.ib-aa-row-bar-wrap {
-				position: absolute; inset: 0;
+				width: 210px; flex-shrink: 0;
 				display: flex; align-items: center; gap: 8px;
-				transition: opacity 0.15s;
+				border-left: 1px solid var(--border-color); padding-left: 8px;
 			}
+			.ib-aa-no-target {
+				width: 210px; flex-shrink: 0;
+				display: flex; align-items: center; padding-left: 8px;
+				font-size: 12px; color: var(--text-muted);
+				border-left: 1px solid var(--border-color);
+			}
+			.ib-aa-row-target-text {
+				width: 150px; flex-shrink: 0;
+				display: flex; align-items: center; gap: 4px; padding-left: 8px;
+				border-left: 1px solid var(--border-color);
+				font-size: 12px; font-variant-numeric: tabular-nums;
+			}
+			.ib-aa-target-actual { font-weight: 700; }
+			.ib-aa-target-sep { color: var(--text-muted); font-size: 11px; }
+			.ib-aa-target-goal { color: var(--text-muted); }
 			.ib-aa-row-bar-track {
 				flex: 1; height: 6px; background: var(--border-color);
 				border-radius: 4px; overflow: hidden;
@@ -1208,43 +1621,187 @@ class IBAssignmentAdmin {
 			.ib-aa-pct--mid  { color: var(--ib-primary); }
 			.ib-aa-pct--low  { color: #94a3b8; }
 
-			/* Actions slot — same cell, fades in as bar fades out */
+			/* Actions — absolutely positioned at row right edge, out of flex flow */
+			.ib-aa-user-row { position: relative; }
 			.ib-aa-row-actions {
-				position: absolute; inset: 0;
-				display: flex; align-items: center; gap: 5px; justify-content: flex-end;
+				position: absolute; right: 20px; top: 50%; transform: translateY(-50%);
+				display: flex; align-items: center; gap: 5px;
 				opacity: 0; pointer-events: none; transition: opacity 0.15s;
 			}
-			.ib-aa-user-row:hover .ib-aa-row-bar-wrap { opacity: 0; }
-			.ib-aa-user-row:hover .ib-aa-row-actions   { opacity: 1; pointer-events: auto; }
-			.ib-aa-btn-view {
-				padding: 4px 10px; border-radius: 5px;
-				border: 1px solid #93c5fd; background: #eff6ff;
-				font-size: 11px; font-weight: 600; cursor: pointer; color: #1d4ed8;
-				transition: all 0.15s; white-space: nowrap;
-			}
-			.ib-aa-btn-view:hover { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
-			.ib-aa-btn-auto {
-				padding: 4px 10px; border-radius: 5px;
-				border: 1px solid var(--ib-primary); background: #fdf6f3;
-				font-size: 11px; font-weight: 600; cursor: pointer; color: var(--ib-primary);
-				transition: all 0.15s; white-space: nowrap;
-			}
-			.ib-aa-btn-auto:hover { background: var(--ib-primary); color: #fff; }
-			.ib-aa-btn-transfer {
-				padding: 4px 10px; border-radius: 5px;
-				border: 1px solid #a7f3d0; background: #ecfdf5;
-				font-size: 11px; font-weight: 600; cursor: pointer; color: #059669;
-				transition: all 0.15s; white-space: nowrap;
-			}
-			.ib-aa-btn-transfer:hover { background: #059669; color: #fff; border-color: #059669; }
-			.ib-aa-btn-hide {
-				width: 24px; height: 24px; border-radius: 50%;
-				border: 1px solid var(--border-color); background: transparent;
-				font-size: 12px; line-height: 1; cursor: pointer; color: var(--text-muted);
-				transition: all 0.15s; flex-shrink: 0;
+			.ib-aa-user-row:hover .ib-aa-row-actions { opacity: 1; pointer-events: auto; }
+			/* Kebab trigger */
+			.ib-aa-btn-kebab {
+				width: 28px; height: 28px; border-radius: 6px;
+				border: 1px solid var(--border-color); background: var(--card-bg);
+				font-size: 16px; line-height: 1; cursor: pointer; color: var(--text-muted);
 				display: flex; align-items: center; justify-content: center; padding: 0;
+				transition: all 0.15s; letter-spacing: -1px;
 			}
-			.ib-aa-btn-hide:hover { border-color: #94a3b8; color: #475569; background: var(--subtle-bg); }
+			.ib-aa-btn-kebab:hover { border-color: var(--ib-primary); color: var(--ib-primary); background: #fdf6f3; }
+
+			/* Team header kebab button */
+			.ib-aa-btn-team-kebab {
+				margin-left: auto; flex-shrink: 0;
+				width: 22px; height: 22px; border-radius: 4px;
+				border: 1px solid transparent; background: transparent;
+				font-size: 14px; cursor: pointer; color: var(--text-muted);
+				display: flex; align-items: center; justify-content: center; padding: 0;
+				transition: all 0.15s; letter-spacing: -1px;
+			}
+			.ib-aa-btn-team-kebab:hover { border-color: var(--ib-primary); color: var(--ib-primary); background: rgba(217,119,87,0.08); }
+
+			/* Team manage modal */
+			.ib-tm-body { display: flex; flex-direction: column; gap: 16px; padding: 4px 0; }
+			.ib-tm-loading { text-align: center; color: var(--text-muted); padding: 20px; font-size: 13px; }
+			.ib-tm-section { border: 1px solid var(--border-color); border-radius: 7px; overflow: hidden; }
+			.ib-tm-section-label {
+				display: flex; align-items: center; gap: 6px;
+				padding: 7px 14px;
+				font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px;
+				color: var(--text-muted); background: var(--subtle-bg);
+				border-bottom: 1px solid var(--border-color);
+			}
+			.ib-tm-count {
+				background: var(--border-color); color: var(--text-muted);
+				border-radius: 10px; padding: 0 6px; font-size: 10px; font-weight: 700;
+			}
+			.ib-tm-list { display: flex; flex-direction: column; }
+			.ib-tm-row {
+				display: flex; align-items: center; gap: 10px;
+				padding: 8px 14px; border-bottom: 1px solid var(--border-color);
+			}
+			.ib-tm-row:last-child { border-bottom: none; }
+			.ib-tm-row-av {
+				width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+				color: #fff; font-size: 10px; font-weight: 700;
+				display: flex; align-items: center; justify-content: center; letter-spacing: 0.3px;
+			}
+			.ib-tm-row-info { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+			.ib-tm-row-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+			.ib-tm-row-sub { font-size: 11px; color: var(--text-muted); }
+			.ib-tm-empty { padding: 10px 14px; font-size: 12px; color: var(--text-muted); }
+			.ib-tm-remove-btn {
+				padding: 3px 10px; border-radius: 4px;
+				border: 1px solid #fca5a5; background: #fff1f2; color: #b91c1c;
+				font-size: 11px; font-weight: 600; cursor: pointer;
+				transition: all 0.15s; white-space: nowrap; flex-shrink: 0;
+			}
+			.ib-tm-remove-btn:hover { background: #b91c1c; color: #fff; border-color: #b91c1c; }
+			.ib-tm-remove-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+			/* User picker */
+			.ib-tm-picker-head {
+				display: flex; align-items: center; gap: 8px;
+				padding: 8px 14px; border-top: 1px solid var(--border-color);
+				background: var(--subtle-bg);
+			}
+			.ib-tm-picker-title { font-size: 11px; font-weight: 600; color: var(--text-muted); white-space: nowrap; }
+			.ib-tm-picker-search {
+				flex: 1; padding: 5px 9px;
+				border: 1px solid var(--border-color); border-radius: 5px;
+				font-size: 12px; background: var(--card-bg); color: var(--text-color);
+				transition: border-color 0.15s;
+			}
+			.ib-tm-picker-search:focus { outline: none; border-color: var(--ib-primary); }
+			.ib-tm-picker-list {
+				display: flex; flex-direction: column;
+				max-height: 200px; overflow-y: auto;
+				border-top: 1px solid var(--border-color);
+			}
+			.ib-tm-picker-row {
+				display: flex; align-items: center; gap: 9px;
+				padding: 7px 14px; border-bottom: 1px solid var(--border-color);
+				transition: background 0.1s;
+			}
+			.ib-tm-picker-row:last-child { border-bottom: none; }
+			.ib-tm-picker-row:hover { background: var(--subtle-bg); }
+			.ib-tm-team-badge {
+				display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
+				padding: 2px 8px; border-radius: 20px;
+				font-size: 10px; font-weight: 700; white-space: nowrap;
+				background: color-mix(in srgb, var(--badge-color) 12%, transparent);
+				color: var(--badge-color);
+				border: 1px solid color-mix(in srgb, var(--badge-color) 30%, transparent);
+			}
+			.ib-tm-team-badge::before { content: "●"; font-size: 7px; }
+			.ib-tm-team-badge--none {
+				background: var(--subtle-bg); color: var(--text-muted);
+				border: 1px solid var(--border-color);
+				--badge-color: transparent;
+			}
+			.ib-tm-team-badge--none::before { content: none; }
+			.ib-tm-picker-add-btn {
+				padding: 3px 10px; border-radius: 4px;
+				border: 1px solid var(--ib-primary); background: #fdf6f3; color: var(--ib-primary);
+				font-size: 11px; font-weight: 700; cursor: pointer;
+				transition: all 0.15s; white-space: nowrap; flex-shrink: 0;
+			}
+			.ib-tm-picker-add-btn:hover { background: var(--ib-primary); color: #fff; }
+			.ib-tm-picker-add-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+			.ib-tm-add-row {
+				display: flex; align-items: center; gap: 8px;
+				padding: 10px 14px; border-top: 1px solid var(--border-color);
+				background: var(--subtle-bg);
+			}
+			.ib-tm-select {
+				flex: 1; padding: 6px 10px;
+				border: 1px solid var(--border-color); border-radius: 5px;
+				font-size: 12px; background: var(--card-bg); color: var(--text-color);
+				transition: border-color 0.15s;
+			}
+			.ib-tm-select:focus { outline: none; border-color: var(--ib-primary); }
+			.ib-tm-add-btn {
+				padding: 6px 16px; border-radius: 5px;
+				border: none; background: var(--ib-primary); color: #fff;
+				font-size: 12px; font-weight: 700; cursor: pointer;
+				transition: all 0.15s; white-space: nowrap; flex-shrink: 0;
+			}
+			.ib-tm-add-btn:hover { background: var(--ib-primary-dark, #b45e3e); }
+			.ib-tm-add-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+			/* Kebab dropdown */
+			.ib-aa-kdrop {
+				position: absolute; z-index: 9999;
+				background: var(--card-bg); border: 1px solid var(--border-color);
+				border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+				padding: 4px; min-width: 200px; overflow: hidden;
+			}
+			.ib-aa-kdrop-header {
+				padding: 8px 10px 6px;
+				border-bottom: 1px solid var(--border-color);
+				margin-bottom: 4px;
+			}
+			.ib-aa-kdrop-name { font-size: 12px; font-weight: 700; color: var(--text-color); }
+			.ib-aa-kdrop-target { font-size: 11px; color: var(--text-muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+			.ib-aa-kdrop-item {
+				display: block; width: 100%; text-align: left;
+				padding: 7px 10px; border: none; background: transparent;
+				font-size: 12px; font-weight: 500; cursor: pointer; border-radius: 5px;
+				color: var(--text-color); transition: background 0.1s;
+			}
+			.ib-aa-kdrop-item:hover { background: var(--subtle-bg); }
+			.ib-aa-kdrop-view:hover         { color: #1d4ed8; background: #eff6ff; }
+			.ib-aa-kdrop-auto:hover         { color: var(--ib-primary); background: #fdf6f3; }
+			.ib-aa-kdrop-transfer:hover     { color: #059669; background: #ecfdf5; }
+			.ib-aa-kdrop-hide:hover         { color: #b91c1c; background: #fff1f2; }
+			.ib-aa-kdrop-manage-team:hover  { color: #7c3aed; background: #f5f3ff; }
+			.ib-aa-kdrop-set-target:hover   { color: #0891b2; background: #ecfeff; }
+
+			/* Set target dialog */
+			.ib-st-meta {
+				display: flex; align-items: center; gap: 14px;
+				padding: 6px 0 10px; font-size: 12px;
+			}
+			.ib-st-month {
+				font-weight: 700; font-size: 13px;
+				background: var(--ib-primary); color: #fff;
+				padding: 2px 10px; border-radius: 20px;
+			}
+			.ib-st-actual { color: var(--text-muted); }
+			.ib-aa-kdrop-sep {
+				height: 1px; background: var(--border-color); margin: 4px 0;
+			}
 
 
 			/* ── View as banner ── */
@@ -1418,6 +1975,26 @@ class IBAssignmentAdmin {
 			/* ── View-as kanban ── */
 			.ib-va-loading { padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
 			.ib-va-board { padding: 4px 0 20px; }
+
+			/* Target strip */
+			.ib-va-target-strip {
+				display: flex; align-items: center; gap: 12px;
+				padding: 10px 16px; margin-bottom: 12px;
+				background: var(--card-bg); border: 1px solid var(--border-color);
+				border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+			}
+			.ib-va-ts-label {
+				font-size: 11px; font-weight: 700; text-transform: uppercase;
+				letter-spacing: 0.5px; color: var(--text-muted); flex-shrink: 0; width: 90px;
+			}
+			.ib-va-ts-track {
+				flex: 1; height: 6px; background: var(--border-color);
+				border-radius: 4px; overflow: hidden;
+			}
+			.ib-va-ts-fill { height: 100%; border-radius: 4px; transition: width 0.5s cubic-bezier(0.4,0,0.2,1); }
+			.ib-va-ts-amt { font-size: 12px; color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+			.ib-va-ts-sep { color: var(--border-color); }
+			.ib-va-ts-pct { font-size: 13px; font-weight: 700; white-space: nowrap; flex-shrink: 0; width: 42px; text-align: right; }
 			.ib-va-columns {
 				display: grid; grid-template-columns: repeat(4, 1fr);
 				gap: 14px; align-items: start;
@@ -1528,7 +2105,10 @@ class IBAssignmentAdmin {
 
 			@media (max-width: 900px) {
 				.ib-va-columns { grid-template-columns: repeat(2, 1fr); }
-				.ib-aa-rth--bar, .ib-aa-row-right { width: 140px; }
+				.ib-aa-rth--bar { width: 140px; }
+				.ib-aa-rth--target { display: none; }
+				.ib-aa-row-bar-wrap, .ib-aa-no-target { width: 140px; }
+				.ib-aa-row-target-text { display: none; }
 				.ib-aa-btn-transfer { display: none; }
 				.ib-aa-pool-terr, .ib-aa-pool-last { display: none; }
 			}

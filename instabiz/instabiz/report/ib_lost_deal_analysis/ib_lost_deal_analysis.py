@@ -9,7 +9,7 @@ def execute(filters=None):
 	_validate(filters)
 	data    = _data(filters)
 	columns = _columns()
-	return columns, data, None, _chart(data), _summary(data)
+	return columns, data, None, _chart(data, filters), _summary(data)
 
 
 def _validate(filters):
@@ -46,7 +46,7 @@ def _data(filters):
 
 
 def _lost_leads(filters):
-	cond  = "WHERE l.custom_status = 'Lost' AND l.modified BETWEEN %(from_date)s AND %(to_date)s"
+	cond  = "WHERE l.custom_status = 'Lost' AND DATE(l.modified) BETWEEN %(from_date)s AND %(to_date)s"
 	vals  = {"from_date": filters.get("from_date"), "to_date": filters.get("to_date")}
 
 	if filters.get("territory"):
@@ -82,7 +82,7 @@ def _lost_leads(filters):
 
 
 def _lost_quotations(filters):
-	cond = "WHERE q.status = 'Lost' AND q.modified BETWEEN %(from_date)s AND %(to_date)s AND q.docstatus = 1"
+	cond = "WHERE q.status = 'Lost' AND DATE(q.modified) BETWEEN %(from_date)s AND %(to_date)s AND q.docstatus = 1"
 	vals = {"from_date": filters.get("from_date"), "to_date": filters.get("to_date")}
 
 	if filters.get("territory"):
@@ -118,23 +118,24 @@ def _lost_quotations(filters):
 	)
 
 
-def _chart(data):
+def _chart(data, filters=None):
 	if not data:
 		return None
-	# Aggregate by loss_reason for chart
 	reason_map = {}
 	for row in data:
 		r = row["loss_reason"] or "Not Set"
 		reason_map[r] = reason_map.get(r, 0) + 1
 
 	reasons = sorted(reason_map, key=lambda k: reason_map[k], reverse=True)
+	chart_type = (filters or {}).get("chart_type") or "bar"
 	return {
 		"data": {
 			"labels":   reasons,
 			"datasets": [{"name": _("Lost Deals"), "values": [reason_map[r] for r in reasons]}],
 		},
-		"type": "pie",
+		"type": chart_type,
 		"colors": ["#d97757", "#2e74b5", "#cf222e", "#70ad47", "#9467bd", "#8c564b"],
+		"height": 280,
 	}
 
 

@@ -7,6 +7,7 @@ from frappe.model.mapper import get_mapped_doc  # pyright: ignore[reportMissingI
 
 from instabiz.overrides.naming import autoname_delivery_note
 from instabiz.overrides.utils import (
+    COMMON_CHILD_FIELD_MAP,
     COMMON_PARENT_FIELD_MAP,
     IbStatusMixin,
     item_postprocess,
@@ -34,6 +35,8 @@ class CustomDeliveryNote(IbStatusMixin, DeliveryNote):
         set_sales_person(self)
 
     def validate(self):
+        if not self.custom_location or self.custom_location == "Select":
+            frappe.throw(frappe._("Please select a Location before saving."))
         set_sales_person(self)
         sync_sales_team(self)
         recalculate_items(self)
@@ -82,6 +85,11 @@ def custom_make_sales_invoice(source_name, target_doc=None):
                 "doctype": "Sales Invoice Item",
                 "postprocess": item_postprocess,
                 "condition": lambda row: row.qty != 0,
+                "field_map": {
+                    **COMMON_CHILD_FIELD_MAP,
+                    "name":   "dn_detail",
+                    "parent": "delivery_note",
+                },
             },
             "Sales Taxes and Charges": {
                 "doctype": "Sales Taxes and Charges",

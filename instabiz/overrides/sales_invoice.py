@@ -1,4 +1,5 @@
 """instabiz.overrides.sales_invoice"""
+import frappe
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import SalesInvoice  # pyright: ignore[reportMissingImports]
 
 from instabiz.overrides.utils import IbStatusMixin, recalculate_items, set_sales_person, sync_sales_team
@@ -28,6 +29,8 @@ class CustomSalesInvoice(IbStatusMixin, SalesInvoice):
         set_sales_person(self)
 
     def validate(self):
+        if not self.custom_location or self.custom_location == "Select":
+            frappe.throw(frappe._("Please select a Location before saving."))
         set_sales_person(self)
         sync_sales_team(self)
         recalculate_items(self)

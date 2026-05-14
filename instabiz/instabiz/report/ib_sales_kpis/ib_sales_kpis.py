@@ -9,7 +9,7 @@ def execute(filters=None):
 	_validate(filters)
 	data    = _data(filters)
 	columns = _columns()
-	return columns, data, None, _chart(data), _summary(data)
+	return columns, data, None, _chart(data, filters), _summary(data)
 
 
 def _validate(filters):
@@ -38,6 +38,7 @@ def _data(filters):
 	to_date   = filters.get("to_date")
 	territory = filters.get("territory")
 	sp_user   = filters.get("sales_person_user")
+	source    = filters.get("source")
 
 	# ── Leads per rep ────────────────────────────────────────────────────────
 	lead_cond = "WHERE l.creation BETWEEN %(from_date)s AND %(to_date)s"
@@ -45,6 +46,8 @@ def _data(filters):
 		lead_cond += " AND l.territory = %(territory)s"
 	if sp_user:
 		lead_cond += " AND l.lead_owner = %(sp_user)s"
+	if source:
+		lead_cond += " AND l.source = %(source)s"
 
 	leads = frappe.db.sql(
 		f"""
@@ -59,7 +62,7 @@ def _data(filters):
 		GROUP BY COALESCE(NULLIF(l.lead_owner,''), l.owner)
 		""",
 		{"from_date": from_date, "to_date": to_date,
-		 "territory": territory, "sp_user": sp_user},
+		 "territory": territory, "sp_user": sp_user, "source": source},
 		as_dict=True,
 	)
 	lead_map = {r.user: r for r in leads}
@@ -135,9 +138,10 @@ def _data(filters):
 	return rows
 
 
-def _chart(data):
+def _chart(data, filters=None):
 	if not data:
 		return None
+	chart_type = (filters or {}).get("chart_type") or "bar"
 	top = data[:10]
 	return {
 		"data": {
@@ -148,7 +152,7 @@ def _chart(data):
 				{"name": _("Orders"),     "values": [r["orders"] for r in top]},
 			],
 		},
-		"type": "bar",
+		"type": chart_type,
 		"colors": ["#d97757", "#2e74b5", "#70ad47"],
 	}
 

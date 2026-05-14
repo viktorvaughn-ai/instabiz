@@ -45,7 +45,8 @@ def get_next_dn_si_number():
     lock_key = "ib_dnsi_counter"
     frappe.db.sql("SELECT GET_LOCK(%s, 10)", lock_key)
     try:
-        current = frappe.db.get_value("Series", _GLOBAL_DNSI_SERIES, "current")
+        row = frappe.db.sql("SELECT current FROM `tabSeries` WHERE name = %s", (_GLOBAL_DNSI_SERIES,))
+        current = row[0][0] if row else None
         if current is None:
             frappe.db.sql(
                 "INSERT INTO `tabSeries` (name, current) VALUES (%s, 0)",
@@ -82,13 +83,18 @@ def autoname_delivery_note(doc, method=None):
 
 def autoname_sales_invoice(doc, method=None):
     wh = get_warehouse_code(doc)
-    # If created from a Delivery Note reuse its number so DN/SI share the same sequence slot
-    for item in (doc.get("items") or []):
-        dn_name = item.get("delivery_note") or ""
-        if "-DN-" in dn_name:
-            num_str = dn_name.split("-DN-")[-1]
-            doc.name = f"IB-{wh}-INV-{num_str}"
-            return
+    # If created from a Delivery Note reuse its number so DN/SI share the same sequence slot.
+    # Mapper sets delivery_note on the parent SI doc; fall back to checking item rows.
+    dn_name = doc.get("delivery_note") or ""
+    if not dn_name:
+        for item in (doc.get("items") or []):
+            dn_name = item.get("delivery_note") or ""
+            if "-DN-" in dn_name:
+                break
+    if dn_name and "-DN-" in dn_name:
+        num_str = dn_name.split("-DN-")[-1]
+        doc.name = f"IB-{wh}-INV-{num_str}"
+        return
     # Standalone SI — consume the next global number
     num = get_next_dn_si_number()
     doc.name = f"IB-{wh}-INV-{num:05d}"

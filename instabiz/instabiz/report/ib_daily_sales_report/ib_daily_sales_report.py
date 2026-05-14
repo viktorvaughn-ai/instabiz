@@ -13,7 +13,7 @@ def execute(filters=None):
 	reps = _get_reps(date, territory)
 	data = _build_rows(date, month_start, territory, reps)
 	columns = _columns()
-	return columns, data, None, _chart(data), _summary(data, date, month_start)
+	return columns, data, None, _chart(data, filters), _summary(data, date, month_start)
 
 
 # ── Columns ───────────────────────────────────────────────────────────────────
@@ -167,9 +167,10 @@ def _mtd_targets(month_start):
 
 # ── Chart ─────────────────────────────────────────────────────────────────────
 
-def _chart(data):
+def _chart(data, filters=None):
 	if not data:
 		return None
+	chart_type = (filters or {}).get("chart_type") or "bar"
 	top = [r for r in data if r["order_value"] > 0][:10]
 	if not top:
 		top = data[:10]
@@ -182,7 +183,7 @@ def _chart(data):
 				{"name": _("MTD Revenue"),    "values": [r["mtd_revenue"]    for r in top]},
 			],
 		},
-		"type": "bar",
+		"type": chart_type,
 		"colors": ["#d97757", "#2e74b5", "#70ad47"],
 	}
 

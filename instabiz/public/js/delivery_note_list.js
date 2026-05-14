@@ -26,5 +26,13 @@ frappe.listview_settings["Delivery Note"] = {
 
 	onload(listview) {
 		ib_hide_sidebar();
+		ib_setup_status_multiselect(listview, "Delivery Note", [
+			"Draft", "Pending", "Confirmed", "Return Issued", "Cancelled",
+		]);
+		const _orig_render_list = listview.render_list.bind(listview);
+		listview.render_list = function () {
+			_orig_render_list();
+			ib_disable_status_click_filter(listview);
+		};
 	},
 };

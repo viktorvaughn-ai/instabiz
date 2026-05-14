@@ -219,6 +219,11 @@ def recalculate_items(doc):
     Incomplete dims: leave qty as-is (user may have typed it manually)
     """
     for item in doc.get("items") or []:
+        # Row already priced in the source document — preserve qty, recalc amount only
+        if item.get("against_sales_order") or item.get("delivery_note"):
+            item.amount = round((item.get("qty") or 0) * (item.get("rate") or 0), 2)
+            continue
+
         uom        = (item.get("uom") or "").strip()
         width_mm   = item.get("width_mm") or 0
         length_mtr = item.get("length_mtr") or 0

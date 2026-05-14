@@ -1,0 +1,165 @@
+{
+ "actions": [],
+ "autoname": "IB-PDC-.YYYY.-.#####",
+ "creation": "2026-05-09 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "customer",
+  "customer_name",
+  "cheque_no",
+  "cheque_date",
+  "amount",
+  "bank_name",
+  "column_break_1",
+  "status",
+  "received_date",
+  "sales_invoice",
+  "sales_person_user",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "customer_name",
+   "fieldtype": "Data",
+   "label": "Customer Name",
+   "fetch_from": "customer.customer_name",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "cheque_no",
+   "fieldtype": "Data",
+   "label": "Cheque Number",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "cheque_date",
+   "fieldtype": "Date",
+   "label": "Cheque Date",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "bank_name",
+   "fieldtype": "Data",
+   "label": "Bank Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Pending\nPresented\nCleared\nBounced\nCancelled",
+   "default": "Pending",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "received_date",
+   "fieldtype": "Date",
+   "label": "Received Date",
+   "default": "Today"
+  },
+  {
+   "fieldname": "sales_invoice",
+   "fieldtype": "Link",
+   "label": "Sales Invoice",
+   "options": "Sales Invoice"
+  },
+  {
+   "fieldname": "sales_person_user",
+   "fieldtype": "Link",
+   "label": "Sales Person",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "idx": 0,
+ "in_create": 1,
+ "links": [],
+ "modified": "2026-05-09 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "IB PDC",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales User",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts User",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "write": 1
+  }
+ ],
+ "sort_field": "cheque_date",
+ "sort_order": "ASC",
+ "title_field": "cheque_no",
+ "track_changes": 1
+}

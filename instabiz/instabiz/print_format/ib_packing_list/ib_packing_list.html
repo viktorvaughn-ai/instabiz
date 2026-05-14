@@ -1,0 +1,110 @@
+{% set company = frappe.get_doc("Company", doc.company) %}
+<style>
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; }
+  .pl-header { text-align: center; margin-bottom: 12px; }
+  .pl-header h2 { margin: 0; font-size: 16px; }
+  .pl-header h3 { margin: 2px 0; font-size: 13px; color: #555; }
+  .pl-meta { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+  .pl-meta td { padding: 3px 8px; vertical-align: top; }
+  .pl-meta .label { font-weight: bold; width: 130px; color: #444; }
+  table.items { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+  table.items th { background: #d97757; color: #fff; padding: 5px 8px; text-align: left; font-size: 11px; }
+  table.items td { border-bottom: 1px solid #ddd; padding: 4px 8px; vertical-align: middle; }
+  table.items tr:nth-child(even) td { background: #fafafa; }
+  .pl-totals { text-align: right; font-weight: bold; margin-top: 4px; }
+  .pl-footer { margin-top: 20px; width: 100%; }
+  .pl-footer td { padding: 4px; }
+  .sig-line { border-top: 1px solid #444; padding-top: 4px; text-align: center; font-size: 10px; color: #555; }
+  .lr-box { border: 2px solid #d97757; padding: 6px 12px; display: inline-block; font-size: 13px; font-weight: bold; margin-bottom: 10px; }
+</style>
+
+<div class="pl-header">
+  <h2>{{ doc.company }}</h2>
+  <h3>PACKING LIST</h3>
+</div>
+
+{% if doc.custom_lr_number or doc.lr_no %}
+<div style="text-align:center">
+  <span class="lr-box">LR No: {{ doc.custom_lr_number or doc.lr_no }}</span>
+</div>
+{% endif %}
+
+<table class="pl-meta">
+  <tr>
+    <td class="label">DN No.</td><td>{{ doc.name }}</td>
+    <td class="label">Date</td><td>{{ frappe.format(doc.posting_date, {"fieldtype":"Date"}) }}</td>
+  </tr>
+  <tr>
+    <td class="label">Customer</td><td>{{ doc.customer }}</td>
+    <td class="label">Location</td><td>{{ doc.custom_location or "" }}</td>
+  </tr>
+  <tr>
+    <td class="label">Ship To</td>
+    <td colspan="3">{{ doc.shipping_address or doc.customer_address or "" }}</td>
+  </tr>
+  {% if doc.transporter_name %}
+  <tr>
+    <td class="label">Transporter</td><td>{{ doc.transporter_name }}</td>
+    <td class="label">Vehicle No.</td><td>{{ doc.vehicle_no or "" }}</td>
+  </tr>
+  {% endif %}
+</table>
+
+<table class="items">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Item Code</th>
+      <th>Description</th>
+      <th>Qty</th>
+      <th>UOM</th>
+      <th>Rolls/Box</th>
+      <th>No. of Boxes</th>
+      <th>Carton Wt (kg)</th>
+      <th>Total Wt (kg)</th>
+      <th>Marking</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% set total_boxes = namespace(v=0) %}
+  {% set total_wt = namespace(v=0.0) %}
+  {% for row in doc.items %}
+    {% set item = frappe.get_doc("Item", row.item_code) %}
+    {% set rolls_per_box = item.custom_rolls_per_box or 1 %}
+    {% set carton_wt = item.custom_carton_weight_kg or 0 %}
+    {% set boxes = (row.qty / rolls_per_box) | round(2) %}
+    {% set line_wt = (boxes * carton_wt) | round(2) %}
+    {% set _ = total_boxes.__setattr__('v', total_boxes.v + boxes) %}
+    {% set _ = total_wt.__setattr__('v', total_wt.v + line_wt) %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td>{{ row.item_code }}</td>
+      <td>{{ row.description or row.item_name }}</td>
+      <td>{{ row.qty }}</td>
+      <td>{{ row.uom }}</td>
+      <td style="text-align:center">{{ rolls_per_box }}</td>
+      <td style="text-align:center">{{ boxes }}</td>
+      <td style="text-align:center">{{ carton_wt }}</td>
+      <td style="text-align:center">{{ line_wt }}</td>
+      <td>{{ item.custom_carton_marking or "" }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr style="font-weight:bold; background:#f5f5f5;">
+      <td colspan="6">TOTAL</td>
+      <td style="text-align:center">{{ total_boxes.v | round(2) }}</td>
+      <td></td>
+      <td style="text-align:center">{{ total_wt.v | round(2) }}</td>
+      <td></td>
+    </tr>
+  </tfoot>
+</table>
+
+<table class="pl-footer">
+  <tr>
+    <td style="width:33%"><div class="sig-line">Packed By</div></td>
+    <td style="width:33%"><div class="sig-line">Checked By</div></td>
+    <td style="width:33%"><div class="sig-line">Authorised By</div></td>
+  </tr>
+</table>

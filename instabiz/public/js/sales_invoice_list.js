@@ -27,5 +27,13 @@ frappe.listview_settings["Sales Invoice"] = {
 
 	onload(listview) {
 		ib_hide_sidebar();
+		ib_setup_status_multiselect(listview, "Sales Invoice", [
+			"Draft", "Unpaid", "Overdue", "Paid", "Return", "Cancelled",
+		]);
+		const _orig_render_list = listview.render_list.bind(listview);
+		listview.render_list = function () {
+			_orig_render_list();
+			ib_disable_status_click_filter(listview);
+		};
 	},
 };

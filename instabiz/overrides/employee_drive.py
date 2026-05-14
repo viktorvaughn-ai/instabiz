@@ -8,7 +8,22 @@ EMPLOYEES_FOLDER = "Employee Documents"
 
 
 def sync_employee_docs_to_drive(doc, method=None):
-	"""After Employee save: enqueue Drive sync for new document rows."""
+	"""After Employee save: enqueue Drive sync for new document rows; rename folder if name changed."""
+	before = doc.get_doc_before_save()
+	name_changed = (
+		before
+		and before.get("employee_name")
+		and before.get("employee_name") != doc.employee_name
+	)
+	if name_changed:
+		frappe.enqueue(
+			"instabiz.overrides.employee_drive._rename_employee_folder",
+			employee=doc.name,
+			old_name=before.get("employee_name"),
+			new_name=doc.employee_name,
+			queue="short",
+		)
+
 	needs_sync = any(
 		row.document_file and not row.drive_file_id
 		for row in (doc.get("custom_employee_documents") or [])
@@ -56,6 +71,40 @@ def _do_sync(employee):
 		if drive_id:
 			frappe.db.set_value("Employee Document", row.name, "drive_file_id", drive_id)
 			frappe.db.commit()
+
+
+def _rename_employee_folder(employee, old_name, new_name):
+	"""Rename the Drive folder when employee_name changes."""
+	try:
+		from drive.utils import get_home_folder
+	except ImportError:
+		return
+
+	team_name = frappe.db.get_value("Drive Team", {"title": HR_TEAM_TITLE}, "name")
+	if not team_name:
+		return
+
+	home = get_home_folder(team_name)
+	root = frappe.db.get_value(
+		"Drive File",
+		{"title": EMPLOYEES_FOLDER, "parent_entity": home["name"], "is_group": 1, "is_active": 1},
+		"name",
+	)
+	if not root:
+		return
+
+	old_title = f"{old_name} ({employee})"
+	folder = frappe.db.get_value(
+		"Drive File",
+		{"title": old_title, "parent_entity": root, "is_group": 1, "is_active": 1},
+		"name",
+	)
+	if not folder:
+		return
+
+	new_title = f"{new_name} ({employee})"
+	frappe.db.set_value("Drive File", folder, "title", new_title)
+	frappe.db.commit()
 
 
 def _ensure_hr_team():

@@ -69,6 +69,7 @@ class CustomSalesOrder(IbStatusMixin, SalesOrder):
 
     def before_submit(self):
         _check_credit_limit(self)
+        _check_overdue_block(self)
 
 
 # ── Credit limit ──────────────────────────────────────────────────────────────
@@ -118,6 +119,15 @@ def _check_credit_limit(doc):
             f"Cannot submit: {name} has outstanding {outstanding_fmt} "
             f"(limit {limit_fmt}) with an invoice unpaid for {overdue_days} days "
             f"(allowed {row.custom_days} days). Clear dues or contact your manager."
+        )
+
+
+def _check_overdue_block(doc):
+    """Block SO submit when customer has a 30d+ overdue flag set by overdue_alert scheduler."""
+    if frappe.db.get_value("Customer", doc.customer, "custom_overdue_block"):
+        frappe.throw(
+            f"Cannot submit: {doc.customer_name or doc.customer} has invoices overdue 30+ days. "
+            "Clear outstanding dues to submit new orders. Contact Sales Manager to override."
         )
 
 
@@ -189,6 +199,13 @@ def reopen_sales_order(name):
 
 # ── Mapper: Sales Order → Delivery Note ──────────────────────────────────────
 
+_LOCATION_WAREHOUSE = {
+    "maharashtra": "MAHARASHTRA - IB",
+    "chennai":     "CHENNAI - IB",
+    "gujarat":     "GUJARAT - IB",
+}
+
+
 @frappe.whitelist()
 def custom_make_delivery_note(source_name, target_doc=None):
     def postprocess_parent(source_doc, target_doc, source_parent):
@@ -200,6 +217,10 @@ def custom_make_delivery_note(source_name, target_doc=None):
                 target_doc.customer_group = customer_doc.customer_group
             if not target_doc.get("territory") and customer_doc.territory:
                 target_doc.territory = customer_doc.territory
+        location = (source_doc.get("custom_location") or "").strip().lower()
+        warehouse = _LOCATION_WAREHOUSE.get(location)
+        if warehouse and not target_doc.set_warehouse:
+            target_doc.set_warehouse = warehouse
         map_parent_fields(source_doc, target_doc)
         map_address_contact_fields(source_doc, target_doc)
 
@@ -222,6 +243,8 @@ def custom_make_delivery_note(source_name, target_doc=None):
                 "condition": lambda row: row.qty != 0,
                 "field_map": {
                     **COMMON_CHILD_FIELD_MAP,
+                    "name":   "so_detail",
+                    "parent": "against_sales_order",
                 },
             },
             "Sales Taxes and Charges": {

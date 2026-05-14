@@ -31,6 +31,12 @@ scheduler_events = {
         "instabiz.overrides.auto_absent.run_auto_absent",
         # Alert HR when employee documents (Passport, PAN, etc.) expire within 30/7 days
         "instabiz.overrides.employee_docs.run_employee_doc_expiry",
+        # Alert Purchase roles when PO payment due within 7 days
+        "instabiz.overrides.vendor_payment_alert.run_vendor_payment_alert",
+        # Overdue Sales Invoice reminders: 7d bell to rep, 15d to managers, 30d block + bell
+        "instabiz.overrides.overdue_alert.run_overdue_alert",
+        # Alert Accounts/Sales when PDC cheque date is 3 days away
+        "instabiz.overrides.pdc_alert.run_pdc_alert",
     ],
 }
 
@@ -170,6 +176,9 @@ doc_events = {
         ],
         "on_cancel": "instabiz.overrides.stock_events.publish_stock_update",
     },
+    "Sales Invoice": {
+        "on_submit": "instabiz.overrides.einvoice.run_einvoice_on_submit",
+    },
     "Stock Entry": {
         "on_submit": "instabiz.overrides.stock_events.publish_stock_update",
         "on_cancel": "instabiz.overrides.stock_events.publish_stock_update",
@@ -229,6 +238,7 @@ app_include_js  = [
     "/assets/instabiz/js/pincode.js",               # shared pincode autofill utility
     "/assets/instabiz/js/recalc.js",                # dimension → qty → amount helpers
     "/assets/instabiz/js/form.js",                  # form handlers (depends on recalc.js)
+    "/assets/instabiz/js/list_utils.js",            # shared list view helpers (status multiselect, extract filter values)
     "/assets/instabiz/js/comment_popover.js",       # inline comment popover on list rows
     # ib_stock_dashboard.js is loaded by Frappe's page engine (not global)
     # "/assets/instabiz/js/quotation_list.js",        # Quotation list view
@@ -255,4 +265,5 @@ doctype_js = {
     "Employee Exit Handover":  "public/js/employee_exit_handover.js",
     "IB Sample Request":       "public/js/sample_request.js",
     "Employee":                "public/js/employee.js",
+    "Job Applicant":           "public/js/job_applicant.js",
 }

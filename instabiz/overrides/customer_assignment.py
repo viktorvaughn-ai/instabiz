@@ -764,12 +764,21 @@ def get_admin_overview(date=None, territory=None, view_as_user=None):
 	if territory:
 		filters["territory"] = territory
 
-	# Build user→team map in one query
+	# Build user→team map — ORDER BY creation ASC so newest membership wins when user is in multiple teams
 	team_rows = frappe.db.sql(
-		"SELECT user, parent AS team FROM `tabLead Sales Team Member`",
+		"SELECT user, parent AS team FROM `tabLead Sales Team Member` ORDER BY creation ASC",
 		as_dict=True,
 	)
 	user_team_map = {r.user: r.team for r in team_rows}
+
+	# Build team→territories map for team header display
+	terr_rows = frappe.db.sql(
+		"SELECT parent AS team, territory FROM `tabLead Sales Team Territory`",
+		as_dict=True,
+	)
+	team_territory_map = {}
+	for r in terr_rows:
+		team_territory_map.setdefault(r.team, []).append(r.territory)
 
 	users = get_active_sales_users()
 	target_map = get_target_map(_month_first(date))
@@ -808,7 +817,7 @@ def get_admin_overview(date=None, territory=None, view_as_user=None):
 			"target_pct": t.get("pct", 0),
 		})
 
-	return {"date": date, "roster": roster}
+	return {"date": date, "roster": roster, "team_territories": team_territory_map}
 
 
 @frappe.whitelist()
@@ -894,5 +903,63 @@ def save_assignment_config(assignments_per_day, dormant_threshold_days, dormant_
 	doc.dormant_threshold_days = int(dormant_threshold_days)
 	doc.dormant_ratio = float(dormant_ratio)
 	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"status": "ok"}
+
+
+@frappe.whitelist()
+def get_team_details(team_name):
+	_require_manager()
+	doc = frappe.get_doc("Lead Sales Team", team_name)
+	members = []
+	for m in doc.members:
+		full_name = m.full_name or frappe.db.get_value("User", m.user, "full_name") or m.user
+		members.append({"user": m.user, "full_name": full_name})
+	territories = [{"territory": t.territory} for t in doc.territories]
+	return {"name": doc.name, "members": members, "territories": territories}
+
+
+@frappe.whitelist()
+def add_team_member(team_name, user):
+	_require_manager()
+	doc = frappe.get_doc("Lead Sales Team", team_name)
+	if any(m.user == user for m in doc.members):
+		frappe.throw(f"{user} is already a member of {team_name}")
+	# Remove from any other teams — one team per user, avoids roster ambiguity
+	frappe.db.delete("Lead Sales Team Member", {"user": user, "parent": ["!=", team_name]})
+	doc.append("members", {"user": user})
+	doc.save()
+	frappe.db.commit()
+	return {"status": "ok"}
+
+
+@frappe.whitelist()
+def remove_team_member(team_name, user):
+	_require_manager()
+	doc = frappe.get_doc("Lead Sales Team", team_name)
+	doc.members = [m for m in doc.members if m.user != user]
+	doc.save()
+	frappe.db.commit()
+	return {"status": "ok"}
+
+
+@frappe.whitelist()
+def add_team_territory(team_name, territory):
+	_require_manager()
+	doc = frappe.get_doc("Lead Sales Team", team_name)
+	if any(t.territory == territory for t in doc.territories):
+		frappe.throw(f"{territory} is already in {team_name}")
+	doc.append("territories", {"territory": territory})
+	doc.save()
+	frappe.db.commit()
+	return {"status": "ok"}
+
+
+@frappe.whitelist()
+def remove_team_territory(team_name, territory):
+	_require_manager()
+	doc = frappe.get_doc("Lead Sales Team", team_name)
+	doc.territories = [t for t in doc.territories if t.territory != territory]
+	doc.save()
 	frappe.db.commit()
 	return {"status": "ok"}

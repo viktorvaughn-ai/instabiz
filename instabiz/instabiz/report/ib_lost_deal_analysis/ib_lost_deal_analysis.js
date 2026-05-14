@@ -42,7 +42,21 @@ frappe.query_reports["IB Lost Deal Analysis"] = {
 				return { filters: { enabled: 1 } };
 			},
 		},
+		{
+			fieldname: "chart_type",
+			label: __("Chart Type"),
+			fieldtype: "Select",
+			options: "bar\npie\ndonut\nline\npercentage",
+			default: "bar",
+		},
 	],
+
+	after_render(report) {
+		const legend = report.chart_wrapper && report.chart_wrapper.querySelector(".chart-legend");
+		if (legend) {
+			legend.style.cssText = "display:flex;flex-wrap:wrap;justify-content:center;gap:6px 16px;";
+		}
+	},
 
 	formatter(value, row, column, data, default_formatter) {
 		value = default_formatter(value, row, column, data);

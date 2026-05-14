@@ -301,3 +301,42 @@ def transfer_leads(leads, to_user):
     )
 
     return {"transferred": len(leads), "to": full_name}
+
+
+@frappe.whitelist()
+def log_lead_activity(lead, activity_type, outcome, notes, next_follow_up_date=None):
+	"""Log a call/meeting/WA/email/visit activity on a Lead timeline."""
+	doc = frappe.get_doc("Lead", lead)
+	if not has_permission(doc, "write", frappe.session.user):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+	VALID_TYPES = {"Call", "Meeting", "WhatsApp", "Email", "Visit"}
+	VALID_OUTCOMES = {"Positive", "Neutral", "Negative", "No Answer"}
+	if activity_type not in VALID_TYPES:
+		frappe.throw(_("Invalid activity type"))
+	if outcome not in VALID_OUTCOMES:
+		frappe.throw(_("Invalid outcome"))
+
+	actor = frappe.db.get_value("User", frappe.session.user, "full_name") or frappe.session.user
+	icon_map = {"Call": "📞", "Meeting": "🤝", "WhatsApp": "💬", "Email": "📧", "Visit": "📍"}
+
+	parts = [f"{icon_map[activity_type]} <b>{activity_type}</b> — Outcome: <b>{outcome}</b>"]
+	if notes:
+		parts.append(frappe.utils.escape_html(notes).replace("\n", "<br>"))
+	if next_follow_up_date:
+		parts.append(f"Next follow-up: <b>{next_follow_up_date}</b>")
+	parts.append(f"<i>Logged by {actor}</i>")
+
+	frappe.get_doc({
+		"doctype": "Comment",
+		"comment_type": "Info",
+		"reference_doctype": "Lead",
+		"reference_name": lead,
+		"content": "<br>".join(parts),
+		"owner": frappe.session.user,
+	}).insert(ignore_permissions=True)
+
+	if next_follow_up_date:
+		frappe.db.set_value("Lead", lead, "custom_next_follow_up_date", next_follow_up_date, update_modified=False)
+
+	return "ok"

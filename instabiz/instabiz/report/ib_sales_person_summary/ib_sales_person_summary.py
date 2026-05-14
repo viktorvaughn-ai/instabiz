@@ -8,7 +8,7 @@ def execute(filters=None):
 	_validate(filters)
 	columns = _columns()
 	data = _data(filters)
-	return columns, data, None, _chart(data), _summary(data)
+	return columns, data, None, _chart(data, filters), _summary(data)
 
 
 def _validate(filters):
@@ -75,15 +75,16 @@ def _data(filters):
 	)
 
 
-def _chart(data):
+def _chart(data, filters=None):
 	if not data:
 		return None
+	chart_type = (filters or {}).get("chart_type") or "bar"
 	return {
 		"data": {
 			"labels": [r.sales_person for r in data],
 			"datasets": [{"name": _("Total Amount"), "values": [r.total_amount or 0 for r in data]}],
 		},
-		"type": "bar",
+		"type": chart_type,
 		"colors": ["#d97757"],
 		"barOptions": {"stacked": 0},
 	}

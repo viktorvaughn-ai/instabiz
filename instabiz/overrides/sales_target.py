@@ -116,6 +116,29 @@ def get_target_map(month_first):
 	return result
 
 
+@frappe.whitelist()
+def set_user_target(sales_user, month, target_amount):
+	"""Create or update IB Sales Target for a user. Requires Sales Manager / System Manager."""
+	_require_manager()
+	mf = _month_first(month)
+	target_amount = flt(target_amount)
+	existing = _get_target_doc(sales_user, mf)
+	if existing:
+		frappe.db.set_value("IB Sales Target", existing.name, "target_amount", target_amount)
+	else:
+		doc = frappe.get_doc({
+			"doctype": "IB Sales Target",
+			"sales_user": sales_user,
+			"month": mf,
+			"target_amount": target_amount,
+		})
+		doc.insert(ignore_permissions=True)
+	frappe.db.commit()
+	actual = _get_actuals(sales_user, mf)
+	pct = round(actual / target_amount * 100) if target_amount else 0
+	return {"status": "ok", "target": target_amount, "actual": actual, "pct": min(pct, 100)}
+
+
 def _require_manager():
 	if not any(r in frappe.get_roles() for r in ["Sales Manager", "System Manager"]):
 		frappe.throw("Not permitted", frappe.PermissionError)
