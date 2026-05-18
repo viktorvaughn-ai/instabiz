@@ -3,6 +3,26 @@ import frappe
 from frappe import _
 
 
+# ── Location → company billing address + GSTIN ───────────────────────────────
+LOCATION_COMPANY_ADDRESS = {
+    "maharashtra": "Instabiz Solutions India Pvt Ltd-Billing-1",
+    "gujarat":     "Instabiz Gujarat-Billing",
+    "chennai":     "INSTABIZ SOLUTIONS CHENNAI-Billing",
+}
+
+LOCATION_COMPANY_GSTIN = {
+    "maharashtra": "27AAECI3431Q1Z8",
+    "gujarat":     "24AAECI3431Q1ZE",
+    "chennai":     "33AAECI3431Q1ZF",
+}
+
+# ── Location → warehouse (for place of dispatch) ──────────────────────────────
+LOCATION_WAREHOUSE = {
+    "maharashtra": "MAHARASHTRA - IB",
+    "gujarat":     "GUJARAT - IB",
+    "chennai":     "CHENNAI - IB",
+}
+
 # ── Dimension fields carried across all transaction child rows ────────────────
 DIMENSION_FIELDS = [
     "color",

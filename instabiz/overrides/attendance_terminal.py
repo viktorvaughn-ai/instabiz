@@ -102,6 +102,19 @@ def get_employees_with_status(search=None, department=None, employee_category=No
 		as_dict=True,
 	)
 
+	# Fetch shift start/end times so frontend can detect late/early arrivals
+	shift_rows = frappe.db.sql(
+		"""
+		SELECT e.name, st.start_time, st.end_time
+		FROM `tabEmployee` e
+		LEFT JOIN `tabShift Type` st ON st.name = e.default_shift
+		WHERE e.name IN %(employees)s
+		""",
+		{"employees": emp_names},
+		as_dict=True,
+	)
+	shift_map = {r.name: r for r in shift_rows}
+
 	logs_by_emp = {}
 	for r in rows:
 		logs_by_emp.setdefault(r.employee, []).append(r)
@@ -117,6 +130,10 @@ def get_employees_with_status(search=None, department=None, employee_category=No
 		else:
 			emp["last_log_type"]    = logs[-1].log_type
 			emp["last_checkin_time"] = str(logs[-1].time)
+
+		shift = shift_map.get(emp.name, {})
+		emp["shift_start_seconds"] = int(shift.get("start_time").total_seconds()) if shift.get("start_time") else None
+		emp["shift_end_seconds"]   = int(shift.get("end_time").total_seconds())   if shift.get("end_time")   else None
 
 	if status:
 		status_map = {"In": "IN", "Out": "OUT", "Absent": None}
@@ -141,21 +158,24 @@ def get_terminal_context():
 
 
 @frappe.whitelist()
-def create_checkin(employee, log_type):
+def create_checkin(employee, log_type, late_reason=None):
 	"""Create an Employee Checkin from the Attendance Terminal."""
 	if log_type not in ("IN", "OUT"):
 		frappe.throw(_("Invalid log_type"))
 
 	shift = frappe.db.get_value("Employee", employee, "default_shift")
 
-	frappe.get_doc({
+	doc = frappe.get_doc({
 		"doctype":   "Employee Checkin",
 		"employee":  employee,
 		"log_type":  log_type,
 		"time":      now_datetime(),
 		"device_id": "Attendance Terminal",
 		"shift":     shift,
-	}).insert(ignore_permissions=True)
+	})
+	if late_reason:
+		doc.custom_late_reason = late_reason
+	doc.insert(ignore_permissions=True)
 
 	return {"log_type": log_type}
 

@@ -220,11 +220,68 @@ function bind_row($row, emp, state, $wrap, page) {
 	$row.find(".at-btn-absent").on("click", () => do_mark_absent(emp, $row, state, $wrap, page));
 }
 
-function do_checkin(emp, log_type, $row, state, $wrap) {
+const LATE_GRACE_SECONDS = 10 * 60; // 10-minute grace window
+
+function _seconds_since_midnight() {
+	const now = new Date();
+	return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+}
+
+function _is_late_in(emp) {
+	if (emp.shift_start_seconds == null) return false;
+	return _seconds_since_midnight() > emp.shift_start_seconds + LATE_GRACE_SECONDS;
+}
+
+function _is_early_out(emp) {
+	if (emp.shift_end_seconds == null) return false;
+	return _seconds_since_midnight() < emp.shift_end_seconds - LATE_GRACE_SECONDS;
+}
+
+function _is_today($wrap) {
+	const selected = $wrap.closest("[data-page-route]").find(".at-date").val();
+	return !selected || selected === frappe.datetime.get_today();
+}
+
+function show_reason_dialog(title, default_preset, callback) {
+	const presets    = ["", __("Came Late"), __("Left Early"), __("Traffic Delay"), __("Personal Emergency"), __("Other")];
+	const has_preset = !!default_preset;
+	const d = new frappe.ui.Dialog({
+		title,
+		fields: [
+			{
+				fieldname: "reason_preset",
+				fieldtype: "Select",
+				label:     __("Reason (optional)"),
+				options:   presets.join("\n"),
+				default:   default_preset,
+			},
+			{
+				fieldname: "custom_reason",
+				fieldtype: "Small Text",
+				label:     __("Details"),
+				depends_on: "eval:doc.reason_preset === '" + __("Other") + "'",
+			},
+		],
+		primary_action_label: __("Confirm"),
+		primary_action(values) {
+			let reason = null;
+			if (values.reason_preset === __("Other")) {
+				reason = values.custom_reason || __("Other");
+			} else if (values.reason_preset) {
+				reason = values.reason_preset;
+			}
+			d.hide();
+			callback(reason);
+		},
+	});
+	d.show();
+}
+
+function _execute_checkin(emp, log_type, late_reason, $row) {
 	$row.find(".at-btn").prop("disabled", true);
 	frappe.call({
 		method: API.create_checkin,
-		args:   { employee: emp.name, log_type },
+		args:   { employee: emp.name, log_type, late_reason: late_reason || null },
 		callback: ({ exc }) => {
 			if (exc) { restore_buttons(emp, $row); return; }
 			emp.last_log_type = log_type;
@@ -238,6 +295,27 @@ function do_checkin(emp, log_type, $row, state, $wrap) {
 			});
 		},
 	});
+}
+
+function do_checkin(emp, log_type, $row, state, $wrap) {
+	const today_mode = _is_today($wrap);
+	const is_late    = today_mode && log_type === "IN"  && _is_late_in(emp);
+	const is_early   = today_mode && log_type === "OUT" && _is_early_out(emp);
+
+	let title, default_preset;
+	if (log_type === "IN") {
+		title          = is_late
+			? __("Late Arrival — {0}", [emp.employee_name])
+			: __("Check-in — {0}", [emp.employee_name]);
+		default_preset = is_late ? __("Came Late") : "";
+	} else {
+		title          = is_early
+			? __("Early Departure — {0}", [emp.employee_name])
+			: __("Check-out — {0}", [emp.employee_name]);
+		default_preset = is_early ? __("Left Early") : "";
+	}
+
+	show_reason_dialog(title, default_preset, reason => _execute_checkin(emp, log_type, reason, $row));
 }
 
 function do_mark_absent(emp, $row, state, $wrap, page) {

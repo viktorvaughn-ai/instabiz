@@ -575,6 +575,31 @@ def claim_customer(customer):
 
 
 @frappe.whitelist()
+def bulk_claim_customers(customers):
+	"""Claim multiple customers for the current manager."""
+	import json
+	_require_manager()
+	if isinstance(customers, str):
+		customers = json.loads(customers)
+	user = frappe.session.user
+	claimed = []
+	skipped = []
+	for customer in customers:
+		existing = frappe.db.get_value("Customer", customer, "ib_claimed_by")
+		if existing and existing != user:
+			skipped.append(customer)
+			continue
+		frappe.db.set_value("Customer", customer, {
+			"ib_claimed_by": user,
+			"ib_claimed_on": now(),
+		})
+		claimed.append(customer)
+	if claimed:
+		frappe.db.commit()
+	return {"status": "ok", "claimed": len(claimed), "skipped": skipped}
+
+
+@frappe.whitelist()
 def unclaim_customer(customer):
 	"""Release a claimed customer back to the general assignment pool."""
 	_require_manager()

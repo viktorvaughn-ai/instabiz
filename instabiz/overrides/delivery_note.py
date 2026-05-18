@@ -9,6 +9,8 @@ from instabiz.overrides.naming import autoname_delivery_note
 from instabiz.overrides.utils import (
     COMMON_CHILD_FIELD_MAP,
     COMMON_PARENT_FIELD_MAP,
+    LOCATION_COMPANY_ADDRESS,
+    LOCATION_COMPANY_GSTIN,
     IbStatusMixin,
     item_postprocess,
     map_address_contact_fields,
@@ -37,14 +39,23 @@ class CustomDeliveryNote(IbStatusMixin, DeliveryNote):
     def validate(self):
         if not self.custom_location or self.custom_location == "Select":
             frappe.throw(frappe._("Please select a Location before saving."))
+        loc = (self.custom_location or "").lower()
+        addr = LOCATION_COMPANY_ADDRESS.get(loc)
+        if addr:
+            self.company_address = addr
+            self.dispatch_address_name = None
+        gstin = LOCATION_COMPANY_GSTIN.get(loc)
+        if gstin:
+            self.company_gstin = gstin
         set_sales_person(self)
         sync_sales_team(self)
         recalculate_items(self)
         super().validate()
 
     def before_submit(self):
+        is_self_pickup = (self.get("custom_transport") or "").strip().upper() == "SELF PICKUP"
         missing = []
-        if not (self.get("lr_no") or self.get("custom_lr_number")):
+        if not is_self_pickup and not (self.get("lr_no") or self.get("custom_lr_number")):
             missing.append("LR Number")
         if not (self.get("custom_transport") or self.get("transporter")):
             missing.append("Transporter / Transport Company")

@@ -113,6 +113,10 @@ class IBCustomerBoard {
 							${IB_ICONS.svg("moon", 13)}<span class="ib-cb-col-title">Dormant</span>
 							<span class="ib-cb-col-badge" id="ib-cb-dormant-count">0</span>
 						</div>
+						<div class="ib-cb-col-bulk" id="ib-cb-dormant-bulk" style="display:none">
+							<label class="ib-cb-bulk-selall"><input type="checkbox" id="ib-cb-dormant-selall"> Select all</label>
+							<button class="ib-cb-pill ib-cb-pill--claim ib-cb-bulk-claim-btn" id="ib-cb-dormant-bulk-btn" disabled>Claim 0</button>
+						</div>
 						<div class="ib-cb-col-search">
 							<input class="ib-cb-pool-search" id="ib-cb-dormant-search" placeholder="Search…" autocomplete="off">
 						</div>
@@ -122,6 +126,10 @@ class IBCustomerBoard {
 						<div class="ib-cb-col-header">
 							${IB_ICONS.svg("users", 13)}<span class="ib-cb-col-title">Regular</span>
 							<span class="ib-cb-col-badge" id="ib-cb-regular-count">0</span>
+						</div>
+						<div class="ib-cb-col-bulk" id="ib-cb-regular-bulk" style="display:none">
+							<label class="ib-cb-bulk-selall"><input type="checkbox" id="ib-cb-regular-selall"> Select all</label>
+							<button class="ib-cb-pill ib-cb-pill--claim ib-cb-bulk-claim-btn" id="ib-cb-regular-bulk-btn" disabled>Claim 0</button>
 						</div>
 						<div class="ib-cb-col-search">
 							<input class="ib-cb-pool-search" id="ib-cb-regular-search" placeholder="Search…" autocomplete="off">
@@ -245,6 +253,10 @@ class IBCustomerBoard {
 			rows.forEach((r) => $cards.append(this._make_card(r, "pool")));
 		}
 		this._bind_search(col, "backend");
+		if (this._is_manager) {
+			$(`#ib-cb-${col}-bulk`).show();
+			this._bind_pool_bulk(col);
+		}
 	}
 
 	// ── Unified search binding ────────────────────────────────────────────────
@@ -427,8 +439,12 @@ class IBCustomerBoard {
 						${IB_ICONS.svg("star", 10)} Claim
 					</button>`
 				: "";
+			const checkbox_html = this._is_manager
+				? `<input type="checkbox" class="ib-cb-card-checkbox" data-customer="${frappe.utils.escape_html(r.customer)}">`
+				: "";
 			inner_html = `
 				<div class="ib-cb-card-top">
+					${checkbox_html}
 					<div class="ib-cb-card-name">${name_html}</div>
 				</div>
 				${territory_line}
@@ -962,6 +978,58 @@ class IBCustomerBoard {
 	}
 
 	// ── Claim / Unclaim ───────────────────────────────────────────────────────
+
+	// ── Bulk claim ──────────────────────────────────────────────────────────────────────────────────────────
+
+	_bind_pool_bulk(col) {
+		const self = this;
+		const $col_cards = $(`#ib-cb-${col}-cards`);
+		const $selall = $(`#ib-cb-${col}-selall`);
+		const $btn = $(`#ib-cb-${col}-bulk-btn`);
+
+		const update_count = () => {
+			const n = $col_cards.find(".ib-cb-card-checkbox:checked").length;
+			const total = $col_cards.find(".ib-cb-card-checkbox").length;
+			$btn.text(`Claim ${n}`).prop("disabled", n === 0);
+			$selall.prop("indeterminate", n > 0 && n < total);
+			$selall.prop("checked", n > 0 && n === total);
+		};
+
+		$selall.off("change").on("change", function () {
+			$col_cards.find(".ib-cb-card-checkbox").prop("checked", this.checked);
+			update_count();
+		});
+
+		$col_cards.off("change.bulk").on("change.bulk", ".ib-cb-card-checkbox", update_count);
+		$btn.off("click").on("click", () => self._bulk_claim(col));
+
+		$selall.prop("checked", false).prop("indeterminate", false);
+		$btn.text("Claim 0").prop("disabled", true);
+	}
+
+	_bulk_claim(col) {
+		const self = this;
+		const customers = [];
+		$(`#ib-cb-${col}-cards .ib-cb-card-checkbox:checked`).each(function () {
+			customers.push($(this).data("customer"));
+		});
+		if (!customers.length) return;
+
+		frappe.call({
+			method: "instabiz.overrides.customer_assignment.bulk_claim_customers",
+			args: { customers: JSON.stringify(customers) },
+			callback(r) {
+				if (r.message) {
+					const { claimed, skipped } = r.message;
+					let msg = `${claimed} customer${claimed !== 1 ? "s" : ""} claimed`;
+					if (skipped.length) msg += `, ${skipped.length} skipped (already claimed by others)`;
+					frappe.show_alert({ message: msg, indicator: claimed ? "green" : "orange" });
+					self.refresh();
+				}
+			},
+		});
+	}
+
 
 	_claim_customer(customer, $card) {
 		const self = this;

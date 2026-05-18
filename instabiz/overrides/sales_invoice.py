@@ -2,7 +2,7 @@
 import frappe
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import SalesInvoice  # pyright: ignore[reportMissingImports]
 
-from instabiz.overrides.utils import IbStatusMixin, recalculate_items, set_sales_person, sync_sales_team
+from instabiz.overrides.utils import LOCATION_COMPANY_ADDRESS, LOCATION_COMPANY_GSTIN, IbStatusMixin, recalculate_items, set_sales_person, sync_sales_team
 from instabiz.overrides.naming import autoname_sales_invoice
 
 
@@ -31,6 +31,13 @@ class CustomSalesInvoice(IbStatusMixin, SalesInvoice):
     def validate(self):
         if not self.custom_location or self.custom_location == "Select":
             frappe.throw(frappe._("Please select a Location before saving."))
+        loc = (self.custom_location or "").lower()
+        addr = LOCATION_COMPANY_ADDRESS.get(loc)
+        if addr:
+            self.company_address = addr
+        gstin = LOCATION_COMPANY_GSTIN.get(loc)
+        if gstin:
+            self.company_gstin = gstin
         set_sales_person(self)
         sync_sales_team(self)
         recalculate_items(self)

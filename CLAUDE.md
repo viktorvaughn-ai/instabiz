@@ -177,6 +177,38 @@ These rules are mandatory for all agents working on this repo. Do not skip them.
 
 ---
 
+## GST & NIC API Configuration State (as of 2026-05-18)
+
+### Credentials in GST Settings (tabGST Credential)
+| GSTIN | State | Username | Service |
+|-------|-------|----------|---------|
+| 27AAECI3431Q1Z8 | Maharashtra | API_Instabiz | e-Waybill / e-Invoice |
+| 24AAECI3431Q1ZE | Gujarat | API_instabizguj | e-Waybill / e-Invoice |
+| 33AAECI3431Q1ZF | Tamil Nadu | API_INSTABIZCHENNAI | e-Waybill / e-Invoice |
+
+### GST Settings flags
+- `enable_api=1`, `enable_e_invoice=1`, `auto_generate_e_invoice=1`
+- `generate_e_waybill_with_e_invoice=1`, `e_invoice_applicable_from=2026-03-14`
+- `sandbox_mode=0` (production)
+
+### NIC Portal Setup (Adaequare GSP)
+GSP = **Adaequare Info Private Limited** (Resilient Tech routes through Adaequare).
+On einvoice1.gst.gov.in → Registration → For GSP → select Adaequare → create sub-user.
+
+| GSTIN | NIC Sub-User | Status |
+|-------|-------------|--------|
+| 27AAECI3431Q1Z8 MH | API_instabiz676 | LIVE — IRN tested 2026-05-18 |
+| 24AAECI3431Q1ZE GJ | API_instabizguj | Pending NIC portal registration |
+| 33AAECI3431Q1ZF TN | API_INSTABIZCHENNAI | Pending NIC portal registration |
+
+### Production test result (2026-05-18)
+- **IRN generation + cancellation**: WORKING. Tested on IB-SGM-INV-00002.
+- **E-Waybill generation + cancellation**: WORKING. EWB 252204142107 with Part B (vehicle MH43AJ5555).
+- HSN 76071990 rejected by NIC — corrected to 76072090 on item master.
+- `generate_e_waybill_with_e_invoice=1` fires both together on SI submit.
+
+---
+
 ## xlsx Status Discrepancies
 
 No outstanding discrepancies.
@@ -278,6 +310,7 @@ All 11 Script Reports have a `chart_type` filter (Select: `bar/pie/donut/line/pe
 | `*_list.js` | List view customizations per doctype |
 | `ib_color_map.js` | window.IB_COLOR_MAP — color name → hex (70+ entries); null = transparent/checkerboard; loaded globally |
 | `ib_item_price_list_list.js` | Doctype list view for IB Item Price List — immediately redirects to `ib-price-list` page |
+| `list_utils.js` | Shared list view helpers: `ib_extract_filter_values`, `ib_setup_status_multiselect`, `ib_disable_status_click_filter` — loaded globally via `app_include_js` |
 
 ### SO List total bar
 - `sales_order_list.js` has a sticky selection total bar (`ib-so-total-bar`) appended to `body`.
@@ -285,15 +318,22 @@ All 11 Script Reports have a `chart_type` filter (Select: `bar/pie/donut/line/pe
 - Fix: patch `listview.refresh` in `onload` to re-call `ib_setup_so_total_bar(listview)` when bar is missing.
 - **Do NOT use `before_render`** in `frappe.listview_settings` — `this` context is the settings object, not the listview; accessing `this.$result` throws and breaks all rendering.
 
-### Latest list-view update (2026-04)
-- Lead, Quotation, and Sales Order list views now use a **custom compact MultiSelectList status filter** in the standard filter row.
+### Latest list-view update (2026-04 / 2026-05)
+- Lead, Quotation, Sales Order, **Delivery Note**, and **Sales Invoice** list views all use a **custom compact MultiSelectList status filter** in the standard filter row.
 - Existing native status filter fields are hidden in UI and replaced by helper controls:
   - Lead uses `custom_status`
   - Quotation uses `status`
   - Sales Order uses `status`
+  - Delivery Note uses `status` (statuses: Draft, Pending, Confirmed, Return Issued, Cancelled)
+  - Sales Invoice uses `status` (statuses: Draft, Unpaid, Overdue, Paid, Return, Cancelled)
 - Multi-select values are applied via list filters using `in` operator (array values), then list is refreshed.
 - Existing row-level status picker behavior on Lead remains intact.
 - UI details: no visible label (`only_input: true`), compact width (`140px`), control inserted in standard filter section (not right-corner page form fallback unless needed).
+- **Shared helpers** live in `public/js/list_utils.js` (loaded globally via `app_include_js`):
+  - `ib_extract_filter_values(value)` — extracts selected values from a MultiSelectList control
+  - `ib_setup_status_multiselect(listview, doctype, statuses)` — parameterised setup for any doctype
+  - `ib_disable_status_click_filter(listview)` — disables indicator pill click-to-filter
+  - `quotation_list.js` and `sales_order_list.js` refactored to call these instead of local copies
 
 ### Lead row status picker (must preserve)
 - File: `instabiz/public/js/lead_list.js`

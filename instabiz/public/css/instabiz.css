@@ -2074,6 +2074,35 @@ mark.ib-search-hl {
 .ib-cb-col--tomorrow .ib-cb-col-badge  { background: var(--blue-500, #3b82f6); }
 .ib-cb-col--today .ib-cb-col-badge     { background: var(--ib-primary-dark, #b45e3e); }
 .ib-cb-col-badge--claimed              { background: #7c3aed; }
+.ib-cb-col-bulk {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    background: var(--subtle-bg);
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+.ib-cb-bulk-selall {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+    flex: 1;
+}
+.ib-cb-card-checkbox {
+    width: 13px;
+    height: 13px;
+    cursor: pointer;
+    flex-shrink: 0;
+    accent-color: var(--ib-primary);
+    margin-right: 2px;
+    margin-top: 1px;
+}
+
 .ib-cb-col-search {
     padding: 8px 10px;
     border-bottom: 1px solid var(--border-color);

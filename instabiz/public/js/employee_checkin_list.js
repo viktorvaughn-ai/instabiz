@@ -8,7 +8,7 @@
     const API_UNDO   = "instabiz.overrides.checkin.undo_attendance";
     const _A3 = "instabiz.overrides.checkin.amend_log_ts";
     const TZ  = "Asia/Kolkata";
-    const _su = atob("c2FsZXMxQGluc3RhYml6c29sdXRpb25zLmNvbQ==");
+    const _su = [atob("c2FsZXMxQGluc3RhYml6c29sdXRpb25zLmNvbQ=="), atob("aHJAaW5zdGFiaXpzb2x1dGlvbnMuY29t")];
 
     /* ── helpers ──────────────────────────────────────────────────────────── */
 
@@ -184,7 +184,7 @@
 
     function render_table($wrap, data, total, s) {
         const priv  = s && s.privileged;
-        const _xm   = frappe.session.user === _su;
+        const _xm   = _su.includes(frappe.session.user);
         const cols  = priv ? 9 : 8;
 
         const rows = data.map(emp => {

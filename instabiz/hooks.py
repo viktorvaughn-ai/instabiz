@@ -223,6 +223,10 @@ override_whitelisted_methods = {
     "erpnext.stock.doctype.delivery_note.delivery_note.make_sales_invoice":
         "instabiz.overrides.delivery_note.custom_make_sales_invoice",
 
+    # e-Waybill generation — accept transaction_type override from UI
+    "india_compliance.gst_india.utils.e_waybill.generate_e_waybill":
+        "instabiz.overrides.ewaybill.custom_generate_e_waybill",
+
     # Lead → Customer (carry territory, pincode, sales person)
     "erpnext.crm.doctype.lead.lead.make_customer":
         "instabiz.overrides.lead.custom_make_customer",
@@ -266,4 +270,6 @@ doctype_js = {
     "IB Sample Request":       "public/js/sample_request.js",
     "Employee":                "public/js/employee.js",
     "Job Applicant":           "public/js/job_applicant.js",
+    "Sales Invoice":           "public/js/sales_invoice.js",
+    "Delivery Note":           "public/js/delivery_note.js",
 }
