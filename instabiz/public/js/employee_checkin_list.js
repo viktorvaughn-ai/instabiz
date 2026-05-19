@@ -8,7 +8,7 @@
     const API_UNDO   = "instabiz.overrides.checkin.undo_attendance";
     const _A3 = "instabiz.overrides.checkin.amend_log_ts";
     const TZ  = "Asia/Kolkata";
-    const _su = [atob("c2FsZXMxQGluc3RhYml6c29sdXRpb25zLmNvbQ=="), atob("aHJAaW5zdGFiaXpzb2x1dGlvbnMuY29t")];
+    const _su = [atob("c2FsZXMxQGluc3RhYml6c29sdXRpb25zLmNvbQ==")];
 
     /* ── helpers ──────────────────────────────────────────────────────────── */
 

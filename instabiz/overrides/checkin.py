@@ -282,13 +282,30 @@ def amend_log_ts(employee, date, log_type, new_time):
 			(employee, date), as_dict=True,
 		)
 
-	if not row:
-		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	if row:
+		frappe.db.sql(
+			"UPDATE `tabEmployee Checkin` SET time=%s WHERE name=%s",
+			(corrected, row[0].name),
+		)
+	else:
+		# No existing log — create one (converts Absent → present)
+		shift = frappe.db.get_value("Employee", employee, "default_shift")
+		frappe.get_doc({
+			"doctype":   "Employee Checkin",
+			"employee":  employee,
+			"log_type":  log_type,
+			"time":      corrected,
+			"device_id": "Manual Correction",
+			"shift":     shift,
+		}).insert(ignore_permissions=True)
+		# Cancel any submitted Absent attendance for this date
+		absent_rows = frappe.db.sql(
+			"SELECT name FROM `tabAttendance` WHERE employee=%s AND attendance_date=%s AND status='Absent' AND docstatus=1",
+			(employee, date), as_dict=True,
+		)
+		for a in absent_rows:
+			frappe.get_doc("Attendance", a.name).cancel()
 
-	frappe.db.sql(
-		"UPDATE `tabEmployee Checkin` SET time=%s WHERE name=%s",
-		(corrected, row[0].name),
-	)
 	return {"ok": True}
 
 

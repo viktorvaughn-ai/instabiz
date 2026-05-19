@@ -22,7 +22,7 @@ frappe.router.on("change", function () {
 });
 
 const IB_DOCTYPES        = ["Quotation", "Sales Order", "Delivery Note", "Sales Invoice"];
-const IB_REOPEN_DOCTYPES = ["Quotation", "Sales Order"];
+const IB_REOPEN_DOCTYPES = ["Quotation", "Sales Order", "Delivery Note", "Sales Invoice"];
 const IB_DEBOUNCE        = 500; // Increased to 500ms for stable decimal input
 
 IB_DOCTYPES.forEach(function (doctype) {
@@ -52,19 +52,22 @@ IB_DOCTYPES.forEach(function (doctype) {
             }
 
             // Custom Reopen logic for Cancelled documents
+            // Server enforces permissions — no client-side role check needed
             if (
                 frm.doc.docstatus === 2 &&
-                IB_REOPEN_DOCTYPES.includes(doctype) &&
-                frappe.model.can_cancel(doctype)
+                IB_REOPEN_DOCTYPES.includes(doctype)
             ) {
                 frm.page.set_primary_action(__("Reopen"), function () {
                     frappe.confirm(
                         __("Reopen this {0}?").replace("{0}", __(doctype)),
                         function () {
                             frappe.call({
-                                method: doctype === "Quotation"
-                                    ? "instabiz.overrides.quotation.reopen_quotation"
-                                    : "instabiz.overrides.sales_order.reopen_sales_order",
+                                method: {
+                                    "Quotation":      "instabiz.overrides.quotation.reopen_quotation",
+                                    "Sales Order":    "instabiz.overrides.sales_order.reopen_sales_order",
+                                    "Delivery Note":  "instabiz.overrides.delivery_note.reopen_delivery_note",
+                                    "Sales Invoice":  "instabiz.overrides.sales_invoice.reopen_sales_invoice",
+                                }[doctype],
                                 args: { name: frm.doc.name },
                                 freeze: true,
                                 freeze_message: __("Reopening…"),
@@ -79,9 +82,9 @@ IB_DOCTYPES.forEach(function (doctype) {
         },
 
 
-        after_save:   (frm) => frm.refresh(),
-        on_submit:    (frm) => frm.refresh(),
-        after_cancel: (frm) => frm.refresh(),
+        // after_save / on_submit / after_cancel — Frappe triggers frm.refresh()
+        // automatically; redundant calls here caused race conditions with
+        // india_compliance's internal reload (e-waybill / IRN generation dialog).
     });
 
     // Child Table Triggers

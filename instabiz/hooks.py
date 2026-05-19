@@ -179,6 +179,11 @@ doc_events = {
     "Sales Invoice": {
         "on_submit": "instabiz.overrides.einvoice.run_einvoice_on_submit",
     },
+    "Payment Entry": {
+        "before_submit": "instabiz.overrides.payment_entry.before_submit",
+        "on_submit":     "instabiz.overrides.payment_entry.on_submit",
+        "on_cancel":     "instabiz.overrides.payment_entry.on_cancel",
+    },
     "Stock Entry": {
         "on_submit": "instabiz.overrides.stock_events.publish_stock_update",
         "on_cancel": "instabiz.overrides.stock_events.publish_stock_update",

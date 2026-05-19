@@ -83,7 +83,7 @@ def autoname_delivery_note(doc, method=None):
 
 def autoname_sales_invoice(doc, method=None):
     wh = get_warehouse_code(doc)
-    # If created from a Delivery Note reuse its number so DN/SI share the same sequence slot.
+    # If created from a Delivery Note, reuse its number so DN/SI share the same sequence slot.
     # Mapper sets delivery_note on the parent SI doc; fall back to checking item rows.
     dn_name = doc.get("delivery_note") or ""
     if not dn_name:
@@ -93,8 +93,12 @@ def autoname_sales_invoice(doc, method=None):
                 break
     if dn_name and "-DN-" in dn_name:
         num_str = dn_name.split("-DN-")[-1]
-        doc.name = f"IB-{wh}-INV-{num_str}"
-        return
-    # Standalone SI — consume the next global number
+        candidate = f"IB-{wh}-INV-{num_str}"
+        # Only reuse if not already taken by a cancelled (or any) existing doc.
+        if not frappe.db.exists("Sales Invoice", candidate):
+            doc.name = candidate
+            return
+        # Cancelled SI with that name still occupies the slot — fall through to new number.
+    # Standalone SI, or DN-reuse conflict — consume the next global number.
     num = get_next_dn_si_number()
     doc.name = f"IB-{wh}-INV-{num:05d}"

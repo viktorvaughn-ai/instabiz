@@ -1,0 +1,628 @@
+{# ── Company ─────────────────────────────────────────────────────────────────── #}
+{% set co = frappe.get_doc("Company", doc.company) %}
+{% set co_addr = frappe.db.get_value("Address", doc.company_address,
+    ["address_line1","address_line2","city","state","pincode"], as_dict=True)
+    if doc.company_address else None %}
+
+{# ── e-Invoice Log ────────────────────────────────────────────────────────────── #}
+{% set einv = frappe.db.get_value("e-Invoice Log",
+    {"reference_doctype": "Sales Invoice", "reference_name": doc.name},
+    ["irn","signed_qr_code","acknowledgement_number","acknowledged_on"], as_dict=True) %}
+{# irn may be blank on the SI itself; use the log's copy #}
+{% set _irn = (einv.irn if einv else None) or doc.irn or "" %}
+
+{# ── e-Waybill Log (SI first, then first linked DN) ───────────────────────────── #}
+{% set ewb_log = frappe.db.get_value("e-Waybill Log",
+    {"reference_doctype": "Sales Invoice", "reference_name": doc.name, "is_cancelled": 0},
+    ["data","e_waybill_number","created_on","valid_upto"], as_dict=True) %}
+{% if not ewb_log %}
+  {% set ns_dn = namespace(v=[]) %}
+  {% for item in doc.items %}
+    {% if item.delivery_note and item.delivery_note not in ns_dn.v %}
+      {% set _ = ns_dn.v.append(item.delivery_note) %}
+    {% endif %}
+  {% endfor %}
+  {% if ns_dn.v %}
+    {% set ewb_log = frappe.db.get_value("e-Waybill Log",
+        {"reference_doctype": "Delivery Note", "reference_name": ns_dn.v[0], "is_cancelled": 0},
+        ["data","e_waybill_number","created_on","valid_upto"], as_dict=True) %}
+  {% endif %}
+{% endif %}
+{% set ewb = _dict(json.loads(ewb_log.data)) if ewb_log and ewb_log.data else None %}
+
+{# ── Customer Addresses ───────────────────────────────────────────────────────── #}
+{% set ship_name = doc.shipping_address_name or doc.customer_address %}
+{% set ship_addr = frappe.db.get_value("Address", ship_name,
+    ["address_line1","address_line2","city","state","pincode","gstin","phone"], as_dict=True)
+    if ship_name else None %}
+{% set bill_addr = frappe.db.get_value("Address", doc.customer_address,
+    ["address_line1","address_line2","city","state","pincode","gstin","phone"], as_dict=True)
+    if doc.customer_address else None %}
+
+{# ── Delivery Notes ───────────────────────────────────────────────────────────── #}
+{% set ns = namespace(dn_list=[]) %}
+{% for item in doc.items %}
+  {% if item.delivery_note and item.delivery_note not in ns.dn_list %}
+    {% set _ = ns.dn_list.append(item.delivery_note) %}
+  {% endif %}
+{% endfor %}
+{% set first_dn = frappe.db.get_value("Delivery Note", ns.dn_list[0],
+    ["name","posting_date","lr_no","custom_lr_number","vehicle_no","transporter_name"], as_dict=True)
+    if ns.dn_list else None %}
+
+{# ── Bank Details via Warehouse ───────────────────────────────────────────────── #}
+{% set wh_name = doc.set_warehouse or (doc.items[0].warehouse if doc.items else None) %}
+{% set ba_name = frappe.db.get_value("Warehouse", wh_name, "custom_bank_details") if wh_name else None %}
+{% set ba = frappe.db.get_value("Bank Account", ba_name,
+    ["account_name","bank","bank_account_no","branch_code","company"], as_dict=True)
+    if ba_name else None %}
+
+{# ── State codes ──────────────────────────────────────────────────────────────── #}
+{% set co_state_code   = doc.company_gstin[:2]|int if doc.company_gstin and doc.company_gstin|length >= 2 else 0 %}
+{% set cust_gstin      = (ship_addr.gstin if ship_addr and ship_addr.gstin else None) or doc.billing_address_gstin or "" %}
+{% set cust_state_code = cust_gstin[:2]|int if cust_gstin|length >= 2 else 0 %}
+{% set bill_gstin      = (bill_addr.gstin if bill_addr and bill_addr.gstin else None) or doc.billing_address_gstin or "" %}
+{% set bill_state_code = bill_gstin[:2]|int if bill_gstin|length >= 2 else 0 %}
+
+{# ── Logistics ────────────────────────────────────────────────────────────────── #}
+{% set vehicle_no = doc.vehicle_no or (first_dn.vehicle_no if first_dn else "") or "" %}
+{% if not vehicle_no and ewb and ewb.VehiclListDetails %}
+  {% set vehicle_no = ewb.VehiclListDetails[-1].vehicleNo or "" %}
+{% endif %}
+{% set transporter = doc.transporter_name
+    or (first_dn.transporter_name if first_dn else "")
+    or (ewb.transporterName if ewb else "") or "" %}
+{% set destination = (ewb.toPlace if ewb else "") or "" %}
+{% set lr_no = doc.lr_no
+    or (first_dn.lr_no if first_dn else "")
+    or (first_dn.custom_lr_number if first_dn else "") or "" %}
+
+{# ── Customer Balance ─────────────────────────────────────────────────────────── #}
+{% set prev_rows = frappe.db.sql(
+    "SELECT COALESCE(SUM(outstanding_amount),0) FROM `tabSales Invoice`"
+    " WHERE customer=%s AND docstatus=1 AND outstanding_amount>0 AND name!=%s",
+    (doc.customer, doc.name)) %}
+{% set prev_bal = prev_rows[0][0]|float if prev_rows else 0 %}
+{% set bill_amt = (doc.rounded_total or doc.grand_total or 0)|float %}
+{% set net_bal  = prev_bal + bill_amt %}
+
+{# ── Helpers ──────────────────────────────────────────────────────────────────── #}
+{% macro fd(d) %}{% if d %}{{ frappe.utils.formatdate(d, "dd-MMM-yy") }}{% endif %}{% endmacro %}
+{% macro fm(v) %}{{ frappe.utils.fmt_money(v|float, precision=2) }}{% endmacro %}
+
+<style>
+  /* ── Reset & base ─────────────────────────────────────────────────────────── */
+  * { box-sizing: border-box; }
+  body  { font-family: Arial, sans-serif; font-size: 11px; color: #000; margin: 0; line-height: 1.4; }
+  p     { margin: 0 0 3px; word-break: break-word; }
+  strong, b { font-weight: bold; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { padding: 4px 6px; vertical-align: top; }
+
+  /* ── Dividers ─────────────────────────────────────────────────────────────── */
+  .hr       { border: 0; border-top: 1.5px solid #222; margin: 6px 0; }
+  .hr-light { border: 0; border-top: 1px solid #bbb;  margin: 5px 0; }
+
+  /* ── Utility ──────────────────────────────────────────────────────────────── */
+  .lbl    { color: #555; }
+  .italic { font-style: italic; }
+  .right  { text-align: right; }
+  .center { text-align: center; }
+
+  /* ── Section heading (page 2) ─────────────────────────────────────────────── */
+  .sec-head {
+    font-weight: bold;
+    padding: 3px 6px;
+    margin: 6px 0 4px;
+    border-top: 1px solid #555;
+    border-bottom: 1px solid #555;
+    background: #f5f5f5;
+  }
+
+  /* ── Items table ──────────────────────────────────────────────────────────── */
+  .it th  { border: 1px solid #777; background: #eee; font-weight: bold; text-align: center; padding: 4px 5px; }
+  .it td  { border: 1px solid #ccc; padding: 4px 5px; }
+  .it .tot-row td { border-top: 1.5px solid #222; font-weight: bold; }
+
+  /* ── Compact key-value tables ─────────────────────────────────────────────── */
+  .kv td  { padding: 2px 5px 2px 0; }
+  .kv td:first-child { color: #555; white-space: nowrap; }
+
+  /* ── Images — never distort ───────────────────────────────────────────────── */
+  img { display: block; }
+</style>
+
+{# ═══════════════════════════════════════════════════════════════════════════════ #}
+{# PAGE 1 — TAX INVOICE                                                            #}
+{# ═══════════════════════════════════════════════════════════════════════════════ #}
+
+{# ── Header: Letterhead left | Invoice title right ───────────────────────────── #}
+<table>
+  <tr>
+    <td style="width:70%; padding: 0 8px 4px 0; vertical-align:top">
+      <img src="/files/letterhead.jpeg"
+           style="width:100%; height:auto; max-height:88px; object-fit:contain; object-position:left center">
+      <div class="lbl" style="margin-top:4px">
+        GSTIN/UIN: <strong>{{ doc.company_gstin or "—" }}</strong>
+        &nbsp;|&nbsp; State: <strong>{{ get_state(co_state_code) if co_state_code else "—" }}</strong>,
+        Code: <strong>{{ co_state_code or "—" }}</strong>
+      </div>
+    </td>
+    <td style="width:30%; text-align:right; vertical-align:top; padding-left:6px">
+      {% if einv and einv.signed_qr_code %}
+      <img src="data:image/png;base64,{{ get_qr_code(einv.signed_qr_code, scale=2) }}"
+           style="height:82px; width:auto; display:inline-block; margin-bottom:4px">
+      {% endif %}
+      <div><strong style="font-size:14px">{{ doc.select_print_heading or "Tax Invoice" }}</strong></div>
+      {% if _irn %}<div class="lbl">e-Invoice</div>{% endif %}
+      <div style="margin-top:3px"><strong>{{ doc.name }}</strong></div>
+      <div>Date: <strong>{{ fd(doc.posting_date) }}</strong></div>
+      {% if doc.ewaybill %}
+      <div>e-Way Bill: <strong>{{ doc.ewaybill }}</strong></div>
+      {% endif %}
+    </td>
+  </tr>
+</table>
+
+{# ── IRN / Ack ─────────────────────────────────────────────────────────────────── #}
+{% if _irn %}
+<hr class="hr">
+<div>
+  <span class="lbl">IRN :</span> {{ _irn }}
+  {% if einv %}
+  &nbsp;&nbsp;&nbsp;
+  <span class="lbl">Ack No. :</span> <strong>{{ einv.acknowledgement_number or "" }}</strong>
+  &nbsp;&nbsp;&nbsp;
+  <span class="lbl">Ack Date :</span> <strong>{{ fd(einv.acknowledged_on) }}</strong>
+  {% endif %}
+</div>
+{% endif %}
+
+<hr class="hr">
+
+{# ── 3-column: Customer | Invoice meta | Outstanding ──────────────────────────── #}
+<table>
+  <tr>
+    {# Col 1 — Consignee + Buyer #}
+    <td style="width:42%; vertical-align:top; padding-right:8px">
+
+      <div class="lbl"><strong>Consignee (Ship To)</strong></div>
+      <div style="margin-top:3px"><strong>{{ doc.customer_name }}</strong></div>
+      {% if ship_addr %}
+        <div>{{ ship_addr.address_line1 }}{% if ship_addr.address_line2 %}, {{ ship_addr.address_line2 }}{% endif %}</div>
+        <div>{{ ship_addr.city }}, {{ ship_addr.state }} – {{ ship_addr.pincode }}</div>
+      {% endif %}
+      <div>GSTIN/UIN : <strong>{{ cust_gstin or "—" }}</strong></div>
+      <div>State : <strong>{{ (ship_addr.state if ship_addr else "") or "—" }}</strong>, Code : <strong>{{ cust_state_code or "—" }}</strong></div>
+      {% if doc.contact_display %}
+      <div>Contact : <strong>{{ doc.contact_display }}</strong>{% if doc.contact_mobile %} · <strong>{{ doc.contact_mobile }}</strong>{% endif %}</div>
+      {% endif %}
+
+      {# Buyer only when different #}
+      {% set _same = (not ship_addr and not bill_addr)
+          or (ship_addr and bill_addr
+              and ship_addr.address_line1 == bill_addr.address_line1
+              and ship_addr.city == bill_addr.city) %}
+      {% if not _same and bill_addr %}
+      <div class="lbl" style="margin-top:7px"><strong>Buyer (Bill To)</strong></div>
+      <div style="margin-top:2px"><strong>{{ doc.customer_name }}</strong></div>
+      <div>{{ bill_addr.address_line1 }}{% if bill_addr.address_line2 %}, {{ bill_addr.address_line2 }}{% endif %}</div>
+      <div>{{ bill_addr.city }}, {{ bill_addr.state }} – {{ bill_addr.pincode }}</div>
+      <div>GSTIN/UIN : <strong>{{ bill_gstin or "—" }}</strong></div>
+      <div>State : <strong>{{ (bill_addr.state if bill_addr else "") or "—" }}</strong>, Code : <strong>{{ bill_state_code or "—" }}</strong></div>
+      {% endif %}
+
+      <div style="margin-top:6px"><span class="lbl">Place of Supply :</span> <strong>{{ doc.place_of_supply or "—" }}</strong></div>
+      {% if doc.is_reverse_charge %}<div><span class="lbl">Reverse Charge :</span> <strong>Yes</strong></div>{% endif %}
+
+    </td>
+
+    {# Col 2 — Invoice details / DN / PO / Transporter #}
+    <td style="width:34%; vertical-align:top; border-left:1px solid #ccc; padding:4px 8px">
+
+      <div class="lbl"><strong>Invoice Details</strong></div>
+      <table class="kv" style="margin-top:3px">
+        <tr><td>Date</td><td>: <strong>{{ fd(doc.posting_date) }}</strong></td></tr>
+        {% if doc.due_date %}<tr><td>Due Date</td><td>: <strong>{{ fd(doc.due_date) }}</strong></td></tr>{% endif %}
+        {% if doc.payment_terms_template %}<tr><td>Payment Terms</td><td>: {{ doc.payment_terms_template }}</td></tr>{% endif %}
+      </table>
+
+      {% if ns.dn_list %}
+      <div class="lbl" style="margin-top:7px"><strong>Delivery Note</strong></div>
+      {% for dn_n in ns.dn_list %}
+        {% set dn_d = frappe.db.get_value("Delivery Note", dn_n, "posting_date") %}
+        <div><strong>{{ dn_n }}</strong>{% if dn_d %} dt. {{ fd(dn_d) }}{% endif %}</div>
+      {% endfor %}
+      {% endif %}
+
+      {% if doc.po_no %}
+      <div class="lbl" style="margin-top:7px"><strong>Purchase Order</strong></div>
+      <div><strong>{{ doc.po_no }}</strong>{% if doc.po_date %} dt. {{ fd(doc.po_date) }}{% endif %}</div>
+      {% endif %}
+
+      {% if transporter or vehicle_no or lr_no %}
+      <div class="lbl" style="margin-top:7px"><strong>Transporter</strong></div>
+      <table class="kv" style="margin-top:2px">
+        {% if transporter %}<tr><td>Name</td><td>: <strong>{{ transporter }}</strong></td></tr>{% endif %}
+        {% if vehicle_no %}<tr><td>Vehicle</td><td>: <strong>{{ vehicle_no }}</strong></td></tr>{% endif %}
+        {% if lr_no %}<tr><td>LR No.</td><td>: <strong>{{ lr_no }}</strong></td></tr>{% endif %}
+        {% if destination %}<tr><td>Destination</td><td>: <strong>{{ destination }}</strong></td></tr>{% endif %}
+      </table>
+      {% endif %}
+
+      {% if doc.remarks %}
+      <div class="lbl" style="margin-top:7px"><strong>Remarks</strong></div>
+      <div>{{ doc.remarks }}</div>
+      {% endif %}
+
+    </td>
+
+    {# Col 3 — Outstanding / Payment status #}
+    <td style="width:24%; vertical-align:top; border-left:1px solid #ccc; padding:4px 8px; text-align:right">
+      {% if doc.outstanding_amount != 0 %}
+      <div class="lbl">Unpaid Amount</div>
+      <div style="margin-top:4px"><strong>₹ {{ fm(doc.outstanding_amount) }}</strong></div>
+      {% else %}
+      <div><strong>✓ Fully Paid</strong></div>
+      {% endif %}
+      {% if doc.due_date %}
+      <div class="lbl" style="margin-top:5px">Due : <strong>{{ fd(doc.due_date) }}</strong></div>
+      {% endif %}
+    </td>
+  </tr>
+</table>
+
+<hr class="hr">
+
+{# ── Items Table ──────────────────────────────────────────────────────────────── #}
+<table class="it">
+  <thead>
+    <tr>
+      <th style="width:4%">Sl<br>No.</th>
+      <th style="width:8%">HSN/SAC</th>
+      <th>Description of Goods</th>
+      <th style="width:6%">GST<br>Rate</th>
+      <th style="width:13%">Quantity</th>
+      <th style="width:8%">Rate</th>
+      <th style="width:5%">per</th>
+      <th style="width:10%">Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in doc.items %}
+    {% set ns_t = namespace(gst=0) %}
+    {% if row.item_tax_rate %}
+      {% for _acct, _r in json.loads(row.item_tax_rate).items() %}
+        {% set ns_t.gst = ns_t.gst + _r %}
+      {% endfor %}
+    {% endif %}
+    <tr>
+      <td class="center">{{ loop.index }}</td>
+      <td class="center">{{ row.gst_hsn_code or "" }}</td>
+      <td>
+        <strong>{{ row.item_name or row.item_code }}</strong>
+        {# spec line #}
+        {% set ns_s = namespace(v="") %}
+        {% if row.item_code %}{% set ns_s.v = row.item_code %}{% endif %}
+        {% if row.custom_thickness %}{% set ns_s.v = ns_s.v + " " + row.custom_thickness %}{% endif %}
+        {% if row.width_mm and row.length_mtr %}
+          {% set ns_s.v = ns_s.v + " " + (row.width_mm|int)|string + "*" + (row.length_mtr|int)|string %}
+        {% endif %}
+        {% set _cm = frappe.db.get_value("Item", row.item_code, "custom_carton_marking") or "" %}
+        {% if _cm %}{% set ns_s.v = ns_s.v + " " + _cm %}{% endif %}
+        {% if row.color %}{% set ns_s.v = ns_s.v + " " + row.color %}{% endif %}
+        {% if ns_s.v %}
+        <br><span class="italic lbl">{{ ns_s.v | trim }}</span>
+        {% endif %}
+      </td>
+      <td class="center">{{ "%g" | format(ns_t.gst) }} %</td>
+      <td class="right"><strong>{{ fm(row.qty) }}</strong> {{ row.uom }}</td>
+      <td class="right"><strong>{{ fm(row.rate) }}</strong></td>
+      <td class="center">{{ row.uom }}</td>
+      <td class="right"><strong>{{ fm(row.amount) }}</strong></td>
+    </tr>
+    {% endfor %}
+
+    {# Subtotal #}
+    <tr>
+      <td colspan="7" style="border:none; border-top:1px solid #999"></td>
+      <td class="right" style="border-top:1px solid #999"><strong>{{ fm(doc.net_total) }}</strong></td>
+    </tr>
+
+    {# Tax rows #}
+    {% for tax in doc.taxes %}
+    <tr class="italic">
+      <td colspan="5" class="right" style="border:none">{{ tax.description }} {{ "%g" | format(tax.rate) }} %</td>
+      <td class="right" style="border:1px solid #ccc">{{ "%g" | format(tax.rate) }}</td>
+      <td class="center" style="border:1px solid #ccc">%</td>
+      <td class="right" style="border:1px solid #ccc">{{ fm(tax.tax_amount) }}</td>
+    </tr>
+    {% endfor %}
+
+    {# Spacers #}
+    {% for _i in range(4) %}
+    <tr style="height:16px"><td colspan="8" style="border:none"></td></tr>
+    {% endfor %}
+
+    {# Grand Total #}
+    <tr class="tot-row">
+      <td colspan="7" class="right">Total</td>
+      <td class="right">₹ {{ fm(doc.rounded_total or doc.grand_total) }}</td>
+    </tr>
+  </tbody>
+</table>
+
+{# ── Amount in words ──────────────────────────────────────────────────────────── #}
+<hr class="hr-light">
+<table>
+  <tr>
+    <td style="width:65%">
+      <div class="lbl">Amount Chargeable (in words)</div>
+      <div><strong>{{ doc.in_words or "" }}</strong></div>
+    </td>
+    <td class="right italic lbl">E. &amp; O.E</td>
+  </tr>
+</table>
+
+{# ── GST Breakup ──────────────────────────────────────────────────────────────── #}
+{% if doc.gst_breakup_table %}
+<hr class="hr-light">
+{{ doc.gst_breakup_table }}
+{% endif %}
+
+<hr class="hr">
+
+{# ── Bottom: Bank + Balance (left) | Declaration + Stamp + Signature (right) ──── #}
+<table>
+  <tr>
+    <td style="width:48%; vertical-align:top; padding-right:8px">
+
+      {% if ba %}
+      <div class="lbl"><strong>Company's Bank Details</strong></div>
+      <table class="kv" style="margin-top:3px">
+        <tr><td>A/c Holder's Name</td><td>: <strong>{{ ba.company or doc.company }}</strong></td></tr>
+        <tr><td>Bank Name</td><td>: <strong>{{ ba.bank }}</strong></td></tr>
+        <tr><td>A/c No.</td><td>: <strong>{{ ba.bank_account_no }}</strong></td></tr>
+        <tr><td>IFS Code</td><td>: <strong>{{ ba.branch_code }}</strong></td></tr>
+      </table>
+      {% endif %}
+
+      <div class="lbl" style="margin-top:8px"><strong>Balance Statement</strong></div>
+      <table class="kv" style="margin-top:3px">
+        <tr><td>Prev. Balance</td><td>: <strong>{{ fm(prev_bal) }} Dr</strong></td></tr>
+        <tr><td>Bill Amount</td><td>: <strong>{{ fm(bill_amt) }} Dr</strong></td></tr>
+        <tr style="border-top:1px solid #777">
+          <td>Net Balance</td><td>: <strong>{{ fm(net_bal) }} Dr</strong></td>
+        </tr>
+      </table>
+
+    </td>
+
+    <td style="width:4%"></td>
+
+    <td style="width:48%; vertical-align:top; padding-left:8px">
+      <div class="lbl"><strong>Declaration</strong></div>
+      <div style="margin-top:3px">1. We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.</div>
+      <div style="margin-top:3px">2. Interest Rate @ 24% p.a. will be charged if payment is not done on or before due date.</div>
+      <div style="margin-top:3px">3. No claim will be accepted after 15 days from invoice date.</div>
+
+      {# Stamp only #}
+      <div style="text-align:right; margin-top:10px">
+        <img src="/files/IB_Stamp.jpeg"
+             style="height:70px; width:auto; display:inline-block">
+      </div>
+      <div style="text-align:right; margin-top:4px">for <strong>{{ doc.company }}</strong></div>
+      <div style="text-align:right; margin-top:26px"><strong>Authorised Signatory</strong></div>
+    </td>
+  </tr>
+</table>
+
+<hr class="hr">
+<div style="text-align:center; color:#555">This is a Computer Generated Invoice</div>
+
+{# ═══════════════════════════════════════════════════════════════════════════════ #}
+{# PAGE 2 — e-WAY BILL (DETAILED)                                                  #}
+{# ═══════════════════════════════════════════════════════════════════════════════ #}
+{% if ewb %}
+<div style="page-break-before:always">
+
+  {# Header: Doc info left | QR right #}
+  <table>
+    <tr>
+      <td style="width:70%; vertical-align:top">
+        <strong style="font-size:14px">e-Way Bill</strong>
+        <table class="kv" style="margin-top:5px">
+          <tr><td>Doc No.</td><td>: <strong>Tax Invoice – {{ doc.name }}</strong></td></tr>
+          <tr><td>Date &nbsp;&nbsp;</td><td>: <strong>{{ fd(doc.posting_date) }}</strong></td></tr>
+        </table>
+        <table class="kv" style="margin-top:5px">
+          <tr><td>IRN &nbsp;&nbsp;&nbsp;&nbsp;</td><td>: {{ _irn or "—" }}</td></tr>
+          {% if einv %}
+          <tr><td>Ack No.</td><td>: <strong>{{ einv.acknowledgement_number or "—" }}</strong></td></tr>
+          <tr><td>Ack Date</td><td>: <strong>{{ fd(einv.acknowledged_on) if einv.acknowledged_on else "—" }}</strong></td></tr>
+          {% endif %}
+        </table>
+      </td>
+      <td style="width:30%; text-align:right; vertical-align:top">
+        <img src="data:image/png;base64,{{ get_e_waybill_qr_code(ewb.ewbNo, ewb.userGstin, ewb.ewayBillDate) }}"
+             style="height:90px; width:auto; display:inline-block">
+      </td>
+    </tr>
+  </table>
+
+  <hr class="hr">
+
+  {# 1. e-Way Bill Details #}
+  <div class="sec-head">1. e-Way Bill Details</div>
+  <table>
+    <tr>
+      <td style="width:34%"><span class="lbl">e-Way Bill No. :</span> <strong>{{ ewb.ewbNo }}</strong></td>
+      <td style="width:33%"><span class="lbl">Generated Date :</span> <strong>{{ ewb.ewayBillDate }}</strong></td>
+      <td style="width:33%"><span class="lbl">Generated By :</span> <strong>{{ ewb.userGstin }}</strong></td>
+    </tr>
+    <tr>
+      <td>
+        {% set _lastVeh = ewb.VehiclListDetails[-1] if ewb.VehiclListDetails else None %}
+        <span class="lbl">Mode :</span>
+        <strong>{% if _lastVeh %}{{ _lastVeh.transMode }} – Road{% else %}Road{% endif %}</strong>
+      </td>
+      <td><span class="lbl">Approx Distance :</span> <strong>{{ ewb.actualDist }} KM</strong></td>
+      <td><span class="lbl">Valid Upto :</span> <strong>{{ ewb.validUpto }}</strong></td>
+    </tr>
+    <tr>
+      <td><span class="lbl">Supply Type :</span> <strong>Outward – Supply</strong></td>
+      <td colspan="2"><span class="lbl">Transaction Type :</span> <strong>Regular</strong></td>
+    </tr>
+    {% if _irn %}
+    <tr>
+      <td colspan="3"><span class="lbl">IRN :</span> {{ _irn }}</td>
+    </tr>
+    {% endif %}
+  </table>
+
+  {# 2. Address Details #}
+  <div class="sec-head">2. Address Details</div>
+  <table>
+    <tr>
+      <td style="width:50%; vertical-align:top; padding-right:10px">
+        <div><strong>From</strong></div>
+        <div style="margin-top:3px">
+          <div>GSTIN: <strong>{{ ewb.fromGstin or doc.company_gstin }}</strong></div>
+          <div><strong>{{ ewb.fromTrdName or doc.company }}</strong></div>
+          <div>{{ get_state(ewb.fromStateCode|int) if ewb.fromStateCode else "" }}</div>
+        </div>
+        <div style="margin-top:6px">
+          <div><strong>:: Dispatch From ::</strong></div>
+          <div>{{ ewb.fromAddr1 or "" }}</div>
+          {% if ewb.fromAddr2 %}<div>{{ ewb.fromAddr2 }}</div>{% endif %}
+          <div>{{ ewb.fromPlace or "" }},
+               {{ get_state(ewb.actFromStateCode|int) if ewb.actFromStateCode else "" }}
+               – {{ ewb.fromPincode or "" }}</div>
+        </div>
+      </td>
+      <td style="width:50%; vertical-align:top; border-left:1px solid #ccc; padding-left:10px">
+        <div><strong>To</strong></div>
+        <div style="margin-top:3px">
+          <div>GSTIN: <strong>{{ ewb.toGstin or doc.billing_address_gstin or "—" }}</strong></div>
+          <div><strong>{{ ewb.toTrdName or doc.customer_name }}</strong></div>
+          <div>{{ get_state(ewb.toStateCode|int) if ewb.toStateCode else "" }}</div>
+        </div>
+        <div style="margin-top:6px">
+          <div><strong>:: Ship To ::</strong></div>
+          <div>{{ ewb.toAddr1 or "" }}</div>
+          {% if ewb.toAddr2 %}<div>{{ ewb.toAddr2 }}</div>{% endif %}
+          <div>{{ ewb.toPlace or "" }},
+               {{ get_state(ewb.actToStateCode|int) if ewb.actToStateCode else "" }}
+               – {{ ewb.toPincode or "" }}</div>
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  {# 3. Goods Details #}
+  <div class="sec-head">3. Goods Details</div>
+  <table class="it">
+    <thead>
+      <tr>
+        <th style="width:10%">HSN Code</th>
+        <th>Product Name &amp; Desc.</th>
+        <th style="width:10%">Quantity</th>
+        <th style="width:12%">Taxable Amt</th>
+        <th style="width:18%">Tax Rate<br>(C + S + I + Cess + Cess Non.Advol)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in ewb.itemList %}
+      <tr>
+        <td class="center">{{ item.hsnCode }}</td>
+        <td>{{ item.productDesc }}</td>
+        <td class="right"><strong>{{ item.quantity }}</strong> {{ item.qtyUnit }}</td>
+        <td class="right"><strong>{{ fm(item.taxableAmount) }}</strong></td>
+        <td class="center">
+          {{ item.cgstRate | default("NE") }} +
+          {{ item.sgstRate | default("NE") }} +
+          {{ item.igstRate | default("NE") }} +
+          {{ item.cessRate | default("NE") }} +
+          {{ item.cessNonAdvol | default("NE") }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {# Goods totals #}
+  <table style="margin-top:4px; border:1px solid #ccc">
+    <tr>
+      <td style="width:25%"><span class="lbl">Tot. Taxable Amt :</span> <strong>{{ fm(ewb.totalValue) }}</strong></td>
+      <td style="width:18%"><span class="lbl">CGST Amt :</span> <strong>{{ fm(ewb.cgstValue) }}</strong></td>
+      <td style="width:18%"><span class="lbl">SGST Amt :</span> <strong>{{ fm(ewb.sgstValue) }}</strong></td>
+      <td style="width:18%"><span class="lbl">IGST Amt :</span> <strong>{{ fm(ewb.igstValue or 0) }}</strong></td>
+      <td style="width:21%"><span class="lbl">CESS Amt :</span> {{ fm(ewb.cessValue or 0) }}</td>
+    </tr>
+    <tr>
+      <td><span class="lbl">CESS Non.Advol :</span> {{ fm(ewb.cessNonAdvolValue or 0) }}</td>
+      <td><span class="lbl">Other Amt :</span> {{ fm(ewb.otherValue or 0) }}</td>
+      <td colspan="3" class="right"><span class="lbl">Total Inv. Amt :</span> <strong>₹ {{ fm(ewb.totInvValue) }}</strong></td>
+    </tr>
+  </table>
+
+  {# 4. Transportation Details #}
+  <div class="sec-head">4. Transportation Details</div>
+  <table>
+    <tr>
+      <td style="width:50%">
+        <span class="lbl">Transporter ID &amp; Name :</span>
+        <strong>{{ ewb.transporterId or "—" }}</strong>
+        {% if ewb.transporterName %} &amp; <strong>{{ ewb.transporterName }}</strong>{% endif %}
+      </td>
+      <td style="width:50%">
+        <span class="lbl">Transporter Doc. No. &amp; Date :</span>
+        <strong>{{ ewb.transDocNo or "—" }}</strong>
+        {% if ewb.transDocDate %} &amp; <strong>{{ ewb.transDocDate }}</strong>{% endif %}
+      </td>
+    </tr>
+  </table>
+
+  {# 5. Vehicle Details — full history table #}
+  <div class="sec-head">5. Vehicle Details</div>
+  <table class="it">
+    <thead>
+      <tr>
+        <th style="width:8%">Mode</th>
+        <th style="width:22%">Vehicle / Trans Doc. No. &amp; Dt.</th>
+        <th style="width:12%">From</th>
+        <th style="width:14%">Entered Date</th>
+        <th style="width:16%">Entered By</th>
+        <th style="width:10%">CEWB No.</th>
+        <th style="width:18%">Multi Veh. Info</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if ewb.VehiclListDetails %}
+        {% for veh in ewb.VehiclListDetails %}
+        <tr>
+          <td class="center">{{ veh.transMode }} – Road</td>
+          <td>
+            <strong>{{ veh.vehicleNo or "" }}</strong>
+            {% if veh.transDocNo %} / {{ veh.transDocNo }}{% endif %}
+            {% if veh.transDocDate %} – Dt {{ veh.transDocDate }}{% endif %}
+          </td>
+          <td>{{ veh.fromPlace or "" }}</td>
+          <td>{{ veh.enteredDate or "" }}</td>
+          <td>{{ veh.userGSTINTransin or "" }}</td>
+          <td class="center">{{ veh.cebwNo or "—" }}</td>
+          <td>{{ veh.multiVehInfo or "—" }}</td>
+        </tr>
+        {% endfor %}
+      {% else %}
+      <tr>
+        <td class="center">Road</td>
+        <td><strong>{{ vehicle_no or "—" }}</strong></td>
+        <td>—</td><td>—</td><td>—</td><td class="center">—</td><td>—</td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+
+</div>
+{% endif %}

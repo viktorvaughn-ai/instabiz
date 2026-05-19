@@ -302,20 +302,21 @@ function do_checkin(emp, log_type, $row, state, $wrap) {
 	const is_late    = today_mode && log_type === "IN"  && _is_late_in(emp);
 	const is_early   = today_mode && log_type === "OUT" && _is_early_out(emp);
 
-	let title, default_preset;
-	if (log_type === "IN") {
-		title          = is_late
-			? __("Late Arrival — {0}", [emp.employee_name])
-			: __("Check-in — {0}", [emp.employee_name]);
-		default_preset = is_late ? __("Came Late") : "";
+	if (is_late) {
+		show_reason_dialog(
+			__("Late Arrival — {0}", [emp.employee_name]),
+			__("Came Late"),
+			reason => _execute_checkin(emp, log_type, reason, $row)
+		);
+	} else if (is_early) {
+		show_reason_dialog(
+			__("Early Departure — {0}", [emp.employee_name]),
+			__("Left Early"),
+			reason => _execute_checkin(emp, log_type, reason, $row)
+		);
 	} else {
-		title          = is_early
-			? __("Early Departure — {0}", [emp.employee_name])
-			: __("Check-out — {0}", [emp.employee_name]);
-		default_preset = is_early ? __("Left Early") : "";
+		_execute_checkin(emp, log_type, null, $row);
 	}
-
-	show_reason_dialog(title, default_preset, reason => _execute_checkin(emp, log_type, reason, $row));
 }
 
 function do_mark_absent(emp, $row, state, $wrap, page) {

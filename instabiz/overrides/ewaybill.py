@@ -136,6 +136,21 @@ def custom_generate_e_waybill(
 	txn_type = int(transaction_type) if transaction_type else None
 	loc = (doc.get("custom_location") or "").lower()
 	wh_name = LOCATION_WAREHOUSE.get(loc)
+
+	# Correct stale company_gstin/company_address on submitted docs (e.g. created before
+	# the post-super() fix was in place). Permanent correction — wrong data, not a temp patch.
+	from instabiz.overrides.utils import LOCATION_COMPANY_ADDRESS, LOCATION_COMPANY_GSTIN  # noqa: PLC0415
+	correct_gstin = LOCATION_COMPANY_GSTIN.get(loc)
+	correct_addr  = LOCATION_COMPANY_ADDRESS.get(loc)
+	updates = {}
+	if correct_gstin and doc.get("company_gstin") != correct_gstin:
+		updates["company_gstin"] = correct_gstin
+	if correct_addr and doc.get("company_address") != correct_addr:
+		updates["company_address"] = correct_addr
+	if updates:
+		frappe.db.set_value(doctype, docname, updates, update_modified=False)
+		doc.update(updates)
+
 	_orig = EWaybillData.set_party_address_details
 
 	def _patched(self):
