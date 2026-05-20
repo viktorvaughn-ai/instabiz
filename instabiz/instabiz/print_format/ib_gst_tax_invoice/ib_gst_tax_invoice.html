@@ -289,6 +289,11 @@
     </tr>
   </thead>
   <tbody>
+    {# doc-level GST rate fallback: sum all tax rows on the invoice #}
+    {% set ns_doc = namespace(doc_gst=0) %}
+    {% for t in doc.taxes %}
+      {% set ns_doc.doc_gst = ns_doc.doc_gst + (t.rate or 0) %}
+    {% endfor %}
     {% for row in doc.items %}
     {% set ns_t = namespace(gst=0) %}
     {% if row.item_tax_rate %}
@@ -296,6 +301,7 @@
         {% set ns_t.gst = ns_t.gst + _r %}
       {% endfor %}
     {% endif %}
+    {% if ns_t.gst == 0 %}{% set ns_t.gst = ns_doc.doc_gst %}{% endif %}
     <tr>
       <td class="center">{{ loop.index }}</td>
       <td class="center">{{ row.gst_hsn_code or "" }}</td>

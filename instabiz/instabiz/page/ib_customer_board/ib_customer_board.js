@@ -110,7 +110,7 @@ class IBCustomerBoard {
 				<div class="ib-cb-columns">
 					<div class="ib-cb-col" id="ib-cb-dormant">
 						<div class="ib-cb-col-header">
-							${IB_ICONS.svg("moon", 13)}<span class="ib-cb-col-title">Dormant</span>
+							${IB_ICONS.svg("moon", 13)}<span class="ib-cb-col-title">No Recent Orders</span>
 							<span class="ib-cb-col-badge" id="ib-cb-dormant-count">0</span>
 						</div>
 						<div class="ib-cb-col-bulk" id="ib-cb-dormant-bulk" style="display:none">
@@ -124,7 +124,7 @@ class IBCustomerBoard {
 					</div>
 					<div class="ib-cb-col" id="ib-cb-regular">
 						<div class="ib-cb-col-header">
-							${IB_ICONS.svg("users", 13)}<span class="ib-cb-col-title">Regular</span>
+							${IB_ICONS.svg("users", 13)}<span class="ib-cb-col-title">Active Customers</span>
 							<span class="ib-cb-col-badge" id="ib-cb-regular-count">0</span>
 						</div>
 						<div class="ib-cb-col-bulk" id="ib-cb-regular-bulk" style="display:none">

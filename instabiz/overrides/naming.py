@@ -76,9 +76,13 @@ def autoname_sales_order(doc, method=None):
 
 
 def autoname_delivery_note(doc, method=None):
-    wh  = get_warehouse_code(doc)
-    num = get_next_dn_si_number()
-    doc.name = f"IB-{wh}-DN-{num:05d}"
+    wh = get_warehouse_code(doc)
+    while True:
+        num = get_next_dn_si_number()
+        candidate = f"IB-{wh}-DN-{num:05d}"
+        if not frappe.db.exists("Delivery Note", candidate):
+            doc.name = candidate
+            return
 
 
 def autoname_sales_invoice(doc, method=None):
@@ -92,7 +96,8 @@ def autoname_sales_invoice(doc, method=None):
             if "-DN-" in dn_name:
                 break
     if dn_name and "-DN-" in dn_name:
-        num_str = dn_name.split("-DN-")[-1]
+        # Strip any Frappe dedup suffix (e.g. "IB-BWD-DN-00006-1" → "00006")
+        num_str = dn_name.split("-DN-")[-1].split("-")[0]
         candidate = f"IB-{wh}-INV-{num_str}"
         # Only reuse if not already taken by a cancelled (or any) existing doc.
         if not frappe.db.exists("Sales Invoice", candidate):
@@ -100,5 +105,9 @@ def autoname_sales_invoice(doc, method=None):
             return
         # Cancelled SI with that name still occupies the slot — fall through to new number.
     # Standalone SI, or DN-reuse conflict — consume the next global number.
-    num = get_next_dn_si_number()
-    doc.name = f"IB-{wh}-INV-{num:05d}"
+    while True:
+        num = get_next_dn_si_number()
+        candidate = f"IB-{wh}-INV-{num:05d}"
+        if not frappe.db.exists("Sales Invoice", candidate):
+            doc.name = candidate
+            return

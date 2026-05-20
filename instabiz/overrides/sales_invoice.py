@@ -4,6 +4,7 @@ from erpnext.accounts.doctype.sales_invoice.sales_invoice import SalesInvoice  #
 
 from instabiz.overrides.utils import LOCATION_COMPANY_ADDRESS, LOCATION_COMPANY_GSTIN, IbStatusMixin, recalculate_items, reopen_sales_doc, set_sales_person, sync_sales_team
 from instabiz.overrides.naming import autoname_sales_invoice
+from instabiz.overrides.quotation import _auto_correct_gst_template
 
 
 # ── Document class ────────────────────────────────────────────────────────────
@@ -42,6 +43,7 @@ class CustomSalesInvoice(IbStatusMixin, SalesInvoice):
         # Must run AFTER super().validate() — ERPNext's set_missing_values() resets
         # company_gstin to the company default, so we re-apply location-based GSTIN last.
         self._apply_location_gstin()
+        _auto_correct_gst_template(self)
 
     def _apply_location_gstin(self):
         loc = (self.custom_location or "").lower()

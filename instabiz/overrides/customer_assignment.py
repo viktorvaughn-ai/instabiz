@@ -299,14 +299,22 @@ def auto_assign_for_user(user, date):
 		dormant_slots = round(slots * config["dormant_ratio"] / 100)
 		regular_slots = slots - dormant_slots
 
-		dormant = get_dormant_pool(territories, exclude, config["dormant_threshold_days"], limit=dormant_slots * 3)
-		dormant_pick = dormant[:dormant_slots]
+		# Fetch generous headroom from both pools upfront
+		dormant = get_dormant_pool(territories, exclude, config["dormant_threshold_days"], limit=slots * 2)
+		regular = get_regular_pool(territories, exclude, config["dormant_threshold_days"], limit=slots * 2)
 
-		# Backfill regular slots if dormant pool was short
-		leftover = dormant_slots - len(dormant_pick)
-		effective_regular_slots = regular_slots + leftover
-		regular = get_regular_pool(territories, exclude, config["dormant_threshold_days"], limit=effective_regular_slots * 3)
+		dormant_pick = dormant[:dormant_slots]
+		dormant_leftover = dormant_slots - len(dormant_pick)
+
+		# Backfill regular if dormant was short
+		effective_regular_slots = regular_slots + dormant_leftover
 		regular_pick = regular[:effective_regular_slots]
+		regular_leftover = effective_regular_slots - len(regular_pick)
+
+		# Backfill dormant if regular was also short
+		if regular_leftover > 0:
+			extra = dormant[len(dormant_pick): len(dormant_pick) + regular_leftover]
+			dormant_pick = dormant_pick + extra
 
 	batch = dormant_pick + regular_pick
 	random.shuffle(batch)
@@ -796,6 +804,13 @@ def get_admin_overview(date=None, territory=None, view_as_user=None):
 	)
 	user_team_map = {r.user: r.team for r in team_rows}
 
+	# Build team→leader map
+	leader_rows = frappe.db.sql(
+		"SELECT name, team_leader FROM `tabLead Sales Team` WHERE team_leader IS NOT NULL AND team_leader != ''",
+		as_dict=True,
+	)
+	team_leader_map = {r.name: r.team_leader for r in leader_rows}
+
 	# Build team→territories map for team header display
 	terr_rows = frappe.db.sql(
 		"SELECT parent AS team, territory FROM `tabLead Sales Team Territory`",
@@ -828,10 +843,12 @@ def get_admin_overview(date=None, territory=None, view_as_user=None):
 			{"assigned_to": user, "assigned_date": _next_working_day(date), "status": "Pending"},
 		)
 		t = target_map.get(user, {})
+		user_team = user_team_map.get(user)
 		roster.append({
 			"user": user,
 			"full_name": full_name,
-			"team": user_team_map.get(user),
+			"team": user_team,
+			"is_leader": bool(user_team and team_leader_map.get(user_team) == user),
 			"total": total,
 			"done": done,
 			"pending": status_map.get("Pending", 0),
@@ -920,6 +937,175 @@ def transfer_assignments(from_user, to_user, date=None):
 
 
 @frappe.whitelist()
+def get_manager_queue():
+	"""Return all claimed customers grouped by claimer. Manager only."""
+	_require_manager()
+	rows = frappe.db.sql(
+		"""
+		SELECT c.name AS customer, c.customer_name, c.territory, c.mobile_no,
+		       c.ib_claimed_by, c.ib_claimed_on,
+		       u.full_name AS claimer_name,
+		       MAX(so.transaction_date) AS last_so_date
+		FROM `tabCustomer` c
+		INNER JOIN `tabUser` u ON u.name = c.ib_claimed_by
+		LEFT JOIN `tabSales Order` so ON so.customer = c.name AND so.docstatus = 1
+		WHERE c.ib_claimed_by IS NOT NULL AND c.ib_claimed_by != ''
+		  AND c.disabled = 0
+		GROUP BY c.name
+		ORDER BY c.ib_claimed_by, c.ib_claimed_on DESC
+		""",
+		as_dict=True,
+	)
+	return rows
+
+
+@frappe.whitelist()
+def assign_claimed_to_user(customer, assigned_to, date=None):
+	"""Assign a claimed customer to a sales user and release the claim. Manager only."""
+	_require_manager()
+	date = date or today()
+
+	if str(date) < str(today()):
+		frappe.throw(_("Cannot assign to a past date."))
+
+	claimed_by = frappe.db.get_value("Customer", customer, "ib_claimed_by")
+	if not claimed_by:
+		frappe.throw(_("Customer is not claimed."))
+
+	existing = frappe.db.get_value(
+		"IB Customer Assignment",
+		{"customer": customer, "assigned_date": date, "status": ["in", ["Pending", "Contacted"]]},
+		"name",
+	)
+	if existing:
+		frappe.throw(_(f"Customer already has an active assignment on {date}."))
+
+	config = get_assignment_config()
+	existing_count = frappe.db.count(
+		"IB Customer Assignment",
+		{"assigned_to": assigned_to, "assigned_date": date, "status": ["in", ["Pending", "Contacted"]]},
+	)
+	if existing_count >= config["assignments_per_day"]:
+		frappe.throw(_(
+			f"{assigned_to} is at the daily quota ({config['assignments_per_day']}) on {date}."
+		))
+
+	territory = frappe.db.get_value("Customer", customer, "territory")
+	source_pool = classify_customer(customer, config["dormant_threshold_days"])
+	_create_assignment(customer, territory, assigned_to, date, source_pool)
+
+	# Release the claim now that it's been actioned
+	frappe.db.set_value("Customer", customer, {"ib_claimed_by": None, "ib_claimed_on": None})
+	frappe.db.commit()
+	return {"status": "ok"}
+
+
+@frappe.whitelist()
+def get_assignments_for_customers(customers):
+	"""Return active assignment info for a list of customers. Manager only."""
+	import json
+	_require_manager()
+	if isinstance(customers, str):
+		customers = json.loads(customers)
+	if not customers:
+		return {}
+	placeholders = ", ".join(["%s"] * len(customers))
+	rows = frappe.db.sql(
+		f"""
+		SELECT ca.customer, ca.assigned_to, ca.assigned_date, ca.status,
+		       u.full_name
+		FROM `tabIB Customer Assignment` ca
+		LEFT JOIN `tabUser` u ON u.name = ca.assigned_to
+		WHERE ca.customer IN ({placeholders})
+		  AND ca.status IN ('Pending', 'Contacted')
+		ORDER BY ca.assigned_date ASC
+		""",
+		customers,
+		as_dict=True,
+	)
+	result = {}
+	for r in rows:
+		if r.customer not in result:
+			result[r.customer] = {
+				"assigned_to": r.assigned_to,
+				"full_name": r.full_name or r.assigned_to,
+				"date": str(r.assigned_date),
+				"status": r.status,
+			}
+	return result
+
+
+@frappe.whitelist()
+def bulk_assign_to_user(customers, assigned_to, date=None):
+	"""Assign multiple customers to a sales user for a given date. Manager only."""
+	import json
+	_require_manager()
+	if isinstance(customers, str):
+		customers = json.loads(customers)
+	date = date or today()
+
+	# Block past dates — rolled-over immediately by scheduler
+	if str(date) < str(today()):
+		frappe.throw(_("Cannot assign to a past date."))
+
+	config = get_assignment_config()
+
+	# Quota: count existing active assignments for this user on this date
+	existing_count = frappe.db.count(
+		"IB Customer Assignment",
+		{"assigned_to": assigned_to, "assigned_date": date, "status": ["in", ["Pending", "Contacted"]]},
+	)
+	remaining_slots = config["assignments_per_day"] - existing_count
+	if remaining_slots <= 0:
+		frappe.throw(_(
+			f"{assigned_to} already has {existing_count} active assignments on {date} "
+			f"(limit: {config['assignments_per_day']}). Remove some before adding more."
+		))
+
+	assigned = 0
+	skipped_already_assigned = []
+	skipped_claimed = []
+	skipped_quota = []
+
+	for customer in customers:
+		# Quota cap — stop once slots exhausted
+		if assigned >= remaining_slots:
+			skipped_quota.append(customer)
+			continue
+
+		# Skip if already has active assignment on this date (any user)
+		existing = frappe.db.get_value(
+			"IB Customer Assignment",
+			{"customer": customer, "assigned_date": date, "status": ["in", ["Pending", "Contacted"]]},
+			"name",
+		)
+		if existing:
+			skipped_already_assigned.append(customer)
+			continue
+
+		# Skip claimed customers (locked to another manager's pipeline)
+		claimed_by = frappe.db.get_value("Customer", customer, "ib_claimed_by")
+		if claimed_by:
+			skipped_claimed.append(customer)
+			continue
+
+		territory = frappe.db.get_value("Customer", customer, "territory")
+		source_pool = classify_customer(customer, config["dormant_threshold_days"])
+		_create_assignment(customer, territory, assigned_to, date, source_pool)
+		assigned += 1
+
+	if assigned:
+		frappe.db.commit()
+
+	return {
+		"assigned": assigned,
+		"skipped_already_assigned": skipped_already_assigned,
+		"skipped_claimed": skipped_claimed,
+		"skipped_quota": skipped_quota,
+	}
+
+
+@frappe.whitelist()
 def save_assignment_config(assignments_per_day, dormant_threshold_days, dormant_ratio):
 	"""Admin saves global assignment config."""
 	_require_manager()
@@ -949,9 +1135,10 @@ def add_team_member(team_name, user):
 	_require_manager()
 	doc = frappe.get_doc("Lead Sales Team", team_name)
 	if any(m.user == user for m in doc.members):
-		frappe.throw(f"{user} is already a member of {team_name}")
-	# Remove from any other teams — one team per user, avoids roster ambiguity
-	frappe.db.delete("Lead Sales Team Member", {"user": user, "parent": ["!=", team_name]})
+		frappe.throw(_(f"{user} is already a member of {team_name}."))
+	other_team = frappe.db.get_value("Lead Sales Team Member", {"user": user, "parent": ["!=", team_name]}, "parent")
+	if other_team:
+		frappe.throw(_(f"{user} is already in team \"{other_team}\". Remove them from that team first."))
 	doc.append("members", {"user": user})
 	doc.save()
 	frappe.db.commit()
@@ -973,7 +1160,10 @@ def add_team_territory(team_name, territory):
 	_require_manager()
 	doc = frappe.get_doc("Lead Sales Team", team_name)
 	if any(t.territory == territory for t in doc.territories):
-		frappe.throw(f"{territory} is already in {team_name}")
+		frappe.throw(_(f"{territory} is already in {team_name}."))
+	other_team = frappe.db.get_value("Lead Sales Team Territory", {"territory": territory, "parent": ["!=", team_name]}, "parent")
+	if other_team:
+		frappe.throw(_(f"Territory \"{territory}\" is already assigned to team \"{other_team}\". Remove it from that team first."))
 	doc.append("territories", {"territory": territory})
 	doc.save()
 	frappe.db.commit()

@@ -36,6 +36,19 @@ def _columns():
 
 # ── Data helpers ──────────────────────────────────────────────────────────────
 
+_ADMIN_EXCEPTIONS = {"idris@instabizsolutions.com"}
+
+
+def _admin_users():
+	"""Return set of user emails that have the System Manager role — excluded from report.
+	Users in _ADMIN_EXCEPTIONS are kept even if they have System Manager role."""
+	rows = frappe.db.sql(
+		"SELECT parent FROM `tabHas Role` WHERE role = 'System Manager' AND parenttype = 'User'",
+		as_dict=True,
+	)
+	return {r.parent for r in rows} - _ADMIN_EXCEPTIONS
+
+
 def _get_reps(date, territory):
 	"""Return set of all sales person users active on this date."""
 	cond = "WHERE transaction_date = %(date)s AND docstatus = 1 AND custom_sales_person_user != ''"
@@ -72,7 +85,8 @@ def _build_rows(date, month_start, territory, reps):
 	mtd_revenue = _mtd_revenue(month_start, date, territory)
 	mtd_targets = _mtd_targets(month_start)
 
-	all_users = set(reps) | set(leads) | set(quotations) | set(orders) | set(dispatches) | set(mtd_revenue)
+	admins = _admin_users()
+	all_users = (set(reps) | set(leads) | set(quotations) | set(orders) | set(dispatches) | set(mtd_revenue)) - admins
 	rows = []
 	for user in all_users:
 		target    = flt(mtd_targets.get(user, 0))

@@ -2603,3 +2603,13 @@ mark.ib-search-hl {
 /* ── Assignment Admin: target column in roster ────────────────────────────── */
 .ib-aa-row-target-bar { min-width: 100px; }
 .ib-aa-no-target { font-size: 12px; color: var(--text-muted); }
+
+/* ── Customer list: assignment status badge ───────────────────────────────── */
+.ib-cust-assigned-badge {
+    display: inline-flex; align-items: center;
+    margin-left: 8px; padding: 1px 8px; border-radius: 20px;
+    font-size: 11px; font-weight: 600; white-space: nowrap;
+    background: #fdf6f3; color: var(--ib-primary);
+    border: 1px solid rgba(217,119,87,0.3);
+}
+

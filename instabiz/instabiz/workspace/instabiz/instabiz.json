@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"ib-h1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Quick Access</b></span>\",\"col\":12}},{\"id\":\"ib-sc-cb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Board\",\"col\":3}},{\"id\":\"i4JIh3VgUG\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Quotation\",\"col\":3}},{\"id\":\"ib-sc-aa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Assignment Admin\",\"col\":3}},{\"id\":\"ib-sc-at\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Attendance Terminal\",\"col\":3}},{\"id\":\"ib-sc-ci\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Employee Check-in\",\"col\":3}},{\"id\":\"ZXtm1iyCR6\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"IB Rate Card\",\"col\":3}},{\"id\":\"dF971yIlQ1\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>STOCK</b></span>\",\"col\":12}},{\"id\":\"KSt9Ra2Yje\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Delivery Note\",\"col\":3}},{\"id\":\"k3YiVWBI5T\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>ACCOUNTING</b></span>\",\"col\":12}},{\"id\":\"MRZdpCcVDo\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Invoice\",\"col\":3}}]",
+ "content": "[{\"id\":\"ib-h1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Quick Access</b></span>\",\"col\":12}},{\"id\":\"ib-sc-cb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Board\",\"col\":3}},{\"id\":\"i4JIh3VgUG\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Quotation\",\"col\":3}},{\"id\":\"ib-sc-aa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Assignment Admin\",\"col\":3}},{\"id\":\"ib-sc-at\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Attendance Terminal\",\"col\":3}},{\"id\":\"ib-sc-ci\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Employee Check-in\",\"col\":3}},{\"id\":\"ZXtm1iyCR6\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"IB Rate Card\",\"col\":3}},{\"id\":\"t4AWh_YoFZ\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Org Chart\",\"col\":3}},{\"id\":\"U9J7kY9N_z\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Master\",\"col\":3}},{\"id\":\"dF971yIlQ1\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>STOCK</b></span>\",\"col\":12}},{\"id\":\"KSt9Ra2Yje\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Delivery Note\",\"col\":3}},{\"id\":\"SXFGusdNGX\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Stock Ledger\",\"col\":3}},{\"id\":\"5dwQIDtA_r\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Live Stock Balance\",\"col\":3}},{\"id\":\"k3YiVWBI5T\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>ACCOUNTING</b></span>\",\"col\":12}},{\"id\":\"MRZdpCcVDo\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Invoice\",\"col\":3}}]",
  "creation": "2026-04-25 11:15:33.281823",
  "custom_blocks": [],
  "docstatus": 0,
@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz",
  "links": [],
- "modified": "2026-05-19 17:15:30.006825",
+ "modified": "2026-05-20 17:37:41.322840",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz",
@@ -23,6 +23,27 @@
  "roles": [],
  "sequence_id": 1.0,
  "shortcuts": [
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Org Chart",
+   "link_to": "ib-org-chart",
+   "type": "Page"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Live Stock Balance",
+   "link_to": "ib-stock-dashboard",
+   "type": "Page"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Stock Ledger",
+   "link_to": "ib-stock-ledger",
+   "type": "Page"
+  },
   {
    "color": "Orange",
    "doc_view": "List",
@@ -36,6 +57,14 @@
    "doc_view": "List",
    "label": "Delivery Note",
    "link_to": "Delivery Note",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Customer Master",
+   "link_to": "Customer",
    "stats_filter": "[]",
    "type": "DocType"
   },

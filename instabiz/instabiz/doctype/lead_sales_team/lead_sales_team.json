@@ -6,6 +6,7 @@
  "engine": "InnoDB",
  "field_order": [
   "team_name",
+  "team_leader",
   "rr_index",
   "members_section",
   "members",
@@ -20,6 +21,14 @@
    "label": "Team Name",
    "reqd": 1,
    "unique": 1
+  },
+  {
+   "fieldname": "team_leader",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "Team Leader",
+   "in_list_view": 1,
+   "description": "Primary point-of-contact / lead for this team"
   },
   {
    "fieldname": "rr_index",

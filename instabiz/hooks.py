@@ -263,6 +263,7 @@ doctype_list_js = {
     "Delivery Note":    "public/js/delivery_note_list.js",
     "Sales Invoice":        "public/js/sales_invoice_list.js",
     "IB Item Price List":   "public/js/ib_item_price_list_list.js",
+    "Customer":             "public/js/customer_list.js",
 }
 
 doctype_js = {

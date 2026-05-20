@@ -19,16 +19,13 @@ class IBAssignmentAdmin {
 		this._date = frappe.datetime.get_today();
 		this._territory = null;
 		this._view_as_user = null;
-		this._pool_type = "Dormant";
-		this._selected_pool_customers = new Set();
 		this._dropdown_users_cache = [];
-		this._pool_page = 0;
-		this._pool_page_size = 50;
-		this._pool_total = 0;
-		this._pool_search = "";
 		this._excluded_users = new Set(JSON.parse(localStorage.getItem("ib_aa_excluded_users") || "[]"));
 		this._collapsed_teams = new Set(JSON.parse(localStorage.getItem("ib_aa_collapsed_teams") || "[]"));
 		this._roster_search = "";
+		this._queue_rows = [];
+		this._queue_search = "";
+		this._queue_claimer = "";
 		this._init();
 	}
 
@@ -89,6 +86,7 @@ class IBAssignmentAdmin {
 				self.refresh();
 			},
 		});
+		this.page.add_inner_button("+ Create New Team", () => self._show_create_team_modal());
 		this.page.add_inner_button("Config", () => self._show_config_modal());
 		this.page.add_inner_button("Refresh", () => self.refresh());
 	}
@@ -110,6 +108,19 @@ class IBAssignmentAdmin {
 					<div class="ib-aa-roster" id="ib-aa-roster"></div>
 				</section>
 
+				<!-- ── Manager Queue ── -->
+				<section class="ib-aa-section ib-aa-queue-section" id="ib-aa-queue-section">
+					<div class="ib-aa-section-head">
+						<span class="ib-aa-section-title">Manager Queue</span>
+						<input class="ib-aa-roster-search" id="ib-aa-queue-search" type="text" placeholder="Search customers…">
+						<select class="ib-aa-queue-claimer-filter" id="ib-aa-queue-claimer-filter">
+							<option value="">All executives</option>
+						</select>
+						<span class="ib-aa-section-date" id="ib-aa-queue-count"></span>
+					</div>
+					<div id="ib-aa-queue-list"></div>
+				</section>
+
 				<!-- ── View As Banner ── -->
 				<div id="ib-aa-view-as-bar" class="ib-aa-view-as-bar" style="display:none;">
 					<div class="ib-aa-view-as-inner">
@@ -122,45 +133,7 @@ class IBAssignmentAdmin {
 				<!-- ── Board View (view-as) ── -->
 				<div id="ib-aa-board-wrap"></div>
 
-				<!-- ── Customer Pool ── -->
-				<section class="ib-aa-section ib-aa-pool-section">
-
-					<!-- Header row -->
-					<div class="ib-aa-pool-topbar">
-						<div class="ib-aa-section-title">Customer Pool</div>
-						<div class="ib-aa-pool-tabs">
-							<button class="ib-aa-tab active" data-type="Dormant" id="ib-aa-tab-dormant">Dormant</button>
-							<button class="ib-aa-tab" data-type="Regular" id="ib-aa-tab-regular">Regular</button>
-						</div>
-						<input class="ib-aa-search" id="ib-aa-pool-search" type="text" placeholder="Search…">
-					</div>
-
-					<!-- Column headers -->
-					<div class="ib-aa-pool-thead">
-						<div style="width:20px;"></div>
-						<div class="ib-aa-th" style="flex:1;"></div>
-						<div class="ib-aa-th" style="width:130px;">Territory</div>
-						<div class="ib-aa-th" style="width:120px;">Last Order</div>
-					</div>
-
-					<div id="ib-aa-pool-list"></div>
-
-				</section>
-
-			</div>
-
-			<!-- ── Sticky assign bar ── -->
-			<div class="ib-aa-sticky-bar" id="ib-aa-assign-panel">
-				<span class="ib-aa-sel-pill" id="ib-aa-sel-count">0 selected</span>
-				<div class="ib-aa-assign-controls">
-					<select class="ib-aa-select" id="ib-aa-assign-user">
-						<option value="">Assign to user…</option>
-					</select>
-					<input type="date" class="ib-aa-date-input" id="ib-aa-assign-date" title="Assign date">
-					<button class="ib-aa-assign-btn" id="ib-aa-confirm-assign" disabled>Assign</button>
-					<button class="ib-aa-clear-btn" id="ib-aa-clear-sel">Clear</button>
 				</div>
-			</div>
 		`);
 		this._bind_events();
 	}
@@ -178,60 +151,21 @@ class IBAssignmentAdmin {
 			}, 150);
 		});
 
-		// Tab switch
-		this.$main.on("click", ".ib-aa-tab", function () {
-			self.$main.find(".ib-aa-tab").removeClass("active");
-			$(this).addClass("active");
-			self._pool_type = $(this).data("type");
-			self._pool_search = "";
-			self.$main.find("#ib-aa-pool-search").val("");
-			self._selected_pool_customers.clear();
-			self._update_assign_bar();
-			self._load_pool(0);
+		// Queue search
+		let _qst;
+		this.$main.on("input", "#ib-aa-queue-search", function () {
+			clearTimeout(_qst);
+			_qst = setTimeout(() => {
+				self._queue_search = this.value.trim();
+				self._apply_queue_filter();
+			}, 150);
 		});
 
-		// Search — reset to page 0, re-query server
-		let _st;
-		this.$main.on("input", "#ib-aa-pool-search", function () {
-			clearTimeout(_st);
-			_st = setTimeout(() => {
-				self._pool_search = this.value.trim();
-				self._load_pool(0);
-			}, 300);
+		this.$main.on("change", "#ib-aa-queue-claimer-filter", function () {
+			self._queue_claimer = this.value;
+			self._apply_queue_filter();
 		});
 
-		// Checkbox
-		this.$main.on("change", ".ib-aa-pool-chk", function () {
-			const c = $(this).val();
-			const $row = $(this).closest(".ib-aa-pool-row");
-			if ($(this).is(":checked")) {
-				self._selected_pool_customers.add(c);
-				$row.addClass("ib-aa-pool-row--checked");
-			} else {
-				self._selected_pool_customers.delete(c);
-				$row.removeClass("ib-aa-pool-row--checked");
-			}
-			self._update_assign_bar();
-		});
-
-		// Select all via header checkbox
-		this.$main.on("change", "#ib-aa-chk-all", function () {
-			const checked = $(this).is(":checked");
-			self.$main.find(".ib-aa-pool-chk").prop("checked", checked).each(function () {
-				checked
-					? self._selected_pool_customers.add($(this).val())
-					: self._selected_pool_customers.delete($(this).val());
-			});
-			self._update_assign_bar();
-		});
-
-		this.$main.on("click", "#ib-aa-confirm-assign", () => self._do_assign());
-		this.$main.on("change", "#ib-aa-assign-user, #ib-aa-assign-date", () => self._refresh_assign_btn());
-		this.$main.on("click", "#ib-aa-clear-sel", () => {
-			self._selected_pool_customers.clear();
-			self.$main.find(".ib-aa-pool-chk, #ib-aa-chk-all").prop("checked", false);
-			self._update_assign_bar();
-		});
 		this.$main.on("click", "#ib-aa-exit-view", () => {
 			self._view_as_user = null;
 			$("#ib-aa-view-as-bar").hide();
@@ -251,83 +185,12 @@ class IBAssignmentAdmin {
 				if (r.message) self._render_roster(r.message.roster, r.message.team_territories || {});
 			},
 		});
-		this._load_pool();
-		this._refresh_tab_counts();
-		this._populate_user_dropdown();
+		this._fetch_users_cache();
+		this._load_manager_queue();
 		if (this._view_as_user) this._reload_va_board();
 	}
 
-	_refresh_tab_counts() {
-		const base = { territory: this._territory, date: this._date, limit: 1, offset: 0 };
-		["Dormant", "Regular"].forEach(type => {
-			frappe.call({
-				method: "instabiz.overrides.customer_assignment.get_customer_pool",
-				args: { ...base, pool_type: type, search: "" },
-				callback(r) {
-					if (!r.message) return;
-					const total = r.message.total || 0;
-					const $tab = $(`#ib-aa-tab-${type.toLowerCase()}`);
-					const label = total > 0 ? `${type} <span class="ib-aa-tab-count">${total}</span>` : type;
-					$tab.html(label);
-				},
-			});
-		});
-	}
-
-	_load_pool(page = 0) {
-		const self = this;
-		this._pool_page = page;
-		const offset = page * this._pool_page_size;
-		$("#ib-aa-pool-list").html(`<div class="ib-aa-pool-loading">Loading…</div>`);
-
-		frappe.call({
-			method: "instabiz.overrides.customer_assignment.get_customer_pool",
-			args: {
-				territory: this._territory,
-				pool_type: this._pool_type,
-				date: this._date,
-				limit: this._pool_page_size,
-				offset,
-				search: this._pool_search || "",
-			},
-			callback(r) {
-				if (!r.message) return;
-				const { rows, total } = r.message;
-				self._pool_total = total || 0;
-				self._render_pool(rows || []);
-				self._render_pool_pagination();
-			},
-		});
-	}
-
-	_render_pool_pagination() {
-		$("#ib-aa-pool-pager").remove();
-		const total = this._pool_total || 0;
-		const page  = this._pool_page;
-		const size  = this._pool_page_size;
-		const pages = Math.ceil(total / size);
-		if (pages <= 1) return;
-
-		const start = page * size + 1;
-		const end   = Math.min((page + 1) * size, total);
-		const self  = this;
-
-		const $pager = $(`
-			<div id="ib-aa-pool-pager" class="ib-aa-pool-pager">
-				<span class="ib-aa-pager-info">${start}–${end} of ${total}</span>
-				<div class="ib-aa-pager-btns">
-					<button class="ib-aa-pager-btn" id="ib-aa-prev" ${page === 0 ? "disabled" : ""}>← Prev</button>
-					<span class="ib-aa-pager-page">Page ${page + 1} of ${pages}</span>
-					<button class="ib-aa-pager-btn" id="ib-aa-next" ${page >= pages - 1 ? "disabled" : ""}>Next →</button>
-				</div>
-			</div>
-		`);
-		$pager.find("#ib-aa-prev").on("click", () => { self._selected_pool_customers.clear(); self._load_pool(page - 1); });
-		$pager.find("#ib-aa-next").on("click", () => { self._selected_pool_customers.clear(); self._load_pool(page + 1); });
-		$("#ib-aa-pool-list").after($pager);
-	}
-
-	_populate_user_dropdown() {
+	_fetch_users_cache() {
 		const self = this;
 		frappe.call({
 			method: "frappe.client.get_list",
@@ -340,11 +203,154 @@ class IBAssignmentAdmin {
 			callback(r) {
 				if (!r.message) return;
 				self._dropdown_users_cache = r.message;
-				const $sel = $("#ib-aa-assign-user").empty().append('<option value="">Assign to…</option>');
-				r.message.forEach((u) => {
-					$sel.append(`<option value="${frappe.utils.escape_html(u.name)}">${frappe.utils.escape_html(u.full_name || u.name)}</option>`);
-				});
 			},
+		});
+	}
+
+	// ── Manager Queue ────────────────────────────────────────────────────────
+
+	_load_manager_queue() {
+		const self = this;
+		frappe.call({
+			method: "instabiz.overrides.customer_assignment.get_manager_queue",
+			callback(r) {
+				self._render_manager_queue(r.message || []);
+			},
+		});
+	}
+
+	_render_manager_queue(rows) {
+		this._queue_rows = rows;
+
+		const $section = $("#ib-aa-queue-section");
+		if (!rows.length) {
+			$section.hide();
+			return;
+		}
+		$section.show();
+
+		// Rebuild claimer filter options
+		const $sel = $("#ib-aa-queue-claimer-filter");
+		const prev = $sel.val();
+		const claimers = [...new Map(rows.map(r => [r.ib_claimed_by, r.claimer_name || r.ib_claimed_by])).entries()];
+		$sel.html('<option value="">All executives</option>' +
+			claimers.map(([v, l]) => `<option value="${frappe.utils.escape_html(v)}">${frappe.utils.escape_html(l)}</option>`).join(""));
+		if (prev && claimers.some(([v]) => v === prev)) $sel.val(prev);
+		else this._queue_claimer = "";
+
+		this._apply_queue_filter();
+	}
+
+	_apply_queue_filter() {
+		const tokens = this._queue_search.toLowerCase().split(/\s+/).filter(Boolean);
+		const claimer = this._queue_claimer;
+		const filtered = this._queue_rows.filter(r => {
+			if (claimer && r.ib_claimed_by !== claimer) return false;
+			if (!tokens.length) return true;
+			const hay = [r.customer_name, r.customer, r.territory, r.claimer_name, r.ib_claimed_by]
+				.filter(Boolean).join(" ").toLowerCase();
+			return tokens.every(t => hay.includes(t));
+		});
+
+		$("#ib-aa-queue-count").html(
+			`<span class="indicator-pill orange no-indicator-dot">${filtered.length} / ${this._queue_rows.length} claimed</span>`
+		);
+		this._render_queue_rows(filtered);
+	}
+
+	_render_queue_rows(rows) {
+		const self = this;
+		const users = this._dropdown_users_cache || [];
+		const $list = $("#ib-aa-queue-list").empty();
+
+		$list.append(`
+			<div class="ib-aa-queue-thead">
+				<div class="ib-aa-qth ib-aa-qth--customer">Customer</div>
+				<div class="ib-aa-qth ib-aa-qth--territory">Territory</div>
+				<div class="ib-aa-qth ib-aa-qth--last">Last Order</div>
+				<div class="ib-aa-qth ib-aa-qth--claimed">Claimed By</div>
+				<div class="ib-aa-qth ib-aa-qth--action"></div>
+			</div>
+		`);
+
+		if (!rows.length) {
+			$list.append(`<p class="ib-aa-empty">No customers match the current filter.</p>`);
+			return;
+		}
+
+		rows.forEach((r) => {
+			const last = r.last_so_date ? frappe.datetime.str_to_user(r.last_so_date) : "No orders";
+			const $row = $(`
+				<div class="ib-aa-queue-row">
+					<div class="ib-aa-qcol--customer">
+						<div class="ib-aa-qcol-name">${frappe.utils.escape_html(r.customer_name || r.customer)}</div>
+						<div class="ib-aa-qcol-code">${frappe.utils.escape_html(r.customer)}</div>
+					</div>
+					<div class="ib-aa-qcol--territory">${frappe.utils.escape_html(r.territory || "—")}</div>
+					<div class="ib-aa-qcol--last">${frappe.utils.escape_html(last)}</div>
+					<div class="ib-aa-qcol--claimed">
+						<span class="indicator-pill blue no-indicator-dot">${frappe.utils.escape_html(r.claimer_name || r.ib_claimed_by)}</span>
+					</div>
+					<div class="ib-aa-qcol--action">
+						<button class="ib-aa-queue-dot-btn" title="Assign to Rep" data-customer="${frappe.utils.escape_html(r.customer)}">
+							${IB_ICONS.svg("user", 13)}
+						</button>
+					</div>
+				</div>
+			`);
+
+			$row.find(".ib-aa-queue-dot-btn").on("click", function () {
+				const customer = $(this).data("customer");
+				const $btn = $(this);
+				const next_day = self._next_working_day(self._date);
+
+				const d = new frappe.ui.Dialog({
+					title: __("Assign {0} to Sales Rep", [r.customer_name || customer]),
+					fields: [
+						{
+							fieldname: "assigned_to",
+							fieldtype: "Select",
+							label: __("Sales User"),
+							options: users.map((u) => u.full_name || u.name).join("\n"),
+							reqd: 1,
+						},
+						{
+							fieldname: "date",
+							fieldtype: "Date",
+							label: __("Date"),
+							reqd: 1,
+							default: next_day,
+						},
+					],
+					primary_action_label: __("Assign & Release Claim"),
+					primary_action(values) {
+						const user_obj = users.find((u) => (u.full_name || u.name) === values.assigned_to);
+						const assigned_to = user_obj ? user_obj.name : values.assigned_to;
+						$btn.prop("disabled", true);
+						frappe.call({
+							method: "instabiz.overrides.customer_assignment.assign_claimed_to_user",
+							args: { customer, assigned_to, date: values.date },
+							callback(rr) {
+								if (rr.message && rr.message.status === "ok") {
+									frappe.show_alert({
+										message: __("{0} assigned to {1}", [r.customer_name || customer, values.assigned_to]),
+										indicator: "green",
+									});
+									d.hide();
+									self._load_manager_queue();
+									self._reload_roster();
+								} else {
+									$btn.prop("disabled", false);
+								}
+							},
+							error() { $btn.prop("disabled", false); },
+						});
+					},
+				});
+				d.show();
+			});
+
+			$list.append($row);
 		});
 	}
 
@@ -356,11 +362,6 @@ class IBAssignmentAdmin {
 
 	_refilter_roster() {
 		if (this._last_roster) this._render_roster(this._last_roster, this._last_team_territories);
-	}
-
-	_reload_pool() {
-		this._load_pool(this._pool_page);
-		this._refresh_tab_counts();
 	}
 
 	_reload_roster() {
@@ -513,6 +514,7 @@ class IBAssignmentAdmin {
 							<div class="ib-aa-row-avatar" style="background:${av}">${initials}</div>
 							<div class="ib-aa-row-name-wrap">
 								<span class="ib-aa-row-name">${frappe.utils.escape_html(u.full_name || u.user)}</span>
+								${u.is_leader ? `<svg class="ib-aa-tl-badge" viewBox="0 0 24 24" width="26" height="26" title="Team Leader" xmlns="http://www.w3.org/2000/svg"><polygon points="12,1 13.6,6.2 17.5,2.5 16.2,7.8 21.5,6.5 17.8,10.5 23,12 17.8,13.6 21.5,17.5 16.2,16.2 17.5,21.5 13.6,17.8 12,23 10.4,17.8 6.5,21.5 7.8,16.2 2.5,17.5 6.2,13.6 1,12 6.2,10.4 2.5,6.5 7.8,7.8 6.5,2.5 10.4,6.2" fill="#f59e0b"/><text x="12" y="14.5" text-anchor="middle" font-size="6.5" font-weight="900" fill="white" font-family="Inter,sans-serif">TL</text></svg>` : ""}
 								${no_tmrw ? `<span class="ib-aa-no-tmrw-dot" title="No assignments queued for tomorrow">⚠</span>` : ""}
 							</div>
 						</div>
@@ -676,6 +678,7 @@ class IBAssignmentAdmin {
 		const self = this;
 		const d = new frappe.ui.Dialog({
 			title: `Manage Team: ${frappe.utils.escape_html(team_name)}`,
+			size: "large",
 			fields: [{
 				fieldtype: "HTML",
 				fieldname: "body",
@@ -726,6 +729,12 @@ class IBAssignmentAdmin {
 		const user_team_map = {};
 		(self._last_roster || []).forEach(u => { if (u.team) user_team_map[u.user] = u.team; });
 
+		// Build territory → team map from _last_team_territories (team → [territories])
+		const territory_team_map = {};
+		Object.entries(self._last_team_territories || {}).forEach(([team, territories]) => {
+			territories.forEach(t => { if (team !== team_name) territory_team_map[t] = team; });
+		});
+
 		const available_users = (self._dropdown_users_cache || []).filter(u => !existing_users.has(u.name));
 		const available_territories = all_territories.filter(t => !existing_territories.has(t));
 
@@ -755,62 +764,104 @@ class IBAssignmentAdmin {
 				? `<span class="ib-tm-team-badge" style="--badge-color:${color}">${frappe.utils.escape_html(other_team)}</span>`
 				: `<span class="ib-tm-team-badge ib-tm-team-badge--none">No team</span>`;
 			return `
-			<div class="ib-tm-picker-row" data-user="${frappe.utils.escape_html(u.name)}" data-search="${frappe.utils.escape_html((u.full_name || "") + " " + u.name).toLowerCase()}">
+			<div class="ib-tm-picker-row" data-user="${frappe.utils.escape_html(u.name)}" data-search="${frappe.utils.escape_html((u.full_name || "") + " " + u.name).toLowerCase()}"${other_team ? ` data-other-team="${frappe.utils.escape_html(other_team)}"` : ""}>
 				<div class="ib-tm-row-av" style="background:${color}">${initials}</div>
 				<div class="ib-tm-row-info">
 					<span class="ib-tm-row-name">${frappe.utils.escape_html(u.full_name || u.name)}</span>
-					<span class="ib-tm-row-sub">${frappe.utils.escape_html(u.name)}</span>
+					<span class="ib-tm-row-sub">${frappe.utils.escape_html(u.name)} ${team_badge}</span>
 				</div>
-				${team_badge}
-				<button class="ib-tm-picker-add-btn" data-user="${frappe.utils.escape_html(u.name)}">+ Add</button>
+				<button class="ib-tm-picker-add-btn${other_team ? " ib-tm-picker-add-btn--blocked" : ""}" data-user="${frappe.utils.escape_html(u.name)}"${other_team ? ' title="Already in another team"' : ""}>+ Add</button>
 			</div>`;
 		}).join("") || `<div class="ib-tm-empty">All users already in this team</div>`;
 
-		// Territory rows
+		const PIN_SVG = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 1C5.24 1 3 3.24 3 6c0 3.75 5 9 5 9s5-5.25 5-9c0-2.76-2.24-5-5-5zm0 6.5A1.5 1.5 0 1 1 8 4a1.5 1.5 0 0 1 0 3.5z" fill="currentColor"/></svg>`;
+
+		// Territory rows — assigned (with Remove)
 		const territory_rows = team.territories.length
 			? team.territories.map(t => `
 				<div class="ib-tm-row">
+					<div class="ib-tm-territory-icon">${PIN_SVG}</div>
 					<div class="ib-tm-row-info">
 						<span class="ib-tm-row-name">${frappe.utils.escape_html(t.territory)}</span>
 					</div>
 					<button class="ib-tm-remove-btn" data-territory="${frappe.utils.escape_html(t.territory)}">Remove</button>
 				</div>`).join("")
-			: `<div class="ib-tm-empty">No territories yet</div>`;
+			: `<div class="ib-tm-empty">No territories assigned yet</div>`;
+
+		// Territory picker rows — available to add (with + Add), filtered by search
+		const territory_picker_rows = available_territories.map(t => {
+			const other_team_t = territory_team_map[t] || null;
+			return `
+			<div class="ib-tm-picker-row" data-territory="${frappe.utils.escape_html(t)}" data-tsearch="${frappe.utils.escape_html(t).toLowerCase()}"${other_team_t ? ` data-other-team="${frappe.utils.escape_html(other_team_t)}"` : ""}>
+				<div class="ib-tm-territory-icon">${PIN_SVG}</div>
+				<div class="ib-tm-row-info">
+					<span class="ib-tm-row-name">${frappe.utils.escape_html(t)}</span>
+					${other_team_t ? `<span class="ib-tm-row-sub"><span class="ib-tm-team-badge" style="--badge-color:${self._avatar_color("", other_team_t)}">${frappe.utils.escape_html(other_team_t)}</span></span>` : ""}
+				</div>
+				<button class="ib-tm-picker-add-btn ib-tm-territory-picker-add-btn${other_team_t ? " ib-tm-picker-add-btn--blocked" : ""}" data-territory="${frappe.utils.escape_html(t)}"${other_team_t ? ` title="Already in ${frappe.utils.escape_html(other_team_t)}"` : ""}>+ Add</button>
+			</div>`;
+		}).join("") || `<div class="ib-tm-empty">All territories already assigned</div>`;
 
 		$body.html(`
-			<div class="ib-tm-section">
-				<div class="ib-tm-section-label">Members <span class="ib-tm-count">${team.members.length}</span></div>
-				<div class="ib-tm-list">${member_rows}</div>
-				<div class="ib-tm-picker-head">
-					<span class="ib-tm-picker-title">Add member</span>
-					<input class="ib-tm-picker-search" id="ib-tm-member-search" placeholder="Search users…" autocomplete="off">
+			<div class="ib-tm-cols">
+
+				<!-- ── Members column ── -->
+				<div class="ib-tm-col">
+					<div class="ib-tm-section">
+						<div class="ib-tm-section-label">Add Member</div>
+						<div class="ib-tm-picker-head">
+							<input class="ib-tm-picker-search" id="ib-tm-member-search" placeholder="Search users…" autocomplete="off">
+						</div>
+						<div class="ib-tm-picker-list" id="ib-tm-picker-list">${picker_rows}</div>
+						<div class="ib-tm-section-label ib-tm-section-label--sub">In Team <span class="ib-tm-count">${team.members.length}</span></div>
+						<div class="ib-tm-list">${member_rows}</div>
+					</div>
 				</div>
-				<div class="ib-tm-picker-list" id="ib-tm-picker-list">${picker_rows}</div>
-			</div>
-			<div class="ib-tm-section">
-				<div class="ib-tm-section-label">Territories <span class="ib-tm-count">${team.territories.length}</span></div>
-				<div class="ib-tm-list">${territory_rows}</div>
-				<div class="ib-tm-add-row">
-					<select class="ib-tm-select" id="ib-tm-territory-sel">
-						<option value="">Select territory to add…</option>
-						${available_territories.map(t => `<option value="${frappe.utils.escape_html(t)}">${frappe.utils.escape_html(t)}</option>`).join("")}
-					</select>
-					<button class="ib-tm-add-btn" id="ib-tm-add-territory">Add</button>
+
+				<!-- ── Territories column ── -->
+				<div class="ib-tm-col">
+					<div class="ib-tm-section">
+						<div class="ib-tm-section-label">Add Territory</div>
+						<div class="ib-tm-picker-head">
+							<input class="ib-tm-picker-search" id="ib-tm-territory-search" placeholder="Search territories…" autocomplete="off">
+						</div>
+						<div class="ib-tm-picker-list" id="ib-tm-territory-picker-list">${territory_picker_rows}</div>
+						<div class="ib-tm-section-label ib-tm-section-label--sub">Assigned <span class="ib-tm-count">${team.territories.length}</span></div>
+						<div class="ib-tm-list">${territory_rows}</div>
+					</div>
 				</div>
+
 			</div>
 		`);
 
-		// Picker search filter
+		// Member search filter
 		$body.find("#ib-tm-member-search").on("input", function() {
 			const q = this.value.trim().toLowerCase();
-			$body.find(".ib-tm-picker-row").each(function() {
+			$body.find("#ib-tm-picker-list .ib-tm-picker-row").each(function() {
 				const hay = $(this).data("search") || "";
 				$(this).toggle(!q || hay.includes(q));
 			});
 		});
 
-		// Per-row add member
-		$body.find(".ib-tm-picker-add-btn").on("click", function() {
+		// Territory search filter
+		$body.find("#ib-tm-territory-search").on("input", function() {
+			const q = this.value.trim().toLowerCase();
+			$body.find("#ib-tm-territory-picker-list .ib-tm-picker-row").each(function() {
+				const hay = $(this).data("tsearch") || "";
+				$(this).toggle(!q || hay.includes(q));
+			});
+		});
+
+		// Per-row add member — exclude territory add buttons which share the base class
+		$body.find(".ib-tm-picker-row .ib-tm-picker-add-btn:not(.ib-tm-territory-picker-add-btn)").on("click", function() {
+			const other_team = $(this).closest(".ib-tm-picker-row").data("other-team");
+			if (other_team) {
+				frappe.show_alert({
+					message: __("User is already in team \"{0}\". Remove them from that team first.", [other_team]),
+					indicator: "red",
+				});
+				return;
+			}
 			const user = $(this).data("user");
 			const $btn = $(this).prop("disabled", true).text("…");
 			frappe.call({
@@ -885,11 +936,18 @@ class IBAssignmentAdmin {
 			});
 		});
 
-		// Add territory
-		$body.find("#ib-tm-add-territory").on("click", function() {
-			const territory = $body.find("#ib-tm-territory-sel").val();
-			if (!territory) { frappe.show_alert({ message: "Select a territory first", indicator: "orange" }); return; }
-			const $btn = $(this).prop("disabled", true).text("Adding…");
+		// Add territory (per-row)
+		$body.find(".ib-tm-territory-picker-add-btn").on("click", function() {
+			const other_team_t = $(this).closest(".ib-tm-picker-row").data("other-team");
+			if (other_team_t) {
+				frappe.show_alert({
+					message: __("Territory is already assigned to team \"{0}\". Remove it from that team first.", [other_team_t]),
+					indicator: "red",
+				});
+				return;
+			}
+			const territory = $(this).data("territory");
+			const $btn = $(this).prop("disabled", true).text("…");
 			frappe.call({
 				method: "instabiz.overrides.customer_assignment.add_team_territory",
 				args: { team_name, territory },
@@ -898,10 +956,10 @@ class IBAssignmentAdmin {
 						frappe.show_alert({ message: `${territory} added`, indicator: "green" });
 						self._load_team_modal(d, $body, team_name);
 					} else {
-						$btn.prop("disabled", false).text("Add");
+						$btn.prop("disabled", false).text("+ Add");
 					}
 				},
-				error() { $btn.prop("disabled", false).text("Add"); },
+				error() { $btn.prop("disabled", false).text("+ Add"); },
 			});
 		});
 	}
@@ -1091,7 +1149,6 @@ class IBAssignmentAdmin {
 										indicator: "orange",
 									});
 									self._reload_va_board();
-									self._reload_pool();
 									self._reload_roster();
 								}
 							},
@@ -1128,7 +1185,6 @@ class IBAssignmentAdmin {
 					if (r.message && r.message.status === "ok") {
 						self._va_show_undo(customer, r.message.assignment);
 						self._reload_va_board();
-						self._reload_pool();
 					} else {
 						$btn.prop("disabled", false).text("Today");
 					}
@@ -1148,7 +1204,6 @@ class IBAssignmentAdmin {
 					if (r.message && r.message.status === "ok") {
 						frappe.show_alert({ message: `${customer} added to Tomorrow`, indicator: "blue" });
 						self._reload_va_board();
-						self._reload_pool();
 					} else {
 						$btn.prop("disabled", false).text("Tomorrow");
 					}
@@ -1190,7 +1245,6 @@ class IBAssignmentAdmin {
 						if (res.message && res.message.status === "ok") {
 							frappe.show_alert({ message: "Assignment removed", indicator: "orange" });
 							self._reload_va_board();
-							self._reload_pool();
 							self._reload_roster();
 						}
 					},
@@ -1239,7 +1293,6 @@ class IBAssignmentAdmin {
 					if (r.message && r.message.status === "ok") {
 						frappe.show_alert({ message: `${customer} removed from Today`, indicator: "orange" });
 						self._reload_va_board();
-						self._reload_pool();
 					}
 				},
 			});
@@ -1312,102 +1365,10 @@ class IBAssignmentAdmin {
 		d.show();
 	}
 
-	// ── Pool ─────────────────────────────────────────────────────────────────
+	// ── Create Team ───────────────────────────────────────────────────────────
 
-	_age_chip(last_so_date) {
-		if (!last_so_date) return `<span class="ib-aa-age-chip ib-aa-age--never">No orders</span>`;
-		const days = Math.floor((new Date() - new Date(last_so_date)) / 86400000);
-		if (days > 90) return `<span class="ib-aa-age-chip ib-aa-age--old">${days}d ago</span>`;
-		if (days > 30) return `<span class="ib-aa-age-chip ib-aa-age--mid">${days}d ago</span>`;
-		return `<span class="ib-aa-age-chip ib-aa-age--recent">${frappe.datetime.str_to_user(last_so_date)}</span>`;
-	}
-
-	_render_pool(rows) {
-		const $list = $("#ib-aa-pool-list").empty();
-
-		if (!rows.length) {
-			$list.html('<p class="ib-aa-empty">No customers in this pool</p>');
-			return;
-		}
-
-		rows.forEach((r) => {
-			const checked = this._selected_pool_customers.has(r.customer);
-			const display_name = frappe.utils.escape_html(r.customer_name || r.customer);
-			const code = frappe.utils.escape_html(r.customer);
-			const gstin = r.gstin ? `<span class="ib-aa-pool-cust-gstin">${frappe.utils.escape_html(r.gstin)}</span>` : "";
-			$list.append(`
-				<label class="ib-aa-pool-row ${checked ? "ib-aa-pool-row--checked" : ""}" data-name="${code}">
-					<input type="checkbox" class="ib-aa-pool-chk" value="${code}" ${checked ? "checked" : ""}>
-					<span class="ib-aa-pool-cust">
-						<span class="ib-aa-pool-cust-name">${display_name}</span>
-						<span class="ib-aa-pool-cust-code">${code}</span>
-						${gstin}
-					</span>
-					<span class="ib-aa-pool-terr">${frappe.utils.escape_html(r.territory || "—")}</span>
-					<span class="ib-aa-pool-last">${this._age_chip(r.last_so_date)}</span>
-				</label>
-			`);
-		});
-	}
-
-	_update_assign_bar() {
-		const count = this._selected_pool_customers.size;
-		const has_sel = count > 0;
-
-		$("#ib-aa-sel-count").text(`${count} customer${count > 1 ? "s" : ""} selected`);
-		$("#ib-aa-assign-panel").toggleClass("ib-aa-sticky-bar--active", has_sel);
-
-		if (has_sel && !$("#ib-aa-assign-date").val()) {
-			$("#ib-aa-assign-date").val(this._next_working_day(this._date));
-		}
-
-		this._refresh_assign_btn();
-	}
-
-	_refresh_assign_btn() {
-		const ok = this._selected_pool_customers.size > 0
-			&& !!$("#ib-aa-assign-user").val()
-			&& !!$("#ib-aa-assign-date").val();
-		$("#ib-aa-confirm-assign").prop("disabled", !ok);
-	}
-
-	_do_assign() {
-		const self = this;
-		const user = $("#ib-aa-assign-user").val();
-		const date = $("#ib-aa-assign-date").val();
-		if (!user) { frappe.msgprint("Select a user first."); return; }
-		if (!date) { frappe.msgprint("Select a date."); return; }
-
-		const customers = [...this._selected_pool_customers];
-		let idx = 0, errors = 0;
-
-		const $btn = $("#ib-aa-confirm-assign").prop("disabled", true).text("Assigning…");
-
-		const next = () => {
-			if (idx >= customers.length) {
-				$btn.prop("disabled", false).text("Assign");
-				frappe.show_alert({
-					message: `${customers.length - errors} assigned${errors ? `, ${errors} skipped` : ""}`,
-					indicator: errors ? "orange" : "green",
-				});
-				self._selected_pool_customers.clear();
-				self.$main.find(".ib-aa-pool-chk").prop("checked", false);
-				self._update_assign_bar();
-				self.refresh();
-				if (self._view_as_user === user) self._reload_va_board();
-				return;
-			}
-			frappe.call({
-				method: "instabiz.overrides.customer_assignment.add_customer_to_today",
-				args: { customer: customers[idx], date, target_user: user },
-				callback(r) {
-					if (r.exc) errors++;
-					idx++;
-					next();
-				},
-			});
-		};
-		next();
+	_show_create_team_modal() {
+		frappe.new_doc("Lead Sales Team");
 	}
 
 	// ── Config modal ──────────────────────────────────────────────────────────
@@ -1576,6 +1537,7 @@ class IBAssignmentAdmin {
 				white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 			}
 			.ib-aa-no-tmrw-dot { font-size: 13px; color: #d97706; flex-shrink: 0; line-height: 1; }
+			.ib-aa-tl-badge { flex-shrink: 0; display: inline-block; vertical-align: middle; }
 
 			/* Stat cells */
 			.ib-aa-row-stat {
@@ -1651,8 +1613,11 @@ class IBAssignmentAdmin {
 			.ib-aa-btn-team-kebab:hover { border-color: var(--ib-primary); color: var(--ib-primary); background: rgba(217,119,87,0.08); }
 
 			/* Team manage modal */
-			.ib-tm-body { display: flex; flex-direction: column; gap: 16px; padding: 4px 0; }
+			.ib-tm-body { padding: 4px 0; }
 			.ib-tm-loading { text-align: center; color: var(--text-muted); padding: 20px; font-size: 13px; }
+			.ib-tm-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+			.ib-tm-col { display: flex; flex-direction: column; min-width: 0; }
+			.ib-tm-col .ib-tm-section { display: flex; flex-direction: column; }
 			.ib-tm-section { border: 1px solid var(--border-color); border-radius: 7px; overflow: hidden; }
 			.ib-tm-section-label {
 				display: flex; align-items: center; gap: 6px;
@@ -1665,7 +1630,12 @@ class IBAssignmentAdmin {
 				background: var(--border-color); color: var(--text-muted);
 				border-radius: 10px; padding: 0 6px; font-size: 10px; font-weight: 700;
 			}
-			.ib-tm-list { display: flex; flex-direction: column; }
+			.ib-tm-list { display: flex; flex-direction: column; max-height: 200px; overflow-y: auto; }
+			.ib-tm-section-label--sub {
+				border-top: 2px solid var(--border-color);
+				background: var(--bg-color);
+				font-size: 9px; letter-spacing: 0.8px;
+			}
 			.ib-tm-row {
 				display: flex; align-items: center; gap: 10px;
 				padding: 8px 14px; border-bottom: 1px solid var(--border-color);
@@ -1716,14 +1686,15 @@ class IBAssignmentAdmin {
 			.ib-tm-picker-row:last-child { border-bottom: none; }
 			.ib-tm-picker-row:hover { background: var(--subtle-bg); }
 			.ib-tm-team-badge {
-				display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
-				padding: 2px 8px; border-radius: 20px;
-				font-size: 10px; font-weight: 700; white-space: nowrap;
+				display: inline-flex; align-items: center; gap: 3px;
+				padding: 1px 5px; border-radius: 10px;
+				font-size: 9px; font-weight: 700; white-space: nowrap;
 				background: color-mix(in srgb, var(--badge-color) 12%, transparent);
 				color: var(--badge-color);
-				border: 1px solid color-mix(in srgb, var(--badge-color) 30%, transparent);
+				border: 1px solid color-mix(in srgb, var(--badge-color) 25%, transparent);
+				vertical-align: middle; line-height: 1.4;
 			}
-			.ib-tm-team-badge::before { content: "●"; font-size: 7px; }
+			.ib-tm-team-badge::before { content: "●"; font-size: 6px; }
 			.ib-tm-team-badge--none {
 				background: var(--subtle-bg); color: var(--text-muted);
 				border: 1px solid var(--border-color);
@@ -1738,27 +1709,19 @@ class IBAssignmentAdmin {
 			}
 			.ib-tm-picker-add-btn:hover { background: var(--ib-primary); color: #fff; }
 			.ib-tm-picker-add-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+			.ib-tm-picker-add-btn--blocked {
+				border-color: var(--border-color); background: var(--subtle-bg);
+				color: var(--text-muted); cursor: not-allowed;
+			}
+			.ib-tm-picker-add-btn--blocked:hover { background: var(--subtle-bg); color: var(--text-muted); }
 
-			.ib-tm-add-row {
-				display: flex; align-items: center; gap: 8px;
-				padding: 10px 14px; border-top: 1px solid var(--border-color);
-				background: var(--subtle-bg);
+			/* Territory icon — mirrors member avatar circle */
+			.ib-tm-territory-icon {
+				width: 28px; height: 28px; border-radius: 50%;
+				border: 1px solid var(--border-color);
+				display: flex; align-items: center; justify-content: center;
+				flex-shrink: 0; color: var(--text-muted); background: var(--subtle-bg);
 			}
-			.ib-tm-select {
-				flex: 1; padding: 6px 10px;
-				border: 1px solid var(--border-color); border-radius: 5px;
-				font-size: 12px; background: var(--card-bg); color: var(--text-color);
-				transition: border-color 0.15s;
-			}
-			.ib-tm-select:focus { outline: none; border-color: var(--ib-primary); }
-			.ib-tm-add-btn {
-				padding: 6px 16px; border-radius: 5px;
-				border: none; background: var(--ib-primary); color: #fff;
-				font-size: 12px; font-weight: 700; cursor: pointer;
-				transition: all 0.15s; white-space: nowrap; flex-shrink: 0;
-			}
-			.ib-tm-add-btn:hover { background: var(--ib-primary-dark, #b45e3e); }
-			.ib-tm-add-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 			/* Kebab dropdown */
 			.ib-aa-kdrop {
@@ -1821,156 +1784,6 @@ class IBAssignmentAdmin {
 				transition: all 0.15s;
 			}
 			.ib-aa-exit-view-btn:hover { background: #fcd34d; border-color: #fcd34d; }
-
-			/* ── Pool section ── */
-			.ib-aa-pool-section { position: relative; }
-			.ib-aa-pool-topbar {
-				display: flex; align-items: center; gap: 10px;
-				padding: 12px 20px;
-				border-bottom: 1px solid var(--border-color);
-				background: var(--subtle-bg);
-			}
-			.ib-aa-pool-tabs { display: flex; gap: 4px; }
-			.ib-aa-tab {
-				padding: 5px 16px; border-radius: 6px;
-				border: 1px solid var(--border-color);
-				background: var(--card-bg);
-				font-size: 12px; font-weight: 600; cursor: pointer;
-				color: var(--text-muted); transition: all 0.15s;
-			}
-			.ib-aa-tab.active { background: var(--ib-primary); border-color: var(--ib-primary); color: #fff; }
-			.ib-aa-tab:hover:not(.active) { border-color: var(--text-muted); color: var(--text-color); }
-			.ib-aa-tab-count {
-				display: inline-block; margin-left: 5px;
-				background: rgba(255,255,255,0.25); color: inherit;
-				border-radius: 10px; padding: 0 7px;
-				font-size: 11px; font-weight: 700;
-			}
-			.ib-aa-tab:not(.active) .ib-aa-tab-count {
-				background: var(--subtle-bg); color: var(--text-muted);
-			}
-			/* ── Age chips ── */
-			.ib-aa-age-chip {
-				display: inline-block; padding: 2px 8px; border-radius: 20px;
-				font-size: 11px; font-weight: 600; white-space: nowrap;
-			}
-			.ib-aa-age--never  { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
-			.ib-aa-age--old    { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
-			.ib-aa-age--mid    { background: #fefce8; color: #a16207; border: 1px solid #fde68a; }
-			.ib-aa-age--recent { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
-			.ib-aa-search {
-				margin-left: auto; padding: 6px 12px;
-				border: 1px solid var(--border-color); border-radius: 6px;
-				font-size: 12px; background: var(--card-bg); color: var(--text-color);
-				width: 220px; transition: border-color 0.15s;
-			}
-			.ib-aa-search:focus { outline: none; border-color: var(--ib-primary); box-shadow: 0 0 0 2px rgba(217,119,87,0.12); }
-
-			/* ── Sticky assign bar ── */
-			.ib-aa-sticky-bar {
-				position: fixed; bottom: 0; left: 0; right: 0; z-index: 1000;
-				display: flex; align-items: center; gap: 14px;
-				padding: 14px 32px;
-				background: var(--card-bg);
-				border-top: 2px solid var(--ib-primary);
-				box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
-				transform: translateY(100%);
-				transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
-			}
-			.ib-aa-sticky-bar--active { transform: translateY(0); }
-			.ib-aa-assign-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: 1; }
-			.ib-aa-sel-pill {
-				background: var(--ib-primary); color: #fff;
-				border-radius: 20px; padding: 5px 16px;
-				font-size: 12px; font-weight: 700; white-space: nowrap; flex-shrink: 0;
-			}
-			.ib-aa-select, .ib-aa-date-input {
-				padding: 7px 10px; border: 1px solid var(--border-color);
-				border-radius: 6px; font-size: 12px;
-				background: var(--card-bg); color: var(--text-color);
-				transition: border-color 0.15s;
-			}
-			.ib-aa-select:focus, .ib-aa-date-input:focus { outline: none; border-color: var(--ib-primary); }
-			.ib-aa-select { min-width: 200px; }
-			.ib-aa-assign-btn {
-				padding: 8px 24px; border-radius: 6px;
-				background: var(--ib-primary); color: #fff;
-				border: none; font-size: 13px; font-weight: 700; cursor: pointer;
-				transition: all 0.15s;
-			}
-			.ib-aa-assign-btn:hover:not(:disabled) { background: var(--ib-primary-dark, #b45e3e); transform: translateY(-1px); box-shadow: 0 2px 8px rgba(217,119,87,0.3); }
-			.ib-aa-assign-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-			.ib-aa-clear-btn {
-				padding: 8px 14px; border-radius: 6px;
-				background: transparent; color: var(--text-muted);
-				border: 1px solid var(--border-color); font-size: 12px; cursor: pointer;
-				transition: all 0.15s;
-			}
-			.ib-aa-clear-btn:hover { border-color: var(--text-muted); color: var(--text-color); }
-
-			/* ── Pool table ── */
-			.ib-aa-pool-thead {
-				display: flex; align-items: center; gap: 12px;
-				padding: 8px 20px;
-				background: var(--subtle-bg);
-				border-bottom: 1px solid var(--border-color);
-			}
-			.ib-aa-th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); }
-
-			.ib-aa-pool-row {
-				display: flex; align-items: center; gap: 12px;
-				padding: 10px 20px;
-				border-bottom: 1px solid var(--border-color);
-				cursor: pointer; margin: 0; transition: background 0.1s;
-				border-left: 3px solid transparent;
-			}
-			.ib-aa-pool-row:hover { background: var(--subtle-bg); }
-			.ib-aa-pool-row:last-child { border-bottom: none; }
-			.ib-aa-pool-row--checked {
-				background: #fdf6f3 !important;
-				border-left-color: var(--ib-primary);
-			}
-			.ib-aa-pool-chk { width: 15px; height: 15px; cursor: pointer; accent-color: var(--ib-primary); flex-shrink: 0; }
-			.ib-aa-pool-cust { flex: 1; display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
-			.ib-aa-pool-cust-name { font-weight: 600; font-size: 13px; color: var(--text-color); }
-			.ib-aa-pool-cust-code { font-size: 10px; color: var(--text-muted); font-family: monospace; }
-			.ib-aa-pool-cust-gstin {
-				display: inline-block;
-				margin-top: 3px;
-				font-size: 11px;
-				font-family: monospace;
-				font-weight: 600;
-				letter-spacing: 0.4px;
-				color: #1e40af;
-				background: #dbeafe;
-				border: 1px solid #93c5fd;
-				border-radius: 20px;
-				padding: 2px 8px;
-				white-space: nowrap;
-			}
-			.ib-aa-pool-cust-gstin::before { content: "GST  "; color: #3b82f6; }
-			.ib-aa-pool-terr { width: 140px; font-size: 12px; color: var(--text-muted); }
-			.ib-aa-pool-last { width: 120px; font-size: 12px; color: var(--text-muted); }
-
-			/* ── Pool loading / pagination ── */
-			.ib-aa-pool-loading { padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
-			.ib-aa-pool-pager {
-				display: flex; align-items: center; justify-content: space-between;
-				padding: 10px 20px;
-				border-top: 1px solid var(--border-color);
-				background: var(--subtle-bg);
-			}
-			.ib-aa-pager-info { font-size: 12px; color: var(--text-muted); }
-			.ib-aa-pager-btns { display: flex; align-items: center; gap: 10px; }
-			.ib-aa-pager-page { font-size: 12px; color: var(--text-muted); }
-			.ib-aa-pager-btn {
-				padding: 5px 14px; border-radius: 6px;
-				border: 1px solid var(--border-color);
-				background: var(--card-bg); color: var(--text-color);
-				font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s;
-			}
-			.ib-aa-pager-btn:hover:not(:disabled) { border-color: var(--ib-primary); color: var(--ib-primary); }
-			.ib-aa-pager-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 			/* ── View-as kanban ── */
 			.ib-va-loading { padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
@@ -2103,6 +1916,82 @@ class IBAssignmentAdmin {
 			.ib-va-undo-bar  { height: 3px; background: var(--border-color); margin: 0 -16px; }
 			.ib-va-undo-fill { height: 100%; background: var(--ib-primary); }
 
+			/* ── Manager Queue table ── */
+			.ib-aa-queue-thead {
+				display: flex; align-items: center;
+				padding: 6px 20px;
+				background: var(--subtle-bg);
+				border-bottom: 1px solid var(--border-color);
+			}
+			.ib-aa-qth {
+				font-size: 10px; font-weight: 700; text-transform: uppercase;
+				letter-spacing: 0.5px; color: var(--text-muted);
+			}
+			.ib-aa-qth--customer { flex: 1; min-width: 0; }
+			.ib-aa-qth--territory, .ib-aa-qth--last, .ib-aa-qth--claimed, .ib-aa-qth--action {
+				flex-shrink: 0; border-left: 1px solid var(--border-color); padding-left: 12px;
+			}
+			.ib-aa-qth--territory { width: 140px; }
+			.ib-aa-qth--last      { width: 110px; }
+			.ib-aa-qth--claimed   { width: 160px; }
+			.ib-aa-qth--action    { width: 52px; }
+
+			.ib-aa-queue-row {
+				display: flex; align-items: center;
+				padding: 10px 20px;
+				border-bottom: 1px solid var(--border-color);
+				border-left: 3px solid transparent;
+				transition: background 0.12s, border-left-color 0.12s;
+			}
+			.ib-aa-queue-row:last-child { border-bottom: none; }
+			.ib-aa-queue-row:hover { background: var(--subtle-bg); border-left-color: var(--ib-primary); }
+
+			.ib-aa-qcol--customer { flex: 1; min-width: 0; }
+			.ib-aa-qcol-name {
+				font-size: 13px; font-weight: 600;
+				white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+			}
+			.ib-aa-qcol-code {
+				font-size: 11px; color: var(--text-muted); margin-top: 1px;
+				white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+			}
+			.ib-aa-qcol--territory {
+				width: 140px; flex-shrink: 0;
+				border-left: 1px solid var(--border-color); padding-left: 12px;
+				font-size: 12px; color: var(--text-muted);
+				white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+			}
+			.ib-aa-qcol--last {
+				width: 110px; flex-shrink: 0;
+				border-left: 1px solid var(--border-color); padding-left: 12px;
+				font-size: 12px; color: var(--text-muted); white-space: nowrap;
+			}
+			.ib-aa-qcol--claimed {
+				width: 160px; flex-shrink: 0;
+				border-left: 1px solid var(--border-color); padding-left: 12px;
+			}
+			.ib-aa-qcol--action {
+				width: 52px; flex-shrink: 0;
+				border-left: 1px solid var(--border-color); padding-left: 12px;
+				display: flex; align-items: center; justify-content: center;
+			}
+			.ib-aa-queue-claimer-filter {
+				padding: 5px 8px; border: 1px solid var(--border-color);
+				border-radius: 6px; font-size: 12px;
+				background: var(--card-bg); color: var(--text-color);
+				cursor: pointer; transition: border-color 0.15s;
+			}
+			.ib-aa-queue-claimer-filter:focus { outline: none; border-color: var(--ib-primary); }
+			.ib-aa-queue-dot-btn {
+				width: 28px; height: 28px; border-radius: 6px;
+				border: 1px solid var(--border-color); background: var(--card-bg);
+				cursor: pointer; color: var(--text-muted);
+				display: flex; align-items: center; justify-content: center; padding: 0;
+				transition: all 0.15s;
+			}
+			.ib-aa-queue-dot-btn:hover { border-color: var(--ib-primary); color: var(--ib-primary); background: #fdf6f3; }
+			.ib-aa-queue-dot-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
 			@media (max-width: 900px) {
 				.ib-va-columns { grid-template-columns: repeat(2, 1fr); }
 				.ib-aa-rth--bar { width: 140px; }
@@ -2110,7 +1999,8 @@ class IBAssignmentAdmin {
 				.ib-aa-row-bar-wrap, .ib-aa-no-target { width: 140px; }
 				.ib-aa-row-target-text { display: none; }
 				.ib-aa-btn-transfer { display: none; }
-				.ib-aa-pool-terr, .ib-aa-pool-last { display: none; }
+				.ib-aa-qth--territory, .ib-aa-qcol--territory { display: none; }
+				.ib-aa-qth--last, .ib-aa-qcol--last { display: none; }
 			}
 		`;
 		document.head.appendChild(s);
