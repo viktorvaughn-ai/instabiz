@@ -1,5 +1,7 @@
 import frappe
-from frappe.utils import flt
+from frappe.utils import flt, add_months, get_first_day, get_last_day
+
+_IB_LEAVE_CREDIT = 2
 
 
 def execute(filters=None):
@@ -16,6 +18,7 @@ def _columns():
         {"fieldname": "designation", "label": "Designation", "fieldtype": "Data", "width": 140},
         {"fieldname": "department", "label": "Department", "fieldtype": "Data", "width": 120},
         {"fieldname": "salary_structure", "label": "Structure", "fieldtype": "Link", "options": "Salary Structure", "width": 110},
+        {"fieldname": "absent_credit", "label": "Absent / Credit", "fieldtype": "Data", "width": 110},
         {"fieldname": "base", "label": "CTC/mo", "fieldtype": "Currency", "width": 100},
         {"fieldname": "basic", "label": "Basic", "fieldtype": "Currency", "width": 90},
         {"fieldname": "hra", "label": "HRA", "fieldtype": "Currency", "width": 80},
@@ -24,7 +27,6 @@ def _columns():
         {"fieldname": "pf", "label": "PF", "fieldtype": "Currency", "width": 80},
         {"fieldname": "esic", "label": "ESIC", "fieldtype": "Currency", "width": 75},
         {"fieldname": "pt", "label": "PT", "fieldtype": "Currency", "width": 70},
-        {"fieldname": "tds", "label": "TDS", "fieldtype": "Currency", "width": 80},
         {"fieldname": "total_deductions", "label": "Deductions", "fieldtype": "Currency", "width": 100},
         {"fieldname": "net_pay", "label": "Net Pay", "fieldtype": "Currency", "width": 100},
     ]
@@ -42,7 +44,6 @@ def _calc(base, structure, pf_opt_in=True, esic_opt_in=True):
         PF = round((min(B + CA, 15000)) * 0.12) if pf_opt_in else 0
         ESIC = round((B + HRA) * 0.0075) if (esic_opt_in and base <= 21000) else 0
         PT = 175 if base <= 10000 else 200
-        taxable_annual = max(0, (B + CA) * 12 - 75000)
 
     elif structure == "Astro Payroll":
         if base > 21000:
@@ -60,47 +61,80 @@ def _calc(base, structure, pf_opt_in=True, esic_opt_in=True):
         PF = round((min(B + HRA, 15000)) * 0.12) if pf_opt_in else 0
         ESIC = round((B + HRA) * 0.0075) if (esic_opt_in and base <= 21000) else 0
         PT = 200
-        taxable_annual = max(0, (B + HRA) * 12 - 75000)
 
     else:
         return None
 
-    TDS = _calc_tds(taxable_annual)
-
     gross = B + HRA + CA
-    total_deductions = PF + ESIC + PT + TDS
+    total_deductions = PF + ESIC + PT
     net_pay = gross - total_deductions
 
     return {
         "basic": B, "hra": HRA, "ca": CA,
         "gross": gross,
-        "pf": PF, "esic": ESIC, "pt": PT, "tds": TDS,
+        "pf": PF, "esic": ESIC, "pt": PT,
         "total_deductions": total_deductions,
         "net_pay": net_pay,
     }
 
 
-def _calc_tds(annual_taxable):
-    if annual_taxable <= 1200000:
-        tax = 0
-    else:
-        tax = 0
-        slabs = [(400000, 800000, 0.05), (800000, 1200000, 0.10),
-                 (1200000, 1600000, 0.15), (1600000, 2000000, 0.20),
-                 (2000000, 2400000, 0.25)]
-        for lo, hi, rate in slabs:
-            if annual_taxable > lo:
-                tax += min(annual_taxable - lo, hi - lo) * rate
-        if annual_taxable > 2400000:
-            tax += (annual_taxable - 2400000) * 0.30
-        tax *= 1.04  # cess
-    return round(tax / 12)
+def _slip_absent_map(payroll_month):
+    """Returns {employee: total_absent_days} for the given month.
+    Prefers submitted salary slips; falls back to raw Attendance records."""
+    month_start = get_first_day(payroll_month)
+    month_end = get_last_day(payroll_month)
+
+    # Try submitted salary slips first
+    slips = frappe.db.sql(
+        """
+        SELECT employee,
+               COALESCE(absent_days, 0) + COALESCE(leave_without_pay, 0) AS total_absent
+        FROM `tabSalary Slip`
+        WHERE docstatus = 1
+          AND start_date >= %(month_start)s
+          AND start_date <= %(month_end)s
+        """,
+        {"month_start": month_start, "month_end": month_end},
+        as_dict=True,
+    )
+    if slips:
+        return {s.employee: flt(s.total_absent) for s in slips}
+
+    # Fall back to Attendance records for the month
+    rows = frappe.db.sql(
+        """
+        SELECT employee,
+               SUM(CASE WHEN status = 'Absent' THEN 1
+                        WHEN status = 'Half Day' THEN 0.5
+                        ELSE 0 END) AS total_absent
+        FROM `tabAttendance`
+        WHERE docstatus = 1
+          AND attendance_date >= %(month_start)s
+          AND attendance_date <= %(month_end)s
+          AND status IN ('Absent', 'Half Day')
+        GROUP BY employee
+        """,
+        {"month_start": month_start, "month_end": month_end},
+        as_dict=True,
+    )
+    return {r.employee: flt(r.total_absent) for r in rows}
+
+
+def _absent_credit_label(total_absent, salary_structure):
+    if total_absent == 0:
+        return "-"
+    if salary_structure == "IB Payroll":
+        return f"{int(total_absent)} / {_IB_LEAVE_CREDIT}"
+    return str(int(total_absent))
 
 
 def _data(filters):
     conditions = "AND ssa.docstatus = 1"
-    if filters.get("department"):
-        conditions += " AND e.department = %(department)s"
+    emp_cat = filters.get("emp_category") or "All"
+    if emp_cat == "Factory":
+        conditions += " AND e.department LIKE '%%Factory%%'"
+    elif emp_cat == "Office":
+        conditions += " AND e.department NOT LIKE '%%Factory%%'"
     if filters.get("salary_structure"):
         conditions += " AND ssa.salary_structure = %(salary_structure)s"
 
@@ -115,6 +149,8 @@ def _data(filters):
         WHERE e.status = 'Active'
         {conditions}
     """, filters, as_dict=True)
+
+    slip_map = _slip_absent_map(filters["payroll_month"]) if filters.get("payroll_month") else {}
 
     # Keep only latest assignment per employee
     seen = set()
@@ -132,12 +168,14 @@ def _data(filters):
         if not calc:
             continue
 
+        total_absent = slip_map.get(r.employee, 0)
         data.append({
             "employee": r.employee,
             "employee_name": r.employee_name,
             "designation": r.designation,
             "department": r.department,
             "salary_structure": r.salary_structure,
+            "absent_credit": _absent_credit_label(total_absent, r.salary_structure),
             "base": flt(r.base),
             **calc,
         })

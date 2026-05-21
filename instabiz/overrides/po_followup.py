@@ -7,7 +7,6 @@ Deduplication: [ib-po-followup] marker in Notification Log subject —
 one alert per PO per day (checked via document_name + subject pattern).
 """
 import frappe
-from frappe import _
 from frappe.utils import add_days, nowdate
 
 _MARKER = "[ib-po-followup]"

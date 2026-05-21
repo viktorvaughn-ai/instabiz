@@ -1,6 +1,5 @@
 import frappe
-from frappe import _
-from frappe.utils import today, add_days, getdate
+from frappe.utils import today, add_days
 
 _HR_ROLES = {"System Manager", "HR Manager", "HR User"}
 

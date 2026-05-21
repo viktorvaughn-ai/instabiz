@@ -2,7 +2,7 @@
 import frappe
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import SalesInvoice  # pyright: ignore[reportMissingImports]
 
-from instabiz.overrides.utils import LOCATION_COMPANY_ADDRESS, LOCATION_COMPANY_GSTIN, IbStatusMixin, recalculate_items, reopen_sales_doc, set_sales_person, sync_sales_team
+from instabiz.overrides.utils import LOCATION_COMPANY_ADDRESS, LOCATION_COMPANY_GSTIN, IbStatusMixin, recalculate_items, set_sales_person, sync_sales_team
 from instabiz.overrides.naming import autoname_sales_invoice
 from instabiz.overrides.quotation import _auto_correct_gst_template
 
@@ -53,10 +53,3 @@ class CustomSalesInvoice(IbStatusMixin, SalesInvoice):
         gstin = LOCATION_COMPANY_GSTIN.get(loc)
         if gstin:
             self.company_gstin = gstin
-
-
-# ── Reopen ───────────────────────────────────────────────────────────────────
-
-@frappe.whitelist()
-def reopen_sales_invoice(name):
-    reopen_sales_doc("Sales Invoice", name, "Sales Invoice Item")

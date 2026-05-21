@@ -1,5 +1,5 @@
 import frappe
-from erpnext.selling.doctype.customer.customer import Customer
+from erpnext.selling.doctype.customer.customer import Customer, get_customer_outstanding
 
 
 class CustomCustomer(Customer):
@@ -11,3 +11,9 @@ class CustomCustomer(Customer):
             if saved_name:
                 self.customer_name = saved_name
         super().validate()
+
+
+@frappe.whitelist()
+def get_outstanding(customer):
+    company = frappe.defaults.get_global_default("company")
+    return get_customer_outstanding(customer, company)

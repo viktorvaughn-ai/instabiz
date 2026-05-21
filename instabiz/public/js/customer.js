@@ -5,6 +5,24 @@ frappe.ui.form.on("Customer", {
 		if (!frm.is_new() && _ib_is_manager()) {
 			_ib_render_claim_button(frm);
 		}
+		if (!frm.is_new()) {
+			_ib_load_outstanding(frm);
+			frm.add_custom_button(__("Send WhatsApp"), () => {
+				ib_show_wa_dialog({
+					customer: frm.doc.name,
+					customer_name: frm.doc.customer_name,
+				});
+			}, IB_ICONS.svg("whatsapp", 16));
+		}
+	},
+
+	custom_bill_and_ship_to_same_address: function (frm) {
+		if (frm.doc.custom_bill_and_ship_to_same_address) {
+			frm.set_value("custom_shipping",  frm.doc.custom_billing);
+			frm.set_value("custom_st_city",   frm.doc.custom_bt_city);
+			frm.set_value("custom_st_state",  frm.doc.custom_bt_state);
+			frm.set_value("custom_st_pincode", frm.doc.custom_bt_pincode);
+		}
 	},
 
 	custom_bt_pincode: function (frm) {
@@ -20,6 +38,17 @@ frappe.ui.form.on("Customer", {
 		});
 	},
 });
+
+function _ib_load_outstanding(frm) {
+	frappe.call({
+		method: "instabiz.overrides.customer.get_outstanding",
+		args: { customer: frm.doc.name },
+		callback(r) {
+			if (r.exc) return;
+			frm.set_value("custom_outstanding_amount", r.message || 0);
+		},
+	});
+}
 
 function _ib_is_manager() {
 	return frappe.user.has_role("Sales Manager") || frappe.user.has_role("System Manager");

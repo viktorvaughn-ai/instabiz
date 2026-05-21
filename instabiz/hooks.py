@@ -37,6 +37,8 @@ scheduler_events = {
         "instabiz.overrides.overdue_alert.run_overdue_alert",
         # Alert Accounts/Sales when PDC cheque date is 3 days away
         "instabiz.overrides.pdc_alert.run_pdc_alert",
+        # Send WA re-engagement to customers with no SO in 30+ days
+        "instabiz.overrides.whatsapp.run_wa_dormant_blast",
     ],
 }
 
@@ -126,6 +128,7 @@ override_doctype_class = {
     "Delivery Note": "instabiz.overrides.delivery_note.CustomDeliveryNote",
     "Sales Invoice": "instabiz.overrides.sales_invoice.CustomSalesInvoice",
     "Customer":      "instabiz.overrides.customer.CustomCustomer",
+    "Salary Slip":   "instabiz.overrides.salary_slip.CustomSalarySlip",
 }
 
 # ── Server-side doc events ────────────────────────────────────────────────────
@@ -249,6 +252,7 @@ app_include_js  = [
     "/assets/instabiz/js/form.js",                  # form handlers (depends on recalc.js)
     "/assets/instabiz/js/list_utils.js",            # shared list view helpers (status multiselect, extract filter values)
     "/assets/instabiz/js/comment_popover.js",       # inline comment popover on list rows
+    "/assets/instabiz/js/whatsapp_dialog.js",       # global WA send dialog (ib_show_wa_dialog)
     # ib_stock_dashboard.js is loaded by Frappe's page engine (not global)
     # "/assets/instabiz/js/quotation_list.js",        # Quotation list view
     # "/assets/instabiz/js/sales_order_list.js",      # Sales Order list view
@@ -278,4 +282,5 @@ doctype_js = {
     "Job Applicant":           "public/js/job_applicant.js",
     "Sales Invoice":           "public/js/sales_invoice.js",
     "Delivery Note":           "public/js/delivery_note.js",
+    "IB WA Session":           "public/js/ib_wa_session.js",
 }

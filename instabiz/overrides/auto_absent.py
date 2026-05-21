@@ -7,7 +7,7 @@ Skips: holidays (per employee holiday list), weekends (Sat/Sun),
        employees with docstatus != 1 (inactive/left).
 """
 import frappe
-from frappe.utils import add_days, get_weekday, getdate, nowdate
+from frappe.utils import add_days, get_weekday, nowdate
 
 
 def run_auto_absent():

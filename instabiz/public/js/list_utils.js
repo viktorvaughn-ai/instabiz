@@ -124,7 +124,6 @@ function ib_watch_ewaybill_dialog(frm) {
             if (billFrom) opts.args.bill_from_address   = billFrom;
             if (dispatch) opts.args.dispatch_from_address = dispatch;
             if (shipTo)   opts.args.ship_to_address     = shipTo;
-            console.log("[IB TxnType] inject:", txnType, "bill_from:", billFrom, "dispatch:", dispatch, "ship_to:", shipTo);
         }
         return _origCall(opts, ...rest);
     };
@@ -167,7 +166,6 @@ async function _ib_populate_distance(frm) {
         if (!src_geo || !dst_geo) return;
 
         const dist = parseInt(_ib_haversine(src_geo.lat, src_geo.lng, dst_geo.lat, dst_geo.lng), 10);
-        console.log("[IB Distance] calculated:", dist, "km");
         const distInput = document.querySelector('input[data-fieldname="distance"]');
         if (distInput) {
             distInput.value = dist;
@@ -305,7 +303,6 @@ function _ib_inject_self_pickup(modal_el) {
             const gst = document.querySelector('input[data-fieldname="gst_transporter_id"]');
             const trn = $modal.find('[data-fieldname="transporter"]').closest(".frappe-control")[0];
             const gstin = localStorage.getItem("ib_ewb_gstin") || "";
-            console.log("[IB Self Pickup] checked:", e.target.checked, "| localStorage gstin:", gstin, "| gst input found:", !!gst, "| transporter found:", !!trn);
             if (e.target.checked) {
                 if (gst) gst.value = gstin;
                 if (trn) trn.style.display = "none";
@@ -313,7 +310,6 @@ function _ib_inject_self_pickup(modal_el) {
                 if (gst) gst.value = "";
                 if (trn) trn.style.display = "";
             }
-            console.log("[IB Self Pickup] gst input value after set:", gst ? gst.value : "N/A");
         }
 
     });

@@ -17,7 +17,7 @@ from instabiz.overrides.utils import (
     map_address_contact_fields,
     map_parent_fields,
     recalculate_items,
-    reopen_sales_doc,
+
     set_sales_person,
     sync_sales_team,
 )
@@ -73,13 +73,6 @@ class CustomDeliveryNote(IbStatusMixin, DeliveryNote):
                 + "<br>".join(f"• {m}" for m in missing),
                 title=_("Missing Dispatch Info"),
             )
-
-
-# ── Reopen ───────────────────────────────────────────────────────────────────
-
-@frappe.whitelist()
-def reopen_delivery_note(name):
-    reopen_sales_doc("Delivery Note", name, "Delivery Note Item")
 
 
 # ── Mapper: Delivery Note → Sales Invoice ─────────────────────────────────────

@@ -1,0 +1,146 @@
+{
+    "actions": [],
+    "autoname": "IB-WAL-.YYYY.-.#####",
+    "creation": "2026-05-21 00:00:00",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "customer",
+        "customer_name",
+        "phone",
+        "template",
+        "sent_by",
+        "sent_at",
+        "status",
+        "column_break_1",
+        "ref_doctype",
+        "ref_docname",
+        "error_message",
+        "section_message",
+        "message"
+    ],
+    "fields": [
+        {
+            "fieldname": "customer",
+            "fieldtype": "Link",
+            "label": "Customer",
+            "options": "Customer",
+            "reqd": 1,
+            "in_list_view": 1,
+            "in_standard_filter": 1
+        },
+        {
+            "fieldname": "customer_name",
+            "fieldtype": "Data",
+            "label": "Customer Name",
+            "fetch_from": "customer.customer_name",
+            "read_only": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "phone",
+            "fieldtype": "Data",
+            "label": "Phone",
+            "read_only": 1
+        },
+        {
+            "fieldname": "template",
+            "fieldtype": "Link",
+            "label": "Template",
+            "options": "IB WA Template",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "sent_by",
+            "fieldtype": "Link",
+            "label": "Sent By",
+            "options": "User",
+            "in_list_view": 1,
+            "in_standard_filter": 1
+        },
+        {
+            "fieldname": "sent_at",
+            "fieldtype": "Datetime",
+            "label": "Sent At",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "status",
+            "fieldtype": "Select",
+            "label": "Status",
+            "options": "Sent\nFailed",
+            "default": "Sent",
+            "in_list_view": 1,
+            "in_standard_filter": 1
+        },
+        {
+            "fieldname": "column_break_1",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "ref_doctype",
+            "fieldtype": "Link",
+            "label": "Document Type",
+            "options": "DocType"
+        },
+        {
+            "fieldname": "ref_docname",
+            "fieldtype": "Dynamic Link",
+            "label": "Document",
+            "options": "ref_doctype"
+        },
+        {
+            "fieldname": "error_message",
+            "fieldtype": "Small Text",
+            "label": "Error",
+            "read_only": 1,
+            "depends_on": "eval:doc.status=='Failed'"
+        },
+        {
+            "fieldname": "section_message",
+            "fieldtype": "Section Break",
+            "label": "Message Sent"
+        },
+        {
+            "fieldname": "message",
+            "fieldtype": "Text",
+            "label": "Message",
+            "read_only": 1
+        }
+    ],
+    "issingle": 0,
+    "links": [],
+    "modified": "2026-05-21 00:00:00",
+    "modified_by": "Administrator",
+    "module": "Instabiz",
+    "name": "IB WA Log",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "read": 1,
+            "write": 0,
+            "create": 0,
+            "delete": 0,
+            "role": "Sales User"
+        },
+        {
+            "create": 1,
+            "delete": 1,
+            "read": 1,
+            "write": 1,
+            "export": 1,
+            "role": "Sales Manager"
+        },
+        {
+            "create": 1,
+            "delete": 1,
+            "read": 1,
+            "write": 1,
+            "export": 1,
+            "role": "System Manager"
+        }
+    ],
+    "sort_field": "sent_at",
+    "sort_order": "DESC",
+    "track_changes": 0
+}

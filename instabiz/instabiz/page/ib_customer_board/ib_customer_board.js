@@ -428,7 +428,7 @@ class IBCustomerBoard {
 
 		const wa_btn = phone ? `
 			<button class="ib-cb-pill ib-cb-pill--wa ib-cb-btn-wa" title="WhatsApp ${frappe.utils.escape_html(phone)}">
-				${IB_ICONS.svg("whatsapp", 11)} WA
+				${IB_ICONS.svg("whatsapp", 14)}
 			</button>` : "";
 
 		let inner_html = "";
@@ -483,6 +483,7 @@ class IBCustomerBoard {
 					${wa_btn}
 				</div>
 			`;
+
 		} else if (ctx === "today" || ctx === "today_done") {
 			const claimed_tag = r.ib_claimed_by
 				? `<span class="ib-cb-claimed-tag">CLAIMED</span>`
@@ -595,10 +596,13 @@ class IBCustomerBoard {
 			$card.find(".ib-cb-btn-skip").on("click", () => self._skip_with_undo(r.name, r.customer_name || r.customer, $card));
 		}
 
-		if (phone && (ctx === "pool" || ctx === "today")) {
-			$card.find(".ib-cb-btn-wa").on("click", () =>
-				window.open(self._wa_url(phone, r), "_blank")
-			);
+		if (ctx === "pool" || ctx === "today" || ctx === "claimed") {
+			$card.find(".ib-cb-btn-wa").on("click", () => {
+				ib_show_wa_dialog({
+					customer: r.customer,
+					customer_name: r.customer_name || r.customer,
+				});
+			});
 		}
 
 		return $card;

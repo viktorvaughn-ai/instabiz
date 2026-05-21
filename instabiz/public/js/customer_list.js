@@ -18,6 +18,33 @@ frappe.listview_settings["Customer"] = {
 			frappe.user.has_role("Sales Manager") || frappe.user.has_role("System Manager");
 		if (!is_manager) return;
 
+		listview.page.add_actions_menu_item(__("Claim"), () => {
+			const selected = listview.get_checked_items();
+			if (!selected.length) {
+				frappe.show_alert({ message: __("Select at least one customer"), indicator: "orange" });
+				return;
+			}
+			const customers = selected.map((r) => r.name);
+			frappe.confirm(
+				__("Claim {0} customer(s) for yourself?", [customers.length]),
+				() => {
+					frappe.call({
+						method: "instabiz.overrides.customer_assignment.bulk_claim_customers",
+						args: { customers: JSON.stringify(customers) },
+						callback(r) {
+							if (r.exc) return;
+							const { claimed, skipped } = r.message;
+							let msg = __("{0} customer(s) claimed", [claimed]);
+							if (skipped && skipped.length)
+								msg += __(", {0} skipped (already claimed by another)", [skipped.length]);
+							frappe.show_alert({ message: msg, indicator: claimed > 0 ? "green" : "orange" });
+							listview.refresh();
+						},
+					});
+				}
+			);
+		});
+
 		listview.page.add_actions_menu_item(__("Assign to Sales User"), () => {
 			const selected = listview.get_checked_items();
 			if (!selected.length) {

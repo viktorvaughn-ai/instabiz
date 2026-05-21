@@ -111,7 +111,7 @@ def _already_assigned_customers(date):
 	"""Return set of customers that must not be assigned on `date`.
 
 	Excluded if:
-	  - Currently Pending (any date) — no double assignment
+	  - Already Pending for this specific date — no same-date duplicate
 	  - Contacted within last 7 days (outcome != Not Interested)
 	  - Contacted within last 30 days (outcome = Not Interested)
 	  - Skipped within last 1 day — prevent same-day re-skip cycle
@@ -124,6 +124,7 @@ def _already_assigned_customers(date):
 		SELECT DISTINCT customer
 		FROM `tabIB Customer Assignment`
 		WHERE status = 'Pending'
+		  AND assigned_date = %(date)s
 		UNION
 		SELECT DISTINCT customer
 		FROM `tabIB Customer Assignment`
@@ -143,6 +144,7 @@ def _already_assigned_customers(date):
 		  AND completed_at >= %(cutoff_skipped)s
 		""",
 		{
+			"date": date,
 			"cutoff_default": cutoff_default,
 			"cutoff_not_interested": cutoff_not_interested,
 			"cutoff_skipped": cutoff_skipped,
@@ -277,7 +279,8 @@ def auto_assign_for_user(user, date):
 	"""Create assignments for user on date up to assignments_per_day quota."""
 	config = get_assignment_config()
 	territories = get_user_territories(user)
-	no_territory = not territories
+	if not territories:
+		return 0
 
 	existing_count = frappe.db.count(
 		"IB Customer Assignment",
@@ -289,32 +292,25 @@ def auto_assign_for_user(user, date):
 
 	exclude = _already_assigned_customers(date)
 
-	if no_territory:
-		# No territory mapping — assign from full dormant pool only
-		all_territories = _all_leaf_territories()
-		dormant = get_dormant_pool(all_territories, exclude, config["dormant_threshold_days"], limit=slots * 3)
-		dormant_pick = dormant[:slots]
-		regular_pick = []
-	else:
-		dormant_slots = round(slots * config["dormant_ratio"] / 100)
-		regular_slots = slots - dormant_slots
+	dormant_slots = round(slots * config["dormant_ratio"] / 100)
+	regular_slots = slots - dormant_slots
 
-		# Fetch generous headroom from both pools upfront
-		dormant = get_dormant_pool(territories, exclude, config["dormant_threshold_days"], limit=slots * 2)
-		regular = get_regular_pool(territories, exclude, config["dormant_threshold_days"], limit=slots * 2)
+	# Fetch generous headroom from both pools upfront
+	dormant = get_dormant_pool(territories, exclude, config["dormant_threshold_days"], limit=slots * 2)
+	regular = get_regular_pool(territories, exclude, config["dormant_threshold_days"], limit=slots * 2)
 
-		dormant_pick = dormant[:dormant_slots]
-		dormant_leftover = dormant_slots - len(dormant_pick)
+	dormant_pick = dormant[:dormant_slots]
+	dormant_leftover = dormant_slots - len(dormant_pick)
 
-		# Backfill regular if dormant was short
-		effective_regular_slots = regular_slots + dormant_leftover
-		regular_pick = regular[:effective_regular_slots]
-		regular_leftover = effective_regular_slots - len(regular_pick)
+	# Backfill regular if dormant was short
+	effective_regular_slots = regular_slots + dormant_leftover
+	regular_pick = regular[:effective_regular_slots]
+	regular_leftover = effective_regular_slots - len(regular_pick)
 
-		# Backfill dormant if regular was also short
-		if regular_leftover > 0:
-			extra = dormant[len(dormant_pick): len(dormant_pick) + regular_leftover]
-			dormant_pick = dormant_pick + extra
+	# Backfill dormant if regular was also short
+	if regular_leftover > 0:
+		extra = dormant[len(dormant_pick): len(dormant_pick) + regular_leftover]
+		dormant_pick = dormant_pick + extra
 
 	batch = dormant_pick + regular_pick
 	random.shuffle(batch)

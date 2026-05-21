@@ -22,7 +22,7 @@ frappe.router.on("change", function () {
 });
 
 const IB_DOCTYPES        = ["Quotation", "Sales Order", "Delivery Note", "Sales Invoice"];
-const IB_REOPEN_DOCTYPES = ["Quotation", "Sales Order", "Delivery Note", "Sales Invoice"];
+const IB_REOPEN_DOCTYPES = ["Quotation", "Sales Order"];
 const IB_DEBOUNCE        = 500; // Increased to 500ms for stable decimal input
 
 IB_DOCTYPES.forEach(function (doctype) {
@@ -51,7 +51,28 @@ IB_DOCTYPES.forEach(function (doctype) {
                 if (frm.page.btn_secondary) frm.page.btn_secondary.hide();
             }
 
-            // Custom Reopen logic for Cancelled documents
+            // Send WhatsApp button (submitted docs with a customer only)
+            // Quotation uses party_name (not customer) when quotation_to === "Customer"
+            const _wa_customer = frm.doc.customer
+                || (frm.doc.quotation_to === "Customer" ? frm.doc.party_name : null);
+            if (frm.doc.docstatus === 1 && _wa_customer) {
+                frm.add_custom_button(__("Send WhatsApp"), () => {
+                    ib_show_wa_dialog({
+                        customer: _wa_customer,
+                        customer_name: frm.doc.customer_name || _wa_customer,
+                        ref_doctype: doctype,
+                        ref_docname: frm.doc.name,
+                    });
+                }, IB_ICONS.svg("whatsapp", 16));
+            }
+
+            // SI and DN: no reopen or amend — cancelled docs must be re-raised fresh
+            if ((doctype === "Sales Invoice" || doctype === "Delivery Note") && frm.doc.docstatus === 2) {
+                // defer past Frappe's own button setup
+                setTimeout(() => frm.page.clear_primary_action(), 0);
+            }
+
+            // Custom Reopen logic for Cancelled documents (Q and SO only)
             // Server enforces permissions — no client-side role check needed
             if (
                 frm.doc.docstatus === 2 &&
@@ -63,16 +84,14 @@ IB_DOCTYPES.forEach(function (doctype) {
                         function () {
                             frappe.call({
                                 method: {
-                                    "Quotation":      "instabiz.overrides.quotation.reopen_quotation",
-                                    "Sales Order":    "instabiz.overrides.sales_order.reopen_sales_order",
-                                    "Delivery Note":  "instabiz.overrides.delivery_note.reopen_delivery_note",
-                                    "Sales Invoice":  "instabiz.overrides.sales_invoice.reopen_sales_invoice",
+                                    "Quotation": "instabiz.overrides.quotation.reopen_quotation",
+                                    "Sales Order": "instabiz.overrides.sales_order.reopen_sales_order",
                                 }[doctype],
                                 args: { name: frm.doc.name },
                                 freeze: true,
                                 freeze_message: __("Reopening…"),
-                                callback: function (r) { 
-                                    if (!r.exc) window.location.reload(); 
+                                callback: function (r) {
+                                    if (!r.exc) window.location.reload();
                                 },
                             });
                         }

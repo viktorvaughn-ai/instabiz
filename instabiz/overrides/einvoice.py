@@ -16,6 +16,17 @@ def _is_einvoice_configured():
 	return is_api_enabled(settings) and settings.get("enable_e_invoice")
 
 
+def _had_cancelled_irn(docname):
+	"""True if this SI previously had an IRN that was cancelled at NIC."""
+	try:
+		return bool(frappe.db.exists(
+			"e-Invoice Log",
+			{"reference_doctype": "Sales Invoice", "reference_name": docname, "is_cancelled": 1},
+		))
+	except Exception:
+		return False
+
+
 def run_einvoice_on_submit(doc, method=None):
 	"""Called on Sales Invoice on_submit. Non-blocking — warns on failure."""
 	# Skip returns, debit notes, inter-company
@@ -26,6 +37,16 @@ def run_einvoice_on_submit(doc, method=None):
 		return
 	# Already has IRN
 	if doc.get("irn"):
+		return
+	# NIC rule: cancelled IRN cannot be regenerated for the same document number
+	if _had_cancelled_irn(doc.name):
+		frappe.msgprint(
+			_("IRN was previously generated and cancelled for {0}. "
+			  "NIC does not allow re-generation for the same invoice number. "
+			  "Cancel this invoice and raise a new one with a fresh number.").format(frappe.bold(doc.name)),
+			title=_("E-Invoice Skipped — Cancelled IRN"),
+			indicator="orange",
+		)
 		return
 
 	if not _is_einvoice_configured():

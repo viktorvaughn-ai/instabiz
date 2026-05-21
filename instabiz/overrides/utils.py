@@ -238,6 +238,9 @@ def recalculate_items(doc):
     Any other UOM: qty = qty_pkg * total_pkg
     Incomplete dims: leave qty as-is (user may have typed it manually)
     """
+    if doc.get("is_return"):
+        return
+
     for item in doc.get("items") or []:
         # Row already priced in the source document — preserve qty, recalc amount only
         if item.get("against_sales_order") or item.get("delivery_note"):
