@@ -1,0 +1,14 @@
+{
+    "creation": "2026-05-25 00:00:00.000000",
+    "doctype": "Page",
+    "module": "Instabiz",
+    "name": "ib-bank-statement-import",
+    "page_name": "ib-bank-statement-import",
+    "roles": [
+        {"role": "Accounts User"},
+        {"role": "Accounts Manager"},
+        {"role": "System Manager"}
+    ],
+    "standard": "Yes",
+    "title": "Bank Statement Import"
+}

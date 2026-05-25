@@ -129,13 +129,15 @@ def _absent_credit_label(total_absent, salary_structure):
 
 
 def _data(filters):
-    conditions = "AND ssa.docstatus = 1"
+    # include both draft (0) and submitted (1) Salary Structure Assignments
+    conditions = "AND ssa.docstatus IN (0, 1)"
     emp_cat = filters.get("emp_category") or "All"
     if emp_cat == "Factory":
         conditions += " AND e.department LIKE '%%Factory%%'"
     elif emp_cat == "Office":
         conditions += " AND e.department NOT LIKE '%%Factory%%'"
-    if filters.get("salary_structure"):
+    # Apply salary_structure filter only when Employee Type is All
+    if emp_cat == "All" and filters.get("salary_structure"):
         conditions += " AND ssa.salary_structure = %(salary_structure)s"
 
     rows = frappe.db.sql(f"""
@@ -169,6 +171,26 @@ def _data(filters):
             continue
 
         total_absent = slip_map.get(r.employee, 0)
+
+        # Prorate amounts based on present days when payroll_month provided
+        if filters.get("payroll_month"):
+            month_start = get_first_day(filters["payroll_month"])
+            month_end = get_last_day(filters["payroll_month"])
+            days_in_month = (month_end - month_start).days + 1
+            # Apply IB leave credit where applicable
+            effective_absent = total_absent
+            if r.salary_structure == "IB Payroll":
+                effective_absent = max(0, total_absent - _IB_LEAVE_CREDIT)
+            present_days = max(0, days_in_month - effective_absent)
+            ratio = (present_days / days_in_month) if days_in_month else 1
+
+            # prorate base + calculated components
+            base_pr = flt(round(flt(r.base) * ratio, 2))
+            prorated = {k: flt(round(v * ratio, 2)) for k, v in calc.items()}
+        else:
+            base_pr = flt(r.base)
+            prorated = {k: flt(v) for k, v in calc.items()}
+
         data.append({
             "employee": r.employee,
             "employee_name": r.employee_name,
@@ -176,8 +198,8 @@ def _data(filters):
             "department": r.department,
             "salary_structure": r.salary_structure,
             "absent_credit": _absent_credit_label(total_absent, r.salary_structure),
-            "base": flt(r.base),
-            **calc,
+            "base": base_pr,
+            **prorated,
         })
 
     data.sort(key=lambda x: (x.get("department") or "", x["employee_name"]))

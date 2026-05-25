@@ -957,24 +957,22 @@ def get_manager_queue():
 
 @frappe.whitelist()
 def assign_claimed_to_user(customer, assigned_to, date=None):
-	"""Assign a claimed customer to a sales user and release the claim. Manager only."""
+	"""Assign a customer to a sales user and release any claim. Manager only.
+	Claim only blocks auto-pool; this path always works regardless of claim state."""
 	_require_manager()
 	date = date or today()
 
 	if str(date) < str(today()):
 		frappe.throw(_("Cannot assign to a past date."))
 
-	claimed_by = frappe.db.get_value("Customer", customer, "ib_claimed_by")
-	if not claimed_by:
-		frappe.throw(_("Customer is not claimed."))
-
+	# Cancel any existing active assignment (manager override / reassignment)
 	existing = frappe.db.get_value(
 		"IB Customer Assignment",
 		{"customer": customer, "assigned_date": date, "status": ["in", ["Pending", "Contacted"]]},
 		"name",
 	)
 	if existing:
-		frappe.throw(_(f"Customer already has an active assignment on {date}."))
+		frappe.db.set_value("IB Customer Assignment", existing, "status", "Skipped")
 
 	config = get_assignment_config()
 	existing_count = frappe.db.count(
@@ -990,8 +988,13 @@ def assign_claimed_to_user(customer, assigned_to, date=None):
 	source_pool = classify_customer(customer, config["dormant_threshold_days"])
 	_create_assignment(customer, territory, assigned_to, date, source_pool)
 
-	# Release the claim now that it's been actioned
-	frappe.db.set_value("Customer", customer, {"ib_claimed_by": None, "ib_claimed_on": None})
+	# Release claim so the customer re-enters the pool after this assignment
+	frappe.db.set_value(
+		"Customer",
+		customer,
+		{"ib_claimed_by": None, "ib_claimed_on": None},
+		update_modified=False,
+	)
 	frappe.db.commit()
 	return {"status": "ok"}
 
@@ -1069,22 +1072,16 @@ def bulk_assign_to_user(customers, assigned_to, date=None):
 			skipped_quota.append(customer)
 			continue
 
-		# Skip if already has active assignment on this date (any user)
+		# Cancel any existing active assignment for this customer on this date (manager override)
 		existing = frappe.db.get_value(
 			"IB Customer Assignment",
 			{"customer": customer, "assigned_date": date, "status": ["in", ["Pending", "Contacted"]]},
 			"name",
 		)
 		if existing:
-			skipped_already_assigned.append(customer)
-			continue
+			frappe.db.set_value("IB Customer Assignment", existing, "status", "Skipped")
 
-		# Skip claimed customers (locked to another manager's pipeline)
-		claimed_by = frappe.db.get_value("Customer", customer, "ib_claimed_by")
-		if claimed_by:
-			skipped_claimed.append(customer)
-			continue
-
+		# Claim only blocks auto-pool; managers can still manually assign claimed customers
 		territory = frappe.db.get_value("Customer", customer, "territory")
 		source_pool = classify_customer(customer, config["dormant_threshold_days"])
 		_create_assignment(customer, territory, assigned_to, date, source_pool)

@@ -340,3 +340,22 @@ def log_lead_activity(lead, activity_type, outcome, notes, next_follow_up_date=N
 		frappe.db.set_value("Lead", lead, "custom_next_follow_up_date", next_follow_up_date, update_modified=False)
 
 	return "ok"
+
+
+@frappe.whitelist()
+def get_team_member_users(team):
+    """Return user emails for all members of a Lead Sales Team (used by list view filter)."""
+    rows = frappe.db.sql(
+        """
+        SELECT m.user
+        FROM `tabLead Sales Team Member` m
+        INNER JOIN `tabLead Sales Team` lst ON lst.name = m.parent
+        WHERE m.parent = %(team)s
+          AND m.parenttype = 'Lead Sales Team'
+          AND m.user IS NOT NULL
+          AND m.user != ''
+        """,
+        {"team": team},
+        as_list=True,
+    )
+    return [r[0] for r in rows if r[0]]

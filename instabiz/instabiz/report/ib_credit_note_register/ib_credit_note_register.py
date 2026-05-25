@@ -21,7 +21,7 @@ def _columns():
 		{"fieldname": "customer",                "label": _("Customer"),         "fieldtype": "Link",     "options": "Customer",      "width": 180},
 		{"fieldname": "territory",               "label": _("Territory"),        "fieldtype": "Data",     "width": 120},
 		{"fieldname": "custom_sales_person_user","label": _("Sales Person"),     "fieldtype": "Data",     "width": 150},
-		{"fieldname": "items",                   "label": _("Items"),            "fieldtype": "Data",     "width": 220},
+		{"fieldname": "item_list",               "label": _("Items"),            "fieldtype": "Data",     "width": 220},
 		{"fieldname": "return_value",            "label": _("Return Value (₹)"), "fieldtype": "Currency", "width": 140},
 		{"fieldname": "custom_return_reason",    "label": _("Return Reason"),    "fieldtype": "Data",     "width": 200},
 		{"fieldname": "status",                  "label": _("Status"),           "fieldtype": "Data",     "width": 100},
@@ -66,7 +66,7 @@ def _data(filters):
 				SELECT GROUP_CONCAT(sii.item_code ORDER BY sii.idx SEPARATOR ', ')
 				FROM `tabSales Invoice Item` sii
 				WHERE sii.parent = si.name
-			)                                                                  AS items
+			)                                                                  AS item_list
 		FROM `tabSales Invoice` si
 		WHERE {where}
 		ORDER BY si.posting_date DESC, si.name DESC

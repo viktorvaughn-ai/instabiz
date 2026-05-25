@@ -16,6 +16,12 @@ LOCATION_COMPANY_GSTIN = {
     "chennai":     "33AAECI3431Q1ZF",
 }
 
+LOCATION_COST_CENTER = {
+    "maharashtra": "Maharashtra - IB",
+    "gujarat":     "Gujarat - IB",
+    "chennai":     "Chennai - IB",
+}
+
 # ── Location → warehouse (for place of dispatch) ──────────────────────────────
 LOCATION_WAREHOUSE = {
     "maharashtra": "MAHARASHTRA - IB",

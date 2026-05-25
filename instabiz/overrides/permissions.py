@@ -65,6 +65,54 @@ def _sales_doc_has_permission(doc, ptype, user):
     return doc.owner == user
 
 
+# ── Customer: restrict Sales Users to their assignments + owned records ───────
+
+def _is_sales_user_only(user):
+    """True when user has Sales User role but NO privileged role.
+    Accounts, HR, Purchase, Stock roles etc. all bypass restriction.
+    """
+    if not user:
+        user = frappe.session.user
+    roles = set(frappe.get_roles(user))
+    if _PRIVILEGED_ROLES & roles:
+        return False
+    return "Sales User" in roles
+
+
+def customer_query_conditions(user):
+    """Sales Users see only customers they own or are assigned to.
+    Everyone else (Sales Manager, Accounts, System Manager …) sees all.
+    """
+    if not user:
+        user = frappe.session.user
+    if not _is_sales_user_only(user):
+        return "1=1"
+    u = frappe.db.escape(user)
+    return (
+        f"(`tabCustomer`.`owner` = {u}"
+        f" OR `tabCustomer`.`name` IN ("
+        f"   SELECT `customer` FROM `tabIB Customer Assignment`"
+        f"   WHERE `assigned_to` = {u}"
+        f" ))"
+    )
+
+
+def customer_has_permission(doc, ptype, user):
+    """Allow create always; for existing docs check ownership or assignment."""
+    if not user:
+        user = frappe.session.user
+    if not _is_sales_user_only(user):
+        return True
+    if ptype == "create" or not doc.name:
+        return True
+    if doc.owner == user:
+        return True
+    return frappe.db.exists(
+        "IB Customer Assignment",
+        {"customer": doc.name, "assigned_to": user},
+    )
+
+
 # ── Per-doctype entry points registered in hooks.py ──────────────────────────
 
 def quotation_query_conditions(user):

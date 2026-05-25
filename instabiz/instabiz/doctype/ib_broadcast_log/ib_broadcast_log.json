@@ -1,0 +1,97 @@
+{
+ "actions": [],
+ "autoname": "IB-BCAST-.YYYY.-.#####",
+ "creation": "2026-05-21 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": ["title", "message", "image", "col_break", "target", "target_users", "sec_break", "sent_by", "sent_at"],
+ "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "reqd": 1
+  },
+  {
+   "fieldname": "message",
+   "fieldtype": "Text",
+   "label": "Message",
+   "reqd": 1
+  },
+  {
+   "fieldname": "image",
+   "fieldtype": "Attach Image",
+   "label": "Image"
+  },
+  {
+   "fieldname": "col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "target",
+   "fieldtype": "Select",
+   "label": "Send To",
+   "options": "All\nSpecific Users",
+   "default": "All",
+   "reqd": 1
+  },
+  {
+   "fieldname": "target_users",
+   "fieldtype": "Small Text",
+   "label": "Target Users",
+   "description": "JSON array of user emails"
+  },
+  {
+   "fieldname": "sec_break",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "sent_by",
+   "fieldtype": "Link",
+   "label": "Sent By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sent_at",
+   "fieldtype": "Datetime",
+   "label": "Sent At",
+   "read_only": 1
+  }
+ ],
+ "in_create": 0,
+ "is_submittable": 0,
+ "issingle": 0,
+ "modified": "2026-05-21 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "IB Broadcast Log",
+ "naming_rule": "Expression (using series)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "role": "All",
+   "write": 0
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "track_changes": 0
+}

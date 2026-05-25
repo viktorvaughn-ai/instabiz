@@ -1,7 +1,23 @@
 // Customer name is protected server-side via CustomCustomer.validate()
 
+// Native address/contact sections replaced by inline custom fields (Billing & Shipping section).
+const _IB_HIDE_ADDR_FIELDS = [
+	"address_contacts",                   // Section Break: Address and Contact
+	"address_html",
+	"contact_html",
+	"primary_address_and_contact_detail", // Section Break: Primary Address and Contact
+	"customer_primary_address",
+	"primary_address",
+	"customer_primary_contact",
+];
+
 frappe.ui.form.on("Customer", {
 	refresh: function (frm) {
+		_IB_HIDE_ADDR_FIELDS.forEach(function (f) {
+			frm.set_df_property(f, "hidden", 1);
+		});
+		_ib_toggle_shipping_fields(frm);
+
 		if (!frm.is_new() && _ib_is_manager()) {
 			_ib_render_claim_button(frm);
 		}
@@ -17,10 +33,11 @@ frappe.ui.form.on("Customer", {
 	},
 
 	custom_bill_and_ship_to_same_address: function (frm) {
+		_ib_toggle_shipping_fields(frm);
 		if (frm.doc.custom_bill_and_ship_to_same_address) {
-			frm.set_value("custom_shipping",  frm.doc.custom_billing);
-			frm.set_value("custom_st_city",   frm.doc.custom_bt_city);
-			frm.set_value("custom_st_state",  frm.doc.custom_bt_state);
+			frm.set_value("custom_shipping",   frm.doc.custom_billing);
+			frm.set_value("custom_st_city",    frm.doc.custom_bt_city);
+			frm.set_value("custom_st_state",   frm.doc.custom_bt_state);
 			frm.set_value("custom_st_pincode", frm.doc.custom_bt_pincode);
 		}
 	},
@@ -38,6 +55,22 @@ frappe.ui.form.on("Customer", {
 		});
 	},
 });
+
+const _IB_SHIPPING_FIELDS = [
+	"custom_shipping_col",
+	"custom_shipping",
+	"custom_st_city",
+	"custom_st_state",
+	"custom_st_pincode",
+];
+
+function _ib_toggle_shipping_fields(frm) {
+	const hide = !!frm.doc.custom_bill_and_ship_to_same_address;
+	_IB_SHIPPING_FIELDS.forEach(function (f) {
+		frm.set_df_property(f, "hidden", hide ? 1 : 0);
+	});
+	frm.refresh_fields(_IB_SHIPPING_FIELDS);
+}
 
 function _ib_load_outstanding(frm) {
 	frappe.call({

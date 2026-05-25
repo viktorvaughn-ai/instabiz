@@ -79,6 +79,7 @@ frappe.listview_settings["Lead"] = Object.assign(
 			});
 
 			ib_hide_sidebar();
+			ib_setup_lead_team_filter(listview);
 			ib_setup_custom_status_multiselect(listview);
 
 			// Restore inline status picker behavior on list pills.
@@ -195,6 +196,85 @@ function ib_show_lead_status_picker($pill, lead, listview) {
 	setTimeout(function () {
 		$(document).on("mousedown.ib_status_close", onOutside);
 	}, 0);
+}
+
+function ib_setup_lead_team_filter(listview) {
+	// Strategy: inject filter into get_args (query level) rather than filter_area.
+	// Avoids "Field not permitted in query" (page.add_field registers fieldname in URL)
+	// and avoids filter_area.add/remove quirks.
+	$(".ib-lead-team-filter").remove();
+
+	// Holds the resolved user list; null = no team filter active
+	let _team_users = null;
+
+	// Patch get_args once — appends lead_owner IN filter when a team is selected
+	const _orig_get_args = listview.get_args.bind(listview);
+	listview.get_args = function () {
+		const args = _orig_get_args();
+		if (_team_users && _team_users.length) {
+			args.filters = (args.filters || []).concat(
+				[["Lead", "lead_owner", "in", _team_users]]
+			);
+		}
+		return args;
+	};
+
+	// Build control — prepend so it appears beside Title (first filter slot)
+	const $wrapper = $(
+		'<div class="form-group frappe-control input-max-width ib-lead-team-filter"></div>'
+	);
+	$wrapper.css({ flex: "0 0 140px", maxWidth: "140px" });
+	$wrapper.prependTo(listview.page.page_form);
+
+	const control = frappe.ui.form.make_control({
+		df: {
+			label:       "",
+			fieldtype:   "Link",
+			options:     "Lead Sales Team",
+			placeholder: __("Lead Team"),
+			input_class: "input-xs",
+		},
+		parent:       $wrapper,
+		only_input:   true,
+		render_input: 1,
+	});
+	control.$wrapper.removeClass("form-group");
+	control.$wrapper.css("margin-bottom", 0);
+
+	function apply() {
+		const team = control.get_value();
+		if (!team) {
+			_team_users = null;
+			listview.refresh();
+			return;
+		}
+		frappe.call({
+			method: "instabiz.overrides.lead.get_team_member_users",
+			args:   { team },
+			callback(r) {
+				_team_users = r.message || [];
+				listview.refresh();
+			},
+		});
+	}
+
+	// awesomplete-selectcomplete fires when user picks from Link autocomplete
+	control.$input.on("awesomplete-selectcomplete", function () {
+		setTimeout(apply, 50);
+	});
+	// Handle manual clear (user backspaces / clears input)
+	control.$input.on("change", function () {
+		if (!control.$input.val()) apply();
+	});
+
+	// Clear when filter area × is clicked
+	const $clearAllBtn = listview.filter_area && listview.filter_area.filter_x_button;
+	if ($clearAllBtn && $clearAllBtn.length) {
+		$clearAllBtn.off("click.ib_lead_team_clear").on("click.ib_lead_team_clear", function () {
+			_team_users = null;
+			control.set_value("");
+		});
+	}
 }
 
 function ib_setup_custom_status_multiselect(listview) {

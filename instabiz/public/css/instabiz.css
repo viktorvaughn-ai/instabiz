@@ -2613,3 +2613,182 @@ mark.ib-search-hl {
     border: 1px solid rgba(217,119,87,0.3);
 }
 
+
+/* ── IB Broadcast modal (received by users) ───────────────────────────────── */
+.ib-bcast-body { padding: 4px 0 8px; }
+.ib-bcast-from {
+    font-size: 12px; color: var(--text-muted);
+    margin-bottom: 12px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+}
+.ib-bcast-msg { font-size: 14px; line-height: 1.7; }
+.ib-bcast-msg p:last-child { margin-bottom: 0; }
+.ib-bcast-img { max-width: 100%; border-radius: 6px; margin-bottom: 12px; display: block; }
+
+/* ── IB Broadcast admin page ─────────────────────────────────────────────── */
+.ib-bc-wrap {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 14px 0 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.ib-bc-unauth { color: var(--text-muted); padding: 60px 0; text-align: center; font-size: 14px; }
+
+/* card shell — identical to .ib-sd-table-wrap */
+.ib-bc-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    overflow: hidden;
+}
+.ib-bc-card-head {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--card-bg);
+}
+.ib-bc-card-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+}
+.ib-bc-body { padding: 14px 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+
+/* form rows */
+.ib-bc-row { display: flex; flex-direction: column; gap: 5px; }
+.ib-bc-label {
+    font-size: 11px; font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+.ib-bc-hint { font-weight: 400; text-transform: none; letter-spacing: 0; }
+
+/* preview box */
+.ib-bc-preview { display: flex; flex-direction: column; gap: 5px; }
+.ib-bc-pv-box {
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--fg-color, #f8f8f8);
+    padding: 10px 12px;
+}
+.ib-bc-pv-inner { font-size: 13px; line-height: 1.7; color: var(--text-color); }
+.ib-bc-pv-inner p:last-child { margin-bottom: 0; }
+.ib-bc-pv-img { max-width: 100%; max-height: 160px; object-fit: contain; border-radius: 4px; margin-bottom: 8px; display: block; }
+
+/* image row */
+.ib-bc-image-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ib-bc-img-thumb { display: flex; align-items: center; gap: 8px; }
+.ib-bc-thumb-img { height: 40px; width: 40px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border-color); }
+.ib-bc-image-name { font-size: 12px; color: var(--text-muted); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* target radios */
+.ib-bc-target-row { display: flex; gap: 18px; }
+.ib-bc-radio-lbl {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 13px; color: var(--text-color);
+    cursor: pointer; font-weight: 500;
+}
+.ib-bc-radio-lbl input { cursor: pointer; accent-color: var(--ib-primary); }
+
+/* user search */
+.ib-bc-search-wrap { position: relative; }
+.ib-bc-search-box {
+    display: flex; align-items: center; gap: 7px;
+    border: 1px solid var(--border-color); border-radius: 6px;
+    padding: 5px 9px; background: var(--control-bg, var(--card-bg));
+    transition: border-color .15s;
+}
+.ib-bc-search-box:focus-within { border-color: var(--ib-primary); }
+.ib-bc-user-search {
+    border: none; outline: none; background: transparent;
+    font-size: 13px; flex: 1; min-width: 0; color: var(--text-color);
+}
+.ib-bc-load-spin { display: flex; align-items: center; }
+.ib-bc-spin {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid var(--border-color); border-top-color: var(--ib-primary);
+    animation: ib-bc-spin .7s linear infinite;
+}
+@keyframes ib-bc-spin { to { transform: rotate(360deg); } }
+
+.ib-bc-user-drop {
+    position: absolute; top: calc(100% + 3px); left: 0; right: 0; z-index: 200;
+    background: var(--card-bg); border: 1px solid var(--border-color);
+    border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.1);
+    max-height: 220px; overflow-y: auto;
+}
+.ib-bc-drop-opt {
+    display: flex; align-items: center; gap: 9px;
+    padding: 7px 10px; cursor: pointer;
+    border-bottom: 1px solid var(--border-color);
+}
+.ib-bc-drop-opt:last-child { border-bottom: none; }
+.ib-bc-drop-opt:hover { background: var(--fg-color); }
+.ib-bc-av {
+    width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; color: #fff;
+}
+.ib-bc-av-sm { width: 20px; height: 20px; font-size: 8px; }
+.ib-bc-drop-name { font-size: 13px; font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ib-bc-drop-email { font-size: 11px; color: var(--text-muted); }
+
+/* chips */
+.ib-bc-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.ib-bc-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    border: 1px solid var(--border-color); border-radius: 20px;
+    padding: 2px 8px 2px 3px; font-size: 12px; font-weight: 500;
+    color: var(--text-color); background: var(--card-bg);
+}
+.ib-bc-chip-rm {
+    background: none; border: none; cursor: pointer;
+    color: var(--text-muted); font-size: 14px; line-height: 1; padding: 0;
+}
+.ib-bc-chip-rm:hover { color: var(--red-500, #e53e3e); }
+
+/* send footer */
+.ib-bc-footer { display: flex; align-items: center; gap: 10px; padding-top: 2px; }
+.ib-bc-ok { font-size: 12px; color: var(--green); }
+.ib-bc-sent-msg { font-size: 12px; }
+
+/* history */
+.ib-bc-hist-empty { padding: 20px 14px; color: var(--text-muted); font-size: 13px; }
+.ib-bc-hist-row { padding: 11px 14px; border-bottom: 1px solid var(--border-color); }
+.ib-bc-hist-row:last-child { border-bottom: none; }
+.ib-bc-hist-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.ib-bc-hist-title { font-size: 13px; font-weight: 600; color: var(--heading-color); }
+.ib-bc-hist-meta { font-size: 11px; color: var(--text-muted); margin-left: auto; }
+.ib-bc-hist-msg { font-size: 13px; line-height: 1.6; color: var(--text-color); }
+.ib-bc-hist-msg p:last-child { margin-bottom: 0; }
+.ib-bc-hist-img { max-height: 72px; border-radius: 4px; border: 1px solid var(--border-color); margin-bottom: 6px; display: block; }
+
+/* badges */
+.ib-bc-badge {
+    display: inline-flex; align-items: center;
+    padding: 1px 7px; border-radius: 10px;
+    font-size: 11px; font-weight: 600;
+}
+.ib-bc-badge-all  { background: rgba(59,130,246,.08); color: #2563eb; border: 1px solid rgba(59,130,246,.2); }
+.ib-bc-badge-sp   { background: rgba(217,119,87,.08); color: var(--ib-primary-dark); border: 1px solid rgba(217,119,87,.2); }
+
+/* ── IB Bank Statement Import ── */
+.ib-bsi-drop {
+    border: 2px dashed var(--border-color);
+    border-radius: 10px;
+    padding: 36px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+}
+.ib-bsi-drop:hover,
+.ib-bsi-drop--active {
+    border-color: var(--ib-primary);
+    background: rgba(217,119,87,.04);
+}

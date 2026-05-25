@@ -1,0 +1,213 @@
+<style>
+  @page { size: A4 landscape; margin: 10mm 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Inter", Arial, sans-serif; font-size: 8pt; color: #111; }
+
+  .wrap { width: 100%; }
+
+  /* ── Header ── */
+  .hd { display: flex; justify-content: space-between; align-items: flex-end;
+        border-bottom: 2.5px solid #d97757; padding-bottom: 7px; margin-bottom: 8px; }
+  .hd-co   { font-size: 13pt; font-weight: 700; color: #d97757; line-height: 1.2; }
+  .hd-sub  { font-size: 7.5pt; color: #999; margin-top: 1px; }
+  .hd-r    { text-align: right; }
+  .hd-title{ font-size: 11pt; font-weight: 700; color: #222; }
+  .hd-per  { font-size: 7.5pt; color: #666; margin-top: 3px; }
+
+  /* ── Filter chips ── */
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; min-height: 0; }
+  .chip  { font-size: 7.5pt; background: #fdf6f3; border: 1px solid #e8c4b0;
+           border-radius: 3px; padding: 2px 7px; color: #444; }
+  .chip b { color: #b85228; font-weight: 600; }
+
+  /* ── Table ── */
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 8pt; }
+
+  colgroup col { }
+
+  thead tr    { background: #d97757; color: #fff; }
+  thead th    { padding: 5px 5px; font-weight: 600; text-align: left;
+                white-space: nowrap; overflow: hidden; }
+  thead th.r  { text-align: right; }
+
+  tbody tr                { border-bottom: 1px solid #eee; }
+  tbody tr:nth-child(even){ background: #fafafa; }
+  tbody tr.op-row         { background: #f5f1ee; color: #888; font-style: italic; }
+  tbody tr.tot-row        { background: #f0f0f0; font-weight: 700; border-top: 1.5px solid #ccc; }
+
+  tbody td   { padding: 3px 5px; vertical-align: middle; }
+  tbody td.r { text-align: right; }
+
+  .ell  { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ref  { color: #b85228; font-weight: 600; white-space: nowrap; }
+  .vt   { font-size: 6.5pt; color: #888; white-space: nowrap; }
+  .pt   { font-size: 7pt; color: #999; }
+  .num  { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .dr   { color: #15803d; font-weight: 600; }
+  .cr   { color: #dc2626; font-weight: 600; }
+  .nil  { color: #bbb; }
+
+  tfoot tr   { background: #1a1a1a; color: #fff; }
+  tfoot td   { padding: 5px 5px; font-weight: 700; }
+  tfoot td.r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .foot { margin-top: 8px; display: flex; justify-content: space-between;
+          font-size: 7pt; color: #bbb; border-top: 1px solid #e5e5e5; padding-top: 4px; }
+  .empty { text-align: center; padding: 24px; color: #aaa; font-style: italic; }
+</style>
+
+{% var _fmt = function(v) { if (!v || v === 0) return ""; return Math.abs(v).toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2}); }; %}
+{% var _fmtN = function(v) { return Math.abs(v || 0).toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2}); }; %}
+{% var _clean = function(s) { return (s || "").toString().replace(/^'|'$/g, "").trim(); }; %}
+{% var _co   = _clean(filters.company); %}
+{% var _from = filters.from_date || ""; %}
+{% var _to   = filters.to_date   || ""; %}
+
+{% var _sv = function(v) { if (Array.isArray(v)) return v.filter(Boolean).join(", "); return (v || "").toString().trim(); }; %}
+{% var _chips = []; %}
+{% if (_from && _to) { _chips.push("<b>Period:</b> " + _from + " &ndash; " + _to); } %}
+{% var _sv_acct = _sv(filters.account);      if (_sv_acct)          { _chips.push("<b>Account:</b> "     + _sv_acct); } %}
+{% var _sv_pt   = _sv(filters.party_type);   if (_sv_pt)            { _chips.push("<b>Party Type:</b> "  + _sv_pt); } %}
+{% var _sv_p    = _sv(filters.party);        if (_sv_p)             { _chips.push("<b>Party:</b> "       + _sv_p); } %}
+{% var _sv_vno  = _sv(filters.voucher_no);   if (_sv_vno)           { _chips.push("<b>Voucher:</b> "     + _sv_vno); } %}
+{% var _sv_cc   = _sv(filters.cost_center);  if (_sv_cc)            { _chips.push("<b>Cost Centre:</b> " + _sv_cc); } %}
+{% var _isSummary = function(r) { var a = (r.account || "").toString(); return a.charAt(0) === "'" && a.charAt(a.length - 1) === "'"; }; %}
+{% var _entry_rows = data.filter(function(r){ return !r.is_total_row && !_isSummary(r) && !!(r.voucher_no || r.posting_date); }); %}
+{% _chips.push("<b>Entries:</b> " + _entry_rows.length); %}
+
+{% var _total_dr = _entry_rows.reduce(function(s,r){ return s + (r.debit  || 0); }, 0); %}
+{% var _total_cr = _entry_rows.reduce(function(s,r){ return s + (r.credit || 0); }, 0); %}
+{% var _net      = _total_dr - _total_cr; %}
+{% var _open_rows = data.filter(function(r){ return _isSummary(r) && _clean(r.account) === "Opening"; }); %}
+{% var _open_dr   = _open_rows.reduce(function(s,r){ return s + (r.debit  || 0); }, 0); %}
+{% var _open_cr   = _open_rows.reduce(function(s,r){ return s + (r.credit || 0); }, 0); %}
+{% var _open_bal  = _open_dr - _open_cr; %}
+
+<div class="wrap">
+
+  <div class="hd">
+    <div>
+      <div class="hd-co">{{ _co }}</div>
+      <div class="hd-sub">General Ledger Statement</div>
+    </div>
+    <div class="hd-r">
+      <div class="hd-title">General Ledger</div>
+      {% if (_from && _to) { %}<div class="hd-per">{{ _from }} &ndash; {{ _to }}</div>{% endif %}
+    </div>
+  </div>
+
+  {% if (_chips.length) { %}
+  <div class="chips">
+    {% for chip in _chips %}
+    <span class="chip">{%= chip %}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if (data && data.length) { %}
+  <table>
+    <colgroup>
+      <col style="width:8%">
+      <col style="width:8%">
+      <col style="width:12%">
+      <col style="width:14%">
+      <col style="width:13%">
+      <col style="width:13%">
+      <col style="width:10%">
+      <col style="width:10%">
+      <col style="width:12%">
+    </colgroup>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Type</th>
+        <th>Reference</th>
+        <th>Account</th>
+        <th>Party</th>
+        <th>Against</th>
+        <th class="r">Debit (&#8377;)</th>
+        <th class="r">Credit (&#8377;)</th>
+        <th class="r">Balance (&#8377;)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in data %}
+      {% if (_isSummary(r)) { %}
+      {% else %}
+      {% if (r.is_total_row) { %}
+      <tr class="tot-row">
+        <td colspan="6" style="font-size:8pt;">Running Total</td>
+        <td class="r num">{{ _fmtN(r.debit) }}</td>
+        <td class="r num">{{ _fmtN(r.credit) }}</td>
+        <td class="r num"></td>
+      </tr>
+      {% else %}
+      {% if (!(r.voucher_no || r.posting_date)) { %}
+      {% else %}
+      {% var _op   = (r.is_opening === "Yes") || (!r.voucher_no && !r.posting_date); %}
+      {% var _acct = _clean(r.account); %}
+      {% var _bal  = r.balance || 0; %}
+      <tr class="{{ _op ? "op-row" : "" }}">
+        <td class="num">{{ r.posting_date || "" }}</td>
+        <td class="vt ell">{{ r.voucher_type || (_op ? "Opening" : "") }}</td>
+        <td class="ref ell">{{ r.voucher_no  || (_op ? "Balance b/f" : "") }}</td>
+        <td class="ell" title="{{ _acct }}">{{ _op ? "" : _acct }}</td>
+        <td>
+          {% if (r.party) { %}
+          <span class="pt">{{ r.party_type || "" }}&nbsp;</span><span class="ell" style="display:block">{{ r.party }}</span>
+          {% endif %}
+        </td>
+        <td class="ell" title="{{ r.against || "" }}">{{ r.against || "" }}</td>
+        <td class="r num">{{ _fmt(r.debit)  }}</td>
+        <td class="r num">{{ _fmt(r.credit) }}</td>
+        <td class="r num {{ _bal > 0 ? "dr" : (_bal < 0 ? "cr" : "nil") }}">
+          {% if (_bal !== 0) { %}
+            {{ _fmtN(_bal) }}&nbsp;<span style="font-size:6.5pt;font-weight:400">{{ _bal > 0 ? "Dr" : "Cr" }}</span>
+          {% else %}
+            &ndash;
+          {% endif %}
+        </td>
+      </tr>
+      {% endif %}
+      {% endif %}
+      {% endif %}
+      {% endfor %}
+      {% if (_open_rows.length > 0) { %}
+      <tr class="op-row" style="border-top:1.5px solid #d6c8c0;">
+        <td></td>
+        <td class="vt">Opening</td>
+        <td class="ref">Balance b/f</td>
+        <td colspan="3"></td>
+        <td class="r num">{{ _open_dr ? _fmtN(_open_dr) : "" }}</td>
+        <td class="r num">{{ _open_cr ? _fmtN(_open_cr) : "" }}</td>
+        <td class="r num {{ _open_bal > 0 ? "dr" : (_open_bal < 0 ? "cr" : "nil") }}">
+          {% if (_open_bal !== 0) { %}
+            {{ _fmtN(_open_bal) }}&nbsp;<span style="font-size:6.5pt;font-weight:400">{{ _open_bal > 0 ? "Dr" : "Cr" }}</span>
+          {% else %}
+            &ndash;
+          {% endif %}
+        </td>
+      </tr>
+      {% endif %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="6">Total</td>
+        <td class="r">{{ _fmtN(_total_dr) }}</td>
+        <td class="r">{{ _fmtN(_total_cr) }}</td>
+        <td class="r">
+          {{ _fmtN(_net) }}&nbsp;{% if (_net !== 0) { %}<span style="font-size:7pt;font-weight:400">{{ _net > 0 ? "Dr" : "Cr" }}</span>{% endif %}
+        </td>
+      </tr>
+    </tfoot>
+  </table>
+  {% else %}
+  <div class="empty">No entries found for the selected filters.</div>
+  {% endif %}
+
+  <div class="foot">
+    <span>{{ _co }}</span>
+    <span>Confidential &mdash; Internal Use Only</span>
+  </div>
+
+</div>

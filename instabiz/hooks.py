@@ -116,7 +116,7 @@ fixtures = [
     "Custom Field",
     {
         "dt": "Property Setter",
-        "filters": [["doc_type", "in", ["Quotation", "Sales Order", "Lead", "Delivery Note"]]]
+        "filters": [["doc_type", "in", ["Quotation", "Sales Order", "Lead", "Delivery Note", "Customer"]]]
     },
 ]
 # ── Class overrides ───────────────────────────────────────────────────────────
@@ -207,6 +207,7 @@ permission_query_conditions = {
     "Sales Order":   "instabiz.overrides.permissions.sales_order_query_conditions",
     "Delivery Note": "instabiz.overrides.permissions.delivery_note_query_conditions",
     "Sales Invoice": "instabiz.overrides.permissions.sales_invoice_query_conditions",
+    "Customer":      "instabiz.overrides.permissions.customer_query_conditions",
 }
 
 has_permission = {
@@ -215,6 +216,7 @@ has_permission = {
     "Sales Order":   "instabiz.overrides.permissions.sales_order_has_permission",
     "Delivery Note": "instabiz.overrides.permissions.delivery_note_has_permission",
     "Sales Invoice": "instabiz.overrides.permissions.sales_invoice_has_permission",
+    "Customer":      "instabiz.overrides.permissions.customer_has_permission",
 }
 
 # ── Whitelisted method overrides ──────────────────────────────────────────────
@@ -253,6 +255,7 @@ app_include_js  = [
     "/assets/instabiz/js/list_utils.js",            # shared list view helpers (status multiselect, extract filter values)
     "/assets/instabiz/js/comment_popover.js",       # inline comment popover on list rows
     "/assets/instabiz/js/whatsapp_dialog.js",       # global WA send dialog (ib_show_wa_dialog)
+    # "/assets/instabiz/js/broadcast.js",            # global broadcast modal subscriber — DISABLED
     # ib_stock_dashboard.js is loaded by Frappe's page engine (not global)
     # "/assets/instabiz/js/quotation_list.js",        # Quotation list view
     # "/assets/instabiz/js/sales_order_list.js",      # Sales Order list view
