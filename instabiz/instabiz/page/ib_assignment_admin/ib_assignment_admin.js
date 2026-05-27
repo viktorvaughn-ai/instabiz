@@ -182,12 +182,27 @@ class IBAssignmentAdmin {
 			method: "instabiz.overrides.customer_assignment.get_admin_overview",
 			args: { date: this._date, territory: this._territory },
 			callback(r) {
-				if (r.message) self._render_roster(r.message.roster, r.message.team_territories || {});
+				if (!r.message) return;
+				const { roster, team_territories, is_manager, leader_team } = r.message;
+				self._is_manager = !!is_manager;
+				self._leader_team = leader_team || null;
+				self._apply_role_visibility();
+				self._render_roster(roster, team_territories || {});
 			},
 		});
 		this._fetch_users_cache();
-		this._load_manager_queue();
+		if (this._is_manager) this._load_manager_queue();
 		if (this._view_as_user) this._reload_va_board();
+	}
+
+	_apply_role_visibility() {
+		const isLeader = !this._is_manager && !!this._leader_team;
+		// Hide manager-only controls for team leaders
+		this.page.inner_toolbar.find("button").filter((_, el) =>
+			["+ Create New Team", "Config"].includes($(el).text().trim())
+		).toggle(!isLeader);
+		this.page.fields_dict?.admin_territory?.$wrapper?.toggle(!isLeader);
+		$("#ib-aa-queue-section").toggle(!isLeader);
 	}
 
 	_fetch_users_cache() {
@@ -1331,10 +1346,14 @@ class IBAssignmentAdmin {
 					label: "Transfer to",
 					options: "User",
 					reqd: 1,
-					get_query: () => ({
-						query: "frappe.core.doctype.user.user.user_query",
-						filters: { ignore_user_type: 1 },
-					}),
+					get_query: () => {
+						const base = { query: "frappe.core.doctype.user.user.user_query", filters: { ignore_user_type: 1 } };
+						if (!this._is_manager && this._leader_team) {
+							const members = (this._dropdown_users_cache || []).map(u => u.name);
+							if (members.length) base.filters.name = ["in", members];
+						}
+						return base;
+					},
 				},
 			],
 			primary_action_label: "Transfer",

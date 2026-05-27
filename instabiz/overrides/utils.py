@@ -232,6 +232,21 @@ def item_postprocess(source_item, target_item, source_doc):
     map_dimension_fields(source_item, target_item)
 
 
+def apply_location_cost_center(doc):
+    """Set cost_center on parent + every item row from LOCATION_COST_CENTER.
+
+    Runs on SO / DN / SI validate() so GL entries carry the correct cost center.
+    Always overwrites — location is authoritative for cost center allocation.
+    """
+    loc = (doc.get("custom_location") or "").lower()
+    cc = LOCATION_COST_CENTER.get(loc)
+    if not cc:
+        return
+    doc.cost_center = cc
+    for item in doc.get("items") or []:
+        item.cost_center = cc
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Field copy helpers
 # ─────────────────────────────────────────────────────────────────────────────

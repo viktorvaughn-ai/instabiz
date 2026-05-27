@@ -1,5 +1,33 @@
 import frappe
+from frappe.utils import flt
 from erpnext.selling.doctype.customer.customer import Customer, get_customer_outstanding
+
+
+def compute_customer_outstanding(customer):
+	"""Sum outstanding_amount of all submitted, unpaid Sales Invoices for this customer.
+
+	ERPNext maintains SI.outstanding_amount in real-time as Payment Entries are
+	submitted / cancelled, so this is the authoritative single source of truth.
+	Returns 0.0 if no open invoices exist.
+	"""
+	result = frappe.db.sql(
+		"SELECT COALESCE(SUM(outstanding_amount), 0) FROM `tabSales Invoice`"
+		" WHERE customer = %s AND docstatus = 1 AND outstanding_amount > 0",
+		customer,
+	)
+	return flt(result[0][0] if result else 0)
+
+
+def refresh_customer_outstanding(customer):
+	"""Compute and persist custom_outstanding_amount to the Customer record."""
+	value = compute_customer_outstanding(customer)
+	frappe.db.set_value("Customer", customer, "custom_outstanding_amount", value)
+
+
+def update_customer_outstanding_on_si(doc, method=None):
+	"""doc_event handler: SI on_submit / on_cancel."""
+	if doc.customer:
+		refresh_customer_outstanding(doc.customer)
 
 
 class CustomCustomer(Customer):
@@ -15,6 +43,9 @@ class CustomCustomer(Customer):
 	def onload(self):
 		super().onload()
 		_backfill_inline_fields(self)
+		# Always show live outstanding on form load — no DB write needed here;
+		# SI and PE events keep the persisted value current for list views.
+		self.custom_outstanding_amount = compute_customer_outstanding(self.name)
 
 	def after_save(self):
 		try:
@@ -174,3 +205,29 @@ def _sync_contact(doc):
 def get_outstanding(customer):
 	company = frappe.defaults.get_global_default("company")
 	return get_customer_outstanding(customer, company)
+
+
+@frappe.whitelist()
+def get_customer_phones(customers):
+	import json
+	names = json.loads(customers)
+	if not names:
+		return {}
+	rows = frappe.db.sql(
+		"""
+		SELECT dl.link_name AS customer, cp.phone
+		FROM `tabContact Phone` cp
+		JOIN `tabDynamic Link` dl ON dl.parent = cp.parent
+		WHERE dl.link_doctype = 'Customer'
+		  AND dl.link_name IN %(names)s
+		ORDER BY cp.is_primary_mobile_no DESC, cp.idx ASC
+		""",
+		{"names": names},
+		as_dict=True,
+	)
+	# Keep first phone per customer
+	result = {}
+	for r in rows:
+		if r.customer not in result:
+			result[r.customer] = (r.phone or "").strip()
+	return result

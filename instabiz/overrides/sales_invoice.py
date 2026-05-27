@@ -2,7 +2,7 @@
 import frappe
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import SalesInvoice  # pyright: ignore[reportMissingImports]
 
-from instabiz.overrides.utils import LOCATION_COMPANY_ADDRESS, LOCATION_COMPANY_GSTIN, IbStatusMixin, recalculate_items, set_sales_person, sync_sales_team
+from instabiz.overrides.utils import LOCATION_COMPANY_ADDRESS, LOCATION_COMPANY_GSTIN, IbStatusMixin, apply_location_cost_center, recalculate_items, set_sales_person, sync_sales_team
 from instabiz.overrides.naming import autoname_sales_invoice
 from instabiz.overrides.quotation import _auto_correct_gst_template
 
@@ -41,8 +41,9 @@ class CustomSalesInvoice(IbStatusMixin, SalesInvoice):
         recalculate_items(self)
         super().validate()
         # Must run AFTER super().validate() — ERPNext's set_missing_values() resets
-        # company_gstin to the company default, so we re-apply location-based GSTIN last.
+        # company_gstin and cost_center to company defaults; re-apply location values last.
         self._apply_location_gstin()
+        apply_location_cost_center(self)
         _auto_correct_gst_template(self)
 
     def _apply_location_gstin(self):

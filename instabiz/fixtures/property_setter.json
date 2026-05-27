@@ -1869,7 +1869,7 @@
   "property": "in_standard_filter",
   "property_type": "Check",
   "row_name": null,
-  "value": "1"
+  "value": "0"
  },
  {
   "default_value": null,
@@ -2397,7 +2397,7 @@
   "property": "in_standard_filter",
   "property_type": "Check",
   "row_name": null,
-  "value": "1"
+  "value": "0"
  },
  {
   "default_value": null,

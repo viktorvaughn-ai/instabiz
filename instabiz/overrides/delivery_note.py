@@ -13,11 +13,11 @@ from instabiz.overrides.utils import (
     LOCATION_COMPANY_ADDRESS,
     LOCATION_COMPANY_GSTIN,
     IbStatusMixin,
+    apply_location_cost_center,
     item_postprocess,
     map_address_contact_fields,
     map_parent_fields,
     recalculate_items,
-
     set_sales_person,
     sync_sales_team,
 )
@@ -53,6 +53,7 @@ class CustomDeliveryNote(IbStatusMixin, DeliveryNote):
         set_sales_person(self)
         sync_sales_team(self)
         recalculate_items(self)
+        apply_location_cost_center(self)
         super().validate()
 
     def before_cancel(self):
@@ -60,19 +61,96 @@ class CustomDeliveryNote(IbStatusMixin, DeliveryNote):
             frappe.throw(frappe._("Fill in Cancellation Reason before cancelling this Delivery Note."))
 
     def before_submit(self):
-        is_self_pickup = (self.get("custom_transport") or "").strip().upper() == "SELF PICKUP"
-        missing = []
-        if not is_self_pickup and not (self.get("lr_no") or self.get("custom_lr_number")):
-            missing.append("LR Number")
         if not (self.get("custom_transport") or self.get("transporter")):
-            missing.append("Transporter / Transport Company")
-        if missing:
-            from frappe import _
             frappe.throw(
-                _("Cannot submit — fill in before dispatch:") + "<br>"
-                + "<br>".join(f"• {m}" for m in missing),
-                title=_("Missing Dispatch Info"),
+                frappe._("Cannot submit — fill in Transporter / Transport Company before dispatch."),
+                title=frappe._("Missing Dispatch Info"),
             )
+        _auto_create_sr_if_needed(self)
+
+
+# ── Auto Stock Reconciliation on insufficient stock ───────────────────────────
+
+def _auto_create_sr_if_needed(dn):
+    """Check actual stock per item/warehouse. If any row is short, create a
+    draft Stock Reconciliation covering the shortfall and throw with a link."""
+    from frappe.utils import today
+
+    company = frappe.defaults.get_global_default("company") or dn.company
+
+    # Aggregate required qty per (item_code, warehouse)
+    required: dict[tuple, float] = {}
+    for row in dn.items:
+        if not row.item_code or not row.warehouse:
+            continue
+        item_has_batch = frappe.db.get_value("Item", row.item_code, "has_batch_no")
+        if item_has_batch:
+            continue  # batch items need bundles — skip
+        key = (row.item_code, row.warehouse)
+        required[key] = required.get(key, 0.0) + (row.qty or 0.0)
+
+    if not required:
+        return
+
+    # Fetch actual stock in one query
+    keys_list = list(required.keys())
+    item_codes = list({k[0] for k in keys_list})
+    warehouses  = list({k[1] for k in keys_list})
+
+    bins = frappe.db.sql(
+        """SELECT item_code, warehouse, actual_qty
+           FROM `tabBin`
+           WHERE item_code IN %(items)s AND warehouse IN %(wh)s""",
+        {"items": item_codes, "wh": warehouses},
+        as_dict=True,
+    )
+    actual: dict[tuple, float] = {(b.item_code, b.warehouse): b.actual_qty for b in bins}
+
+    shortfall = [
+        {"item_code": ic, "warehouse": wh, "needed": qty, "have": actual.get((ic, wh), 0.0)}
+        for (ic, wh), qty in required.items()
+        if actual.get((ic, wh), 0.0) < qty
+    ]
+
+    if not shortfall:
+        return
+
+    # Fetch expense account for stock adjustment
+    expense_account = frappe.db.get_value("Company", company, "stock_adjustment_account") \
+        or "Stock Adjustment - IB"
+
+    sr = frappe.get_doc({
+        "doctype": "Stock Reconciliation",
+        "purpose": "Stock Reconciliation",
+        "posting_date": today(),
+        "company": company,
+        "expense_account": expense_account,
+        "items": [
+            {
+                "item_code": row["item_code"],
+                "warehouse": row["warehouse"],
+                # Set qty to exactly what this DN needs
+                "qty": row["needed"],
+                "valuation_rate": frappe.db.get_value("Item", row["item_code"], "valuation_rate") or 100.0,
+            }
+            for row in shortfall
+        ],
+    })
+    sr.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    lines = "".join(
+        f"<li>{r['item_code']} — need {r['needed']}, have {r['have']} in {r['warehouse']}</li>"
+        for r in shortfall
+    )
+    sr_link = f'<a href="/app/stock-reconciliation/{sr.name}">{sr.name}</a>'
+    frappe.throw(
+        frappe._(
+            "Insufficient stock for {0} item(s). A draft Stock Reconciliation {1} has been "
+            "created. Submit it to add stock, then re-submit this Delivery Note.<ul>{2}</ul>"
+        ).format(len(shortfall), sr_link, lines),
+        title=frappe._("Stock Reconciliation Required"),
+    )
 
 
 # ── Mapper: Delivery Note → Sales Invoice ─────────────────────────────────────

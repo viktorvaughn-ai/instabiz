@@ -1,0 +1,88 @@
+{
+ "charts": [],
+ "content": "[{\"id\":\"iba-h1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Quick Access</b></span>\",\"col\":12}},{\"id\":\"iba-sc-si\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Invoice\",\"col\":3}},{\"id\":\"iba-sc-cn\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Credit Notes\",\"col\":3}},{\"id\":\"iba-sc-pe\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Payment Entry\",\"col\":3}},{\"id\":\"iba-sc-je\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Journal Entry\",\"col\":3}},{\"id\":\"iba-hdr2\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>REPORTS</b></span>\",\"col\":12}},{\"id\":\"iba-sc-gl\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"General Ledger\",\"col\":3}},{\"id\":\"iba-sc-ar\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Accounts Receivable\",\"col\":3}},{\"id\":\"iba-sc-pl\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Party Ledger Summary\",\"col\":3}}]",
+ "creation": "2026-05-27 00:00:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "hide_custom": 0,
+ "idx": 0,
+ "indicator_color": "orange",
+ "is_hidden": 0,
+ "label": "Accounts",
+ "links": [],
+ "modified": "2026-05-27 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "Instabiz Accounts",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "Instabiz",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [
+  {"role": "Accounts User"},
+  {"role": "Accounts Manager"},
+  {"role": "System Manager"}
+ ],
+ "sequence_id": 2.0,
+ "shortcuts": [
+  {
+   "color": "Orange",
+   "doc_view": "List",
+   "label": "Sales Invoice",
+   "link_to": "Sales Invoice",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Yellow",
+   "doc_view": "List",
+   "label": "Credit Notes",
+   "link_to": "Sales Invoice",
+   "stats_filter": "[[\"Sales Invoice\",\"is_return\",\"=\",1,false]]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Payment Entry",
+   "link_to": "Payment Entry",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "doc_view": "List",
+   "label": "Journal Entry",
+   "link_to": "Journal Entry",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "General Ledger",
+   "link_to": "General Ledger",
+   "report_ref_doctype": "GL Entry",
+   "type": "Report"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Accounts Receivable",
+   "link_to": "Accounts Receivable",
+   "report_ref_doctype": "Sales Invoice",
+   "type": "Report"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Party Ledger Summary",
+   "link_to": "Customer Ledger Summary",
+   "report_ref_doctype": "Sales Invoice",
+   "type": "Report"
+  }
+ ],
+ "title": "Accounts"
+}

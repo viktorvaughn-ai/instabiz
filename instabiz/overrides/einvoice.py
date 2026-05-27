@@ -27,6 +27,27 @@ def _had_cancelled_irn(docname):
 		return False
 
 
+def _dn_ewaybill_exists(doc):
+	"""True if any linked Delivery Note already has an e-waybill number.
+
+	When e-waybill is generated on DN submit, the SI has no ewaybill field set.
+	india_compliance then tries to generate a second e-waybill during IRN creation
+	(generate_e_waybill_with_e_invoice=1). We suppress that by temporarily patching
+	the cached GST Settings when we know the DN already owns the waybill.
+	"""
+	dn_names = list({
+		row.delivery_note
+		for row in doc.items
+		if row.get("delivery_note")
+	})
+	if not dn_names:
+		return False
+	return bool(frappe.db.sql(
+		"SELECT 1 FROM `tabDelivery Note` WHERE name IN %s AND ewaybill IS NOT NULL AND ewaybill != '' LIMIT 1",
+		(dn_names,),
+	))
+
+
 def run_einvoice_on_submit(doc, method=None):
 	"""Called on Sales Invoice on_submit. Non-blocking — warns on failure."""
 	# Skip returns, debit notes, inter-company
@@ -59,6 +80,16 @@ def run_einvoice_on_submit(doc, method=None):
 		)
 		return
 
+	# If the linked DN already has an e-waybill, suppress the duplicate attempt
+	# that india_compliance would make via generate_e_waybill_with_e_invoice=1.
+	# We patch the per-request cached doc (frappe.local.document_cache) — safe within one request.
+	dn_has_ewb = _dn_ewaybill_exists(doc)
+	settings = frappe.get_cached_doc("GST Settings") if dn_has_ewb else None
+	_saved_flag = None
+	if settings:
+		_saved_flag = settings.generate_e_waybill_with_e_invoice
+		settings.generate_e_waybill_with_e_invoice = 0
+
 	try:
 		from india_compliance.gst_india.utils.e_invoice import (  # pyright: ignore[reportMissingImports]
 			generate_e_invoice,
@@ -78,3 +109,6 @@ def run_einvoice_on_submit(doc, method=None):
 			indicator="orange",
 			alert=True,
 		)
+	finally:
+		if settings and _saved_flag is not None:
+			settings.generate_e_waybill_with_e_invoice = _saved_flag

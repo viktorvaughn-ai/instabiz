@@ -15,6 +15,7 @@ from instabiz.overrides.utils import (
     map_address_contact_fields,
     COMMON_PARENT_FIELD_MAP,
     COMMON_CHILD_FIELD_MAP,
+    LOCATION_WAREHOUSE,
     _check_floor_price,
     _check_item_lifecycle,
     _check_customer_item_spec,
@@ -31,15 +32,8 @@ _GST_CATEGORY_NORMALIZE = {v.upper(): v for v in [
 	"Tax Deductor", "Tax Collector", "Input Service Distributor",
 ]}
 
-_LOCATION_WAREHOUSE = {
-	"MAHARASHTRA": "MAHARASHTRA - IB",
-	"GUJARAT":     "GUJARAT - IB",
-	"CHENNAI":     "CHENNAI - IB",
-}
-
-
 def _set_company_gstin_from_warehouse(doc):
-	warehouse_name = _LOCATION_WAREHOUSE.get((doc.custom_location or "").upper())
+	warehouse_name = LOCATION_WAREHOUSE.get((doc.custom_location or "").lower())
 	if not warehouse_name:
 		return
 	gstin = frappe.get_cached_value("Warehouse", warehouse_name, "custom_gstin")

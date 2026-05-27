@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"ib-h1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Quick Access</b></span>\",\"col\":12}},{\"id\":\"ib-sc-cb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Board\",\"col\":3}},{\"id\":\"i4JIh3VgUG\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Quotation\",\"col\":3}},{\"id\":\"ib-sc-aa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Assignment Admin\",\"col\":3}},{\"id\":\"ib-sc-at\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Attendance Terminal\",\"col\":3}},{\"id\":\"ib-sc-ci\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Employee Check-in\",\"col\":3}},{\"id\":\"ZXtm1iyCR6\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"IB Rate Card\",\"col\":3}},{\"id\":\"t4AWh_YoFZ\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Org Chart\",\"col\":3}},{\"id\":\"U9J7kY9N_z\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Master\",\"col\":3}},{\"id\":\"uAlt7No3zQ\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Whatsapp Sessions\",\"col\":3}},{\"id\":\"dF971yIlQ1\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>STOCK</b></span>\",\"col\":12}},{\"id\":\"KSt9Ra2Yje\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Delivery Note\",\"col\":3}},{\"id\":\"SXFGusdNGX\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Stock Ledger\",\"col\":3}},{\"id\":\"5dwQIDtA_r\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Live Stock Balance\",\"col\":3}},{\"id\":\"k3YiVWBI5T\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>ACCOUNTING</b></span>\",\"col\":12}},{\"id\":\"MRZdpCcVDo\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Invoice\",\"col\":3}},{\"id\":\"VGjtVqRcNx\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Credit Notes\",\"col\":3}},{\"id\":\"368kdRf9D7\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Payment Entry\",\"col\":3}},{\"id\":\"-AlHSnqnmB\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Journal Entry\",\"col\":3}},{\"id\":\"alzF4tabuK\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"General Ledger\",\"col\":3}},{\"id\":\"YH2uyqHOY_\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Party Ledger Summary\",\"col\":3}},{\"id\":\"ku28M7r1ED\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Accounts Receivable\",\"col\":3}}]",
+ "content": "[{\"id\":\"ib-h1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Quick Access</b></span>\",\"col\":12}},{\"id\":\"ib-sc-cb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Board\",\"col\":3}},{\"id\":\"ib-sc-q\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Quotation\",\"col\":3}},{\"id\":\"ib-sc-so\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Order\",\"col\":3}},{\"id\":\"ib-sc-cm\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Master\",\"col\":3}},{\"id\":\"ib-sc-rc\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"IB Rate Card\",\"col\":3}},{\"id\":\"ib-sc-aa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Assignment Admin\",\"col\":3}},{\"id\":\"ib-sc-ci\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Employee Check-in\",\"col\":3}},{\"id\":\"ib-stock-hdr\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>STOCK</b></span>\",\"col\":12}},{\"id\":\"ib-sc-dn\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Delivery Note\",\"col\":3}},{\"id\":\"ib-sc-sb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Live Stock Balance\",\"col\":3}},{\"id\":\"ib-sc-sl\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Stock Ledger\",\"col\":3}}]",
  "creation": "2026-04-25 11:15:33.281823",
  "custom_blocks": [],
  "docstatus": 0,
@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz",
  "links": [],
- "modified": "2026-05-25 15:57:20.620750",
+ "modified": "2026-05-27 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz",
@@ -24,35 +24,61 @@
  "sequence_id": 1.0,
  "shortcuts": [
   {
-   "color": "Grey",
-   "doc_view": "List",
-   "label": "Org Chart",
-   "link_to": "ib-org-chart",
+   "doc_view": "",
+   "label": "Customer Board",
+   "link_to": "ib-customer-board",
    "type": "Page"
   },
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Payment Entry",
-   "link_to": "Payment Entry",
+   "label": "Quotation",
+   "link_to": "Quotation",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Blue",
+   "doc_view": "List",
+   "label": "Sales Order",
+   "link_to": "Sales Order",
    "stats_filter": "[]",
    "type": "DocType"
   },
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Party Ledger Summary",
-   "link_to": "Customer Ledger Summary",
-   "report_ref_doctype": "Sales Invoice",
-   "type": "Report"
+   "label": "Customer Master",
+   "link_to": "Customer",
+   "stats_filter": "[]",
+   "type": "DocType"
   },
   {
-   "color": "Grey",
+   "color": "",
+   "doc_view": "",
+   "label": "IB Rate Card",
+   "link_to": "ib-price-list",
+   "type": "Page"
+  },
+  {
+   "doc_view": "",
+   "label": "Assignment Admin",
+   "link_to": "ib-assignment-admin",
+   "type": "Page"
+  },
+  {
+   "doc_view": "",
+   "label": "Employee Check-in",
+   "type": "URL",
+   "url": "/app/employee-checkin"
+  },
+  {
+   "color": "Green",
    "doc_view": "List",
-   "label": "Accounts Receivable",
-   "link_to": "Accounts Receivable",
-   "report_ref_doctype": "Sales Invoice",
-   "type": "Report"
+   "label": "Delivery Note",
+   "link_to": "Delivery Note",
+   "stats_filter": "[]",
+   "type": "DocType"
   },
   {
    "color": "Grey",
@@ -66,102 +92,6 @@
    "doc_view": "List",
    "label": "Stock Ledger",
    "link_to": "ib-stock-ledger",
-   "type": "Page"
-  },
-  {
-   "color": "Orange",
-   "doc_view": "List",
-   "label": "Sales Invoice",
-   "link_to": "Sales Invoice",
-   "stats_filter": "[]",
-   "type": "DocType"
-  },
-  {
-   "color": "Green",
-   "doc_view": "List",
-   "label": "Delivery Note",
-   "link_to": "Delivery Note",
-   "stats_filter": "[]",
-   "type": "DocType"
-  },
-  {
-   "color": "Green",
-   "doc_view": "List",
-   "label": "Whatsapp Sessions",
-   "link_to": "IB WA Session",
-   "stats_filter": "[]",
-   "type": "DocType"
-  },
-  {
-   "color": "Yellow",
-   "doc_view": "List",
-   "label": "Credit Notes",
-   "link_to": "Sales Invoice",
-   "stats_filter": "[[\"Sales Invoice\",\"is_return\",\"=\",1,false]]",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "List",
-   "label": "Customer Master",
-   "link_to": "Customer",
-   "stats_filter": "[]",
-   "type": "DocType"
-  },
-  {
-   "color": "Green",
-   "doc_view": "List",
-   "label": "Journal Entry",
-   "link_to": "Journal Entry",
-   "stats_filter": "[]",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "List",
-   "label": "General Ledger",
-   "link_to": "General Ledger",
-   "report_ref_doctype": "GL Entry",
-   "type": "Report"
-  },
-  {
-   "color": "",
-   "doc_view": "",
-   "label": "IB Rate Card",
-   "link_to": "ib-price-list",
-   "stats_filter": "",
-   "type": "Page"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "List",
-   "label": "Quotation",
-   "link_to": "Quotation",
-   "stats_filter": "[]",
-   "type": "DocType"
-  },
-  {
-   "doc_view": "",
-   "label": "Customer Board",
-   "link_to": "ib-customer-board",
-   "type": "Page"
-  },
-  {
-   "doc_view": "",
-   "label": "Employee Check-in",
-   "type": "URL",
-   "url": "/app/employee-checkin"
-  },
-  {
-   "doc_view": "",
-   "label": "Assignment Admin",
-   "link_to": "ib-assignment-admin",
-   "type": "Page"
-  },
-  {
-   "doc_view": "",
-   "label": "Attendance Terminal",
-   "link_to": "attendance-terminal",
    "type": "Page"
   }
  ],

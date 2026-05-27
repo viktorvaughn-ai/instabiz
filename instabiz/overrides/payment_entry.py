@@ -17,10 +17,12 @@ def before_submit(doc, method=None):
 def on_submit(doc, method=None):
 	_notify_accounts(doc)
 	_update_so_advance(doc)
+	_update_customer_outstanding(doc)
 
 
 def on_cancel(doc, method=None):
 	_update_so_advance(doc)
+	_update_customer_outstanding(doc)
 
 
 def _auto_reconcile(doc):
@@ -59,6 +61,14 @@ def _auto_reconcile(doc):
 
 	if added:
 		doc.set_amounts()
+
+	if remaining > 0.01:
+		frappe.msgprint(
+			f"₹{remaining:,.2f} could not be matched to any outstanding invoice. "
+			"This amount will remain unallocated — reconcile manually if needed.",
+			title="Partial Allocation",
+			indicator="orange",
+		)
 
 
 def _notify_accounts(doc):
@@ -105,6 +115,13 @@ def _notify_accounts(doc):
 			"document_type": "Payment Entry",
 			"document_name": doc.name,
 		}).insert(ignore_permissions=True)
+
+
+def _update_customer_outstanding(doc):
+	"""Refresh custom_outstanding_amount on the customer after PE submit/cancel."""
+	if doc.party_type == "Customer" and doc.party:
+		from instabiz.overrides.customer import refresh_customer_outstanding
+		refresh_customer_outstanding(doc.party)
 
 
 def _update_so_advance(doc):

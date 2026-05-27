@@ -10,7 +10,8 @@
  "restrict_to_domain": null,
  "roles": [
   {"role": "Sales Manager"},
-  {"role": "System Manager"}
+  {"role": "System Manager"},
+  {"role": "Team Leader"}
  ],
  "standard": "Yes",
  "system_page": 0,

@@ -5,6 +5,14 @@ function _ib_cust_next_working_day(date_str) {
 }
 
 frappe.listview_settings["Customer"] = {
+	add_fields: ["custom_primary_contact_person"],
+
+	formatters: {
+		mobile_no(value, df, doc) {
+			return value || doc.custom_primary_contact_person || "";
+		},
+	},
+
 	onload(listview) {
 		// Remove native Frappe actions we don't use — deferred so Frappe adds them first
 		const _REMOVE = ["Assign To", "Clear Assignment", "Apply Assignment Rule"];
@@ -122,6 +130,32 @@ frappe.listview_settings["Customer"] = {
 	},
 
 	after_render(listview) {
+		// Fetch Contact Phone for customers with no mobile_no or custom_primary_contact_person
+		const missing = (listview.data || []).filter(
+			(r) => !r.mobile_no && !r.custom_primary_contact_person
+		).map((r) => r.name);
+
+		if (missing.length) {
+			frappe.call({
+				method: "instabiz.overrides.customer.get_customer_phones",
+				args: { customers: JSON.stringify(missing) },
+				callback(r) {
+					const phones = r.message || {};
+					listview.$result.find(".list-row-container").each(function () {
+						const name = $(this).find("[data-name]").data("name") || $(this).attr("data-name");
+						if (!name || !phones[name]) return;
+						const $cell = $(this).find(".list-row-col[data-fieldname='mobile_no']");
+						if ($cell.length && !$cell.text().trim()) {
+							$cell.find(".ellipsis, span").first().text(phones[name]);
+							if (!$cell.find(".ellipsis, span").length) {
+								$cell.text(phones[name]);
+							}
+						}
+					});
+				},
+			});
+		}
+
 		const is_manager =
 			frappe.user.has_role("Sales Manager") || frappe.user.has_role("System Manager");
 		if (!is_manager || !listview.data || !listview.data.length) return;

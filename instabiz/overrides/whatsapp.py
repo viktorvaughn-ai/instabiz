@@ -25,7 +25,7 @@ _PRINT_FORMAT = {
 	"Quotation":     "",
 	"Sales Order":   "",
 	"Delivery Note": "IB Packing List",
-	"Sales Invoice": "IB Tax Invoice",
+	"Sales Invoice": "IB GST Tax Invoice",
 }
 
 

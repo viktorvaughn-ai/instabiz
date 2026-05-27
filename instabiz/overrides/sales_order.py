@@ -13,8 +13,10 @@ from instabiz.overrides.utils import (
     item_postprocess,
     map_parent_fields,
     map_address_contact_fields,
+    apply_location_cost_center,
     COMMON_PARENT_FIELD_MAP,
     COMMON_CHILD_FIELD_MAP,
+    LOCATION_WAREHOUSE,
     _check_floor_price,
     _check_item_lifecycle,
     _check_customer_item_spec,
@@ -58,6 +60,7 @@ class CustomSalesOrder(IbStatusMixin, SalesOrder):
         set_sales_person(self)
         sync_sales_team(self)
         recalculate_items(self)
+        apply_location_cost_center(self)
         _check_floor_price(self)
         _check_item_lifecycle(self)
         _check_customer_item_spec(self)
@@ -199,13 +202,6 @@ def reopen_sales_order(name):
 
 # ── Mapper: Sales Order → Delivery Note ──────────────────────────────────────
 
-_LOCATION_WAREHOUSE = {
-    "maharashtra": "MAHARASHTRA - IB",
-    "chennai":     "CHENNAI - IB",
-    "gujarat":     "GUJARAT - IB",
-}
-
-
 @frappe.whitelist()
 def custom_make_delivery_note(source_name, target_doc=None):
     def postprocess_parent(source_doc, target_doc, source_parent):
@@ -218,11 +214,19 @@ def custom_make_delivery_note(source_name, target_doc=None):
             if not target_doc.get("territory") and customer_doc.territory:
                 target_doc.territory = customer_doc.territory
         location = (source_doc.get("custom_location") or "").strip().lower()
-        warehouse = _LOCATION_WAREHOUSE.get(location)
+        warehouse = LOCATION_WAREHOUSE.get(location)
         if warehouse and not target_doc.set_warehouse:
             target_doc.set_warehouse = warehouse
         map_parent_fields(source_doc, target_doc)
         map_address_contact_fields(source_doc, target_doc)
+
+    location = (frappe.db.get_value("Sales Order", source_name, "custom_location") or "").strip().lower()
+    _dn_warehouse = LOCATION_WAREHOUSE.get(location)
+
+    def dn_item_postprocess(source_item, target_item, source_doc):
+        item_postprocess(source_item, target_item, source_doc)
+        if _dn_warehouse:
+            target_item.warehouse = _dn_warehouse
 
     return get_mapped_doc(
         "Sales Order",
@@ -239,7 +243,7 @@ def custom_make_delivery_note(source_name, target_doc=None):
             },
             "Sales Order Item": {
                 "doctype": "Delivery Note Item",
-                "postprocess": item_postprocess,
+                "postprocess": dn_item_postprocess,
                 "condition": lambda row: row.qty != 0,
                 "field_map": {
                     **COMMON_CHILD_FIELD_MAP,

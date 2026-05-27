@@ -142,6 +142,9 @@ doc_events = {
             "instabiz.overrides.user.copy_admin_ui_settings",
         ],
     },
+    "Lead Sales Team": {
+        "after_save": "instabiz.overrides.customer_assignment.sync_team_leader_role",
+    },
     "Lead": {
         "before_insert": [
             "instabiz.overrides.lead.check_duplicate_lead",
@@ -180,7 +183,11 @@ doc_events = {
         "on_cancel": "instabiz.overrides.stock_events.publish_stock_update",
     },
     "Sales Invoice": {
-        "on_submit": "instabiz.overrides.einvoice.run_einvoice_on_submit",
+        "on_submit": [
+            "instabiz.overrides.einvoice.run_einvoice_on_submit",
+            "instabiz.overrides.customer.update_customer_outstanding_on_si",
+        ],
+        "on_cancel": "instabiz.overrides.customer.update_customer_outstanding_on_si",
     },
     "Payment Entry": {
         "before_submit": "instabiz.overrides.payment_entry.before_submit",
@@ -207,7 +214,6 @@ permission_query_conditions = {
     "Sales Order":   "instabiz.overrides.permissions.sales_order_query_conditions",
     "Delivery Note": "instabiz.overrides.permissions.delivery_note_query_conditions",
     "Sales Invoice": "instabiz.overrides.permissions.sales_invoice_query_conditions",
-    "Customer":      "instabiz.overrides.permissions.customer_query_conditions",
 }
 
 has_permission = {
@@ -216,7 +222,6 @@ has_permission = {
     "Sales Order":   "instabiz.overrides.permissions.sales_order_has_permission",
     "Delivery Note": "instabiz.overrides.permissions.delivery_note_has_permission",
     "Sales Invoice": "instabiz.overrides.permissions.sales_invoice_has_permission",
-    "Customer":      "instabiz.overrides.permissions.customer_has_permission",
 }
 
 # ── Whitelisted method overrides ──────────────────────────────────────────────

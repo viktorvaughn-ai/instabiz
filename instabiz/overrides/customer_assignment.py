@@ -674,7 +674,12 @@ def add_customer_to_today(customer, date=None, target_user=None):
 	"""Any sales user can manually add a customer to their own Today board. No quota limit.
 	Managers may pass target_user to act on behalf of another user."""
 	if target_user and target_user != frappe.session.user:
-		_require_manager()
+		is_manager = any(r in frappe.get_roles() for r in ["Sales Manager", "System Manager"])
+		leader_team = None if is_manager else _get_leader_team()
+		if not is_manager and not leader_team:
+			frappe.throw(_("Not authorized."), frappe.PermissionError)
+		if leader_team and target_user not in _get_team_member_users(leader_team):
+			frappe.throw(_("Not authorized."), frappe.PermissionError)
 		user = target_user
 	else:
 		user = frappe.session.user
@@ -766,6 +771,32 @@ def remove_all_pending(user, date=None):
 	return {"removed": len(removed)}
 
 
+# ── Team Leader role sync ─────────────────────────────────────────────────────
+
+def sync_team_leader_role(doc, method=None):
+	"""Grant 'Team Leader' role to the new team_leader; revoke from the old one if changed."""
+	new_leader = (doc.team_leader or "").strip() or None
+	old_leader = (frappe.db.get_value("Lead Sales Team", doc.name, "team_leader") or "").strip() or None
+
+	# Revoke from old leader if they're no longer leading any team
+	if old_leader and old_leader != new_leader:
+		still_leads = frappe.db.exists("Lead Sales Team", {"team_leader": old_leader, "name": ["!=", doc.name]})
+		if not still_leads:
+			_set_role(old_leader, "Team Leader", grant=False)
+
+	if new_leader:
+		_set_role(new_leader, "Team Leader", grant=True)
+
+
+def _set_role(user, role, grant=True):
+	"""Add or remove a role for a user."""
+	has_role = frappe.db.exists("Has Role", {"parent": user, "role": role, "parenttype": "User"})
+	if grant and not has_role:
+		frappe.get_doc("User", user).add_roles(role)
+	elif not grant and has_role:
+		frappe.get_doc("User", user).remove_roles(role)
+
+
 # ── Whitelisted: admin-facing ─────────────────────────────────────────────────
 
 def _require_manager():
@@ -773,13 +804,38 @@ def _require_manager():
 		frappe.throw(_("Not authorized."), frappe.PermissionError)
 
 
+def _get_leader_team(user=None):
+	"""Return the team name for which user is the team_leader, or None."""
+	return frappe.db.get_value("Lead Sales Team", {"team_leader": user or frappe.session.user}, "name")
+
+
+def _get_team_member_users(team_name):
+	"""Return set of user emails who are members of team_name."""
+	rows = frappe.db.get_all("Lead Sales Team Member", filters={"parent": team_name}, fields=["user"])
+	return {r.user for r in rows}
+
+
+def _require_manager_or_leader():
+	"""Allow Sales Manager / System Manager / Team Leader role OR user set as team_leader in Lead Sales Team."""
+	roles = frappe.get_roles()
+	is_manager = any(r in roles for r in ["Sales Manager", "System Manager"])
+	if not is_manager and "Team Leader" not in roles and not _get_leader_team():
+		frappe.throw(_("Not authorized."), frappe.PermissionError)
+
+
 @frappe.whitelist()
 def get_admin_overview(date=None, territory=None, view_as_user=None):
 	"""Return all users' assignment counts for a date, or view as a specific user."""
-	_require_manager()
+	_require_manager_or_leader()
+	is_manager = any(r in frappe.get_roles() for r in ["Sales Manager", "System Manager"])
+	leader_team = None if is_manager else _get_leader_team()
 	date = date or today()
 
 	if view_as_user:
+		# Team leaders can only view users in their own team
+		if leader_team:
+			if view_as_user not in _get_team_member_users(leader_team):
+				frappe.throw(_("Not authorized."), frappe.PermissionError)
 		original_user = frappe.session.user
 		frappe.session.user = view_as_user
 		try:
@@ -787,11 +843,6 @@ def get_admin_overview(date=None, territory=None, view_as_user=None):
 		finally:
 			frappe.session.user = original_user
 		return {"view_as": view_as_user, "board": data}
-
-	# Build roster of all sales users with counts
-	filters = {"assigned_date": date}
-	if territory:
-		filters["territory"] = territory
 
 	# Build user→team map — ORDER BY creation ASC so newest membership wins when user is in multiple teams
 	team_rows = frappe.db.sql(
@@ -817,6 +868,12 @@ def get_admin_overview(date=None, territory=None, view_as_user=None):
 		team_territory_map.setdefault(r.team, []).append(r.territory)
 
 	users = get_active_sales_users()
+
+	# Team leaders only see members of their own team
+	if leader_team:
+		allowed_users = _get_team_member_users(leader_team)
+		users = [u for u in users if u in allowed_users]
+
 	target_map = get_target_map(_month_first(date))
 	roster = []
 	for user in users:
@@ -855,23 +912,40 @@ def get_admin_overview(date=None, territory=None, view_as_user=None):
 			"target_pct": t.get("pct", 0),
 		})
 
-	return {"date": date, "roster": roster, "team_territories": team_territory_map}
+	return {
+		"date": date,
+		"roster": roster,
+		"team_territories": team_territory_map,
+		"is_manager": is_manager,
+		"leader_team": leader_team,
+	}
 
 
 @frappe.whitelist()
 def get_customer_pool(territory=None, pool_type=None, date=None, limit=50, offset=0, search=None):
 	"""Return assignable customers for admin pool browser with pagination."""
-	_require_manager()
+	_require_manager_or_leader()
+	is_manager = any(r in frappe.get_roles() for r in ["Sales Manager", "System Manager"])
+	leader_team = None if is_manager else _get_leader_team()
 	date = date or today()
 	limit = int(limit)
 	offset = int(offset)
 	search = (search or "").strip() or None
 	config = get_assignment_config()
 
-	territories = [territory] if territory else frappe.db.sql(
-		"SELECT name FROM `tabTerritory` WHERE is_group = 0",
-		as_dict=True,
-	)
+	if territory:
+		territories = [territory]
+	elif leader_team:
+		# Team leaders only see their team's territories
+		terr_rows = frappe.db.get_all(
+			"Lead Sales Team Territory", filters={"parent": leader_team}, fields=["territory"]
+		)
+		territories = [r.territory for r in terr_rows] or ["__none__"]
+	else:
+		territories = frappe.db.sql(
+			"SELECT name FROM `tabTerritory` WHERE is_group = 0",
+			as_dict=True,
+		)
 	if territories and isinstance(territories[0], dict):
 		territories = [t["name"] for t in territories]
 
@@ -898,7 +972,10 @@ def get_customer_pool(territory=None, pool_type=None, date=None, limit=50, offse
 @frappe.whitelist()
 def bulk_auto_assign(user, date=None, count=None):
 	"""Admin triggers auto-assign for a specific user on demand."""
-	_require_manager()
+	_require_manager_or_leader()
+	leader_team = None if any(r in frappe.get_roles() for r in ["Sales Manager", "System Manager"]) else _get_leader_team()
+	if leader_team and user not in _get_team_member_users(leader_team):
+		frappe.throw(_("Not authorized."), frappe.PermissionError)
 	date = date or today()
 	created = auto_assign_for_user(user, date)
 	return {"created": created}
@@ -907,7 +984,12 @@ def bulk_auto_assign(user, date=None, count=None):
 @frappe.whitelist()
 def transfer_assignments(from_user, to_user, date=None):
 	"""Transfer all Pending assignments from from_user to to_user on date."""
-	_require_manager()
+	_require_manager_or_leader()
+	leader_team = None if any(r in frappe.get_roles() for r in ["Sales Manager", "System Manager"]) else _get_leader_team()
+	if leader_team:
+		members = _get_team_member_users(leader_team)
+		if from_user not in members or to_user not in members:
+			frappe.throw(_("Not authorized."), frappe.PermissionError)
 	if from_user == to_user:
 		frappe.throw(_("Cannot transfer to the same user."))
 	date = date or today()

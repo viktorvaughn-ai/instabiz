@@ -199,8 +199,9 @@ def run_ewaybill_on_submit(doc, method=None):
 	if doc.get("is_return") or not doc.get("customer"):
 		return
 
-	# Self pickup — no third-party transporter; e-waybill must be generated from the Sales Invoice
-	if (doc.get("custom_transport") or "").strip().upper() == "SELF PICKUP":
+	# Self pickup — no third-party transporter; e-waybill must be generated from the Sales Invoice.
+	# Matches "SELF PICKUP", "SELF PIKUP" and any future variants.
+	if "SELF" in (doc.get("custom_transport") or "").upper():
 		frappe.msgprint(
 			_("Transport is Self Pickup — e-Way Bill not auto-generated. "
 			  "Generate it from the linked Sales Invoice using the e-Way Bill action button."),
