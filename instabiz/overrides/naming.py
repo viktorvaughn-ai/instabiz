@@ -85,6 +85,24 @@ def autoname_delivery_note(doc, method=None):
             return
 
 
+def autoname_purchase_order(doc, method=None):
+    wh       = get_warehouse_code(doc)
+    prefix   = f"IB-{wh}-PO-"
+    doc.name = frappe.model.naming.make_autoname(f"{prefix}.#####")
+
+
+def autoname_purchase_receipt(doc, method=None):
+    wh       = get_warehouse_code(doc)
+    prefix   = f"IB-{wh}-GRN-"
+    doc.name = frappe.model.naming.make_autoname(f"{prefix}.#####")
+
+
+def autoname_purchase_invoice(doc, method=None):
+    wh       = get_warehouse_code(doc)
+    prefix   = f"IB-{wh}-PINV-"
+    doc.name = frappe.model.naming.make_autoname(f"{prefix}.#####")
+
+
 def autoname_sales_invoice(doc, method=None):
     wh = get_warehouse_code(doc)
     # If created from a Delivery Note, reuse its number so DN/SI share the same sequence slot.

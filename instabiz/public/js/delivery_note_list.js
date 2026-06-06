@@ -44,6 +44,8 @@ frappe.listview_settings["Delivery Note"] = {
 		ib_setup_status_multiselect(listview, "Delivery Note", [
 			"Draft", "Pending", "Confirmed", "Return Issued", "Cancelled",
 		]);
+		ib_setup_list_sales_user_filter(listview, "Delivery Note");
+		ib_setup_list_date_filter(listview, "Delivery Note", "creation", []);
 		const _orig_render_list = listview.render_list.bind(listview);
 		listview.render_list = function () {
 			_orig_render_list();

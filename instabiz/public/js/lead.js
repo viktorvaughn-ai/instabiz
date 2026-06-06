@@ -1,7 +1,16 @@
 frappe.ui.form.on("Lead", {
+	onload(frm) {
+		if (frm.is_new() && !frm.doc.lead_owner) {
+			frm.set_value("lead_owner", frappe.session.user);
+		}
+	},
+
 	refresh(frm) {
 		if (!frm.is_new()) {
 			frm.add_custom_button(__("Log Activity"), () => _ib_log_activity_dialog(frm));
+			if (frappe.user.has_role("Sales Manager") || frappe.user.has_role("System Manager")) {
+				frm.add_custom_button(__("Reassign"), () => _ib_reassign_lead_dialog(frm), __("Actions"));
+			}
 		}
 	},
 
@@ -64,4 +73,46 @@ function _ib_log_activity_dialog(frm) {
 		},
 	});
 	d.show();
+}
+
+function _ib_reassign_lead_dialog(frm) {
+	frappe.db.get_list("User", {
+		filters: [["Has Role", "role", "in", ["Sales User", "Sales Manager"]], ["enabled", "=", 1]],
+		fields: ["name", "full_name"],
+		limit: 200,
+	}).then(users => {
+		const name_to_email = {};
+		const options = users.map(u => {
+			const label = u.full_name || u.name;
+			name_to_email[label] = u.name;
+			return label;
+		});
+		const d = new frappe.ui.Dialog({
+			title: __("Reassign Lead"),
+			fields: [{
+				fieldname: "to_user_label",
+				label: __("Assign To"),
+				fieldtype: "Select",
+				options: options.join("\n"),
+				reqd: 1,
+			}],
+			primary_action_label: __("Reassign"),
+			primary_action(values) {
+				const to_user = name_to_email[values.to_user_label];
+				if (!to_user) return;
+				frappe.call({
+					method: "instabiz.overrides.lead.transfer_leads",
+					args: { leads: JSON.stringify([frm.docname]), to_user },
+					callback(r) {
+						if (r.message && r.message.transferred) {
+							d.hide();
+							frappe.show_alert({ message: `Lead reassigned to ${values.to_user_label}`, indicator: "green" });
+							frm.reload_doc();
+						}
+					},
+				});
+			},
+		});
+		d.show();
+	});
 }

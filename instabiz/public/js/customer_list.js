@@ -5,7 +5,7 @@ function _ib_cust_next_working_day(date_str) {
 }
 
 frappe.listview_settings["Customer"] = {
-	add_fields: ["custom_primary_contact_person"],
+	add_fields: ["custom_primary_contact_person", "custom_sales_person"],
 
 	formatters: {
 		mobile_no(value, df, doc) {
@@ -25,33 +25,6 @@ frappe.listview_settings["Customer"] = {
 		const is_manager =
 			frappe.user.has_role("Sales Manager") || frappe.user.has_role("System Manager");
 		if (!is_manager) return;
-
-		listview.page.add_actions_menu_item(__("Claim"), () => {
-			const selected = listview.get_checked_items();
-			if (!selected.length) {
-				frappe.show_alert({ message: __("Select at least one customer"), indicator: "orange" });
-				return;
-			}
-			const customers = selected.map((r) => r.name);
-			frappe.confirm(
-				__("Claim {0} customer(s) for yourself?", [customers.length]),
-				() => {
-					frappe.call({
-						method: "instabiz.overrides.customer_assignment.bulk_claim_customers",
-						args: { customers: JSON.stringify(customers) },
-						callback(r) {
-							if (r.exc) return;
-							const { claimed, skipped } = r.message;
-							let msg = __("{0} customer(s) claimed", [claimed]);
-							if (skipped && skipped.length)
-								msg += __(", {0} skipped (already claimed by another)", [skipped.length]);
-							frappe.show_alert({ message: msg, indicator: claimed > 0 ? "green" : "orange" });
-							listview.refresh();
-						},
-					});
-				}
-			);
-		});
 
 		listview.page.add_actions_menu_item(__("Assign to Sales User"), () => {
 			const selected = listview.get_checked_items();
@@ -126,6 +99,30 @@ frappe.listview_settings["Customer"] = {
 					d.show();
 				},
 			});
+		});
+
+		listview.page.add_actions_menu_item(__("Remove Assignment"), () => {
+			const selected = listview.get_checked_items();
+			if (!selected.length) {
+				frappe.show_alert({ message: __("Select at least one customer"), indicator: "orange" });
+				return;
+			}
+			const customers = selected.map((r) => r.name);
+			frappe.confirm(
+				__("Remove assignment from {0} customer(s)?", [customers.length]),
+				() => {
+					const calls = customers.map((customer) =>
+						frappe.call({
+							method: "instabiz.overrides.customer_assignment.remove_customer_assignment",
+							args: { customer },
+						})
+					);
+					Promise.all(calls).then(() => {
+						frappe.show_alert({ message: __("{0} assignment(s) removed", [customers.length]), indicator: "orange" });
+						listview.refresh();
+					});
+				}
+			);
 		});
 	},
 

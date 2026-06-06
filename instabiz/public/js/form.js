@@ -133,6 +133,99 @@ IB_DOCTYPES.forEach(function (doctype) {
     });
 });
 
+// ── Patch erpnext.utils.update_child_items for Q + SO ────────────────────────
+// ERPNext's native dialog only shows qty/rate. Intercept and show our extended
+// dialog that includes dimension fields (color, width, length, qty_pkg, etc.).
+(function _ib_patch_update_child_items() {
+    let _retries = 0;
+    const _try = () => {
+        if (!window.erpnext || !erpnext.utils || !erpnext.utils.update_child_items) {
+            if (++_retries < 50) setTimeout(_try, 300);
+            return;
+        }
+        const _orig = erpnext.utils.update_child_items.bind(erpnext.utils);
+        erpnext.utils.update_child_items = function (opts) {
+            const dt = opts.frm && opts.frm.doc && opts.frm.doc.doctype;
+            if (dt === "Quotation" || dt === "Sales Order") {
+                _ib_update_items_dialog(opts.frm, dt);
+            } else {
+                _orig.call(this, opts);
+            }
+        };
+    };
+    $(document).ready(_try);
+}());
+
+// ── Update Items with Dimensions dialog (Q + SO, submitted) ──────────────────
+
+function _ib_update_items_dialog(frm, doctype) {
+    const data = (frm.doc.items || []).map((d) => ({
+        docname:          d.name,
+        item_code:        d.item_code,
+        color:            d.color || "",
+        width_mm:         d.width_mm || 0,
+        length_mtr:       d.length_mtr || 0,
+        qty_pkg:          d.qty_pkg || 0,
+        total_pkg:        d.total_pkg || 0,
+        rate:             d.rate || 0,
+        custom_thickness: d.custom_thickness || "",
+        custom_branding:  d.custom_branding || "",
+        custom_marking:   d.custom_marking || "",
+    }));
+
+    const dialog = new frappe.ui.Dialog({
+        title: __("Update Items"),
+        size: "extra-large",
+        fields: [
+            {
+                fieldname: "items",
+                fieldtype: "Table",
+                label: "Items",
+                cannot_add_rows: true,
+                in_place_edit: false,
+                reqd: 1,
+                data: data,
+                get_data: () => data,
+                fields: [
+                    { fieldname: "docname",          fieldtype: "Data",     read_only: 1, hidden: 1 },
+                    { fieldname: "item_code",        label: __("Item"),         fieldtype: "Data",     read_only: 1, in_list_view: 1, columns: 2 },
+                    { fieldname: "color",            label: __("Color"),        fieldtype: "Link",     options: "Color",        in_list_view: 1 },
+                    { fieldname: "width_mm",         label: __("Width MM"),     fieldtype: "Float",    in_list_view: 1 },
+                    { fieldname: "length_mtr",       label: __("Length MTR"),   fieldtype: "Float",    in_list_view: 1 },
+                    { fieldname: "qty_pkg",          label: __("Qty/Pkg"),      fieldtype: "Float",    in_list_view: 1 },
+                    { fieldname: "total_pkg",        label: __("Total Pkg"),    fieldtype: "Float",    in_list_view: 1 },
+                    { fieldname: "rate",             label: __("Rate"),         fieldtype: "Currency",  in_list_view: 1 },
+                    { fieldname: "custom_thickness", label: __("Thickness"),    fieldtype: "Data" },
+                    { fieldname: "custom_branding",  label: __("Branding"),     fieldtype: "Link",     options: "IB Branding" },
+                    { fieldname: "custom_marking",   label: __("Marking"),      fieldtype: "Data" },
+                ],
+            },
+        ],
+        primary_action_label: __("Update"),
+        primary_action(values) {
+            const items = (values.items || []).filter((d) => !!d.item_code);
+            frappe.call({
+                method: "instabiz.overrides.utils.update_item_dimensions",
+                freeze: true,
+                freeze_message: __("Updating…"),
+                args: {
+                    parent_doctype: doctype,
+                    parent_name: frm.doc.name,
+                    items: JSON.stringify(items),
+                },
+                callback(r) {
+                    if (!r.exc) {
+                        dialog.hide();
+                        frappe.show_alert({ message: __("Items updated"), indicator: "green" });
+                        frm.reload_doc();
+                    }
+                },
+            });
+        },
+    });
+    dialog.show();
+}
+
 // ── Quotation: Margin % on item rows ─────────────────────────────────────────
 
 function _ib_update_margin(frm, cdt, cdn) {

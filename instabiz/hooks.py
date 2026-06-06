@@ -118,17 +118,28 @@ fixtures = [
         "dt": "Property Setter",
         "filters": [["doc_type", "in", ["Quotation", "Sales Order", "Lead", "Delivery Note", "Customer"]]]
     },
+    {
+        "dt": "Purchase Taxes and Charges Template",
+        "filters": [["company", "=", "Instabiz Solutions India Pvt Ltd"]]
+    },
+    {
+        "dt": "Sales Taxes and Charges Template",
+        "filters": [["company", "=", "Instabiz Solutions India Pvt Ltd"]]
+    },
 ]
 # ── Class overrides ───────────────────────────────────────────────────────────
 # recalculate_items runs inside each class's validate(), so no need to also
 # register it as a doc_event — that would execute it twice per save.
 override_doctype_class = {
-    "Quotation":     "instabiz.overrides.quotation.CustomQuotation",
-    "Sales Order":   "instabiz.overrides.sales_order.CustomSalesOrder",
-    "Delivery Note": "instabiz.overrides.delivery_note.CustomDeliveryNote",
-    "Sales Invoice": "instabiz.overrides.sales_invoice.CustomSalesInvoice",
-    "Customer":      "instabiz.overrides.customer.CustomCustomer",
-    "Salary Slip":   "instabiz.overrides.salary_slip.CustomSalarySlip",
+    "Quotation":         "instabiz.overrides.quotation.CustomQuotation",
+    "Sales Order":       "instabiz.overrides.sales_order.CustomSalesOrder",
+    "Delivery Note":     "instabiz.overrides.delivery_note.CustomDeliveryNote",
+    "Sales Invoice":     "instabiz.overrides.sales_invoice.CustomSalesInvoice",
+    "Purchase Order":    "instabiz.overrides.purchase_order.CustomPurchaseOrder",
+    "Purchase Receipt":  "instabiz.overrides.purchase_receipt.CustomPurchaseReceipt",
+    "Purchase Invoice":  "instabiz.overrides.purchase_invoice.CustomPurchaseInvoice",
+    "Customer":          "instabiz.overrides.customer.CustomCustomer",
+    "Salary Slip":       "instabiz.overrides.salary_slip.CustomSalarySlip",
 }
 
 # ── Server-side doc events ────────────────────────────────────────────────────
@@ -158,8 +169,7 @@ doc_events = {
         ],
     },
     "Item": {
-        "before_insert": "instabiz.overrides.item.set_batch_no_for_fg",
-        "before_save":   "instabiz.overrides.item.set_batch_no_for_fg",
+        "before_save": "instabiz.overrides.item.set_batch_no_for_fg",
     },
     "Comment": {
         "after_insert": "instabiz.overrides.comment.notify_owner_on_comment",
@@ -188,6 +198,7 @@ doc_events = {
             "instabiz.overrides.customer.update_customer_outstanding_on_si",
         ],
         "on_cancel": "instabiz.overrides.customer.update_customer_outstanding_on_si",
+        "on_trash":  "instabiz.overrides.customer.update_customer_outstanding_on_si",
     },
     "Payment Entry": {
         "before_submit": "instabiz.overrides.payment_entry.before_submit",
@@ -209,19 +220,21 @@ doc_events = {
 # for sales docs, lead_owner for Leads).
 # Roles in _PRIVILEGED_ROLES (System Manager, Sales Manager) bypass the filter.
 permission_query_conditions = {
-    "Lead":          "instabiz.overrides.lead.get_permission_query_conditions",
-    "Quotation":     "instabiz.overrides.permissions.quotation_query_conditions",
-    "Sales Order":   "instabiz.overrides.permissions.sales_order_query_conditions",
-    "Delivery Note": "instabiz.overrides.permissions.delivery_note_query_conditions",
-    "Sales Invoice": "instabiz.overrides.permissions.sales_invoice_query_conditions",
+    "Lead":              "instabiz.overrides.lead.get_permission_query_conditions",
+    "Quotation":         "instabiz.overrides.permissions.quotation_query_conditions",
+    "Sales Order":       "instabiz.overrides.permissions.sales_order_query_conditions",
+    "Delivery Note":     "instabiz.overrides.permissions.delivery_note_query_conditions",
+    "Sales Invoice":     "instabiz.overrides.permissions.sales_invoice_query_conditions",
+    "Employee Checkin":  "instabiz.overrides.checkin.employee_checkin_query_conditions",
 }
 
 has_permission = {
-    "Lead":          "instabiz.overrides.lead.has_permission",
-    "Quotation":     "instabiz.overrides.permissions.quotation_has_permission",
-    "Sales Order":   "instabiz.overrides.permissions.sales_order_has_permission",
-    "Delivery Note": "instabiz.overrides.permissions.delivery_note_has_permission",
-    "Sales Invoice": "instabiz.overrides.permissions.sales_invoice_has_permission",
+    "Lead":              "instabiz.overrides.lead.has_permission",
+    "Quotation":         "instabiz.overrides.permissions.quotation_has_permission",
+    "Sales Order":       "instabiz.overrides.permissions.sales_order_has_permission",
+    "Delivery Note":     "instabiz.overrides.permissions.delivery_note_has_permission",
+    "Sales Invoice":     "instabiz.overrides.permissions.sales_invoice_has_permission",
+    "Employee Checkin":  "instabiz.overrides.checkin.employee_checkin_has_permission",
 }
 
 # ── Whitelisted method overrides ──────────────────────────────────────────────
@@ -268,14 +281,17 @@ app_include_js  = [
 
 # ── DocType-specific list JS (appended AFTER the app's own list JS) ───────────
 doctype_list_js = {
-    "Employee Checkin": "public/js/employee_checkin_list.js",
-    "Lead":             "public/js/lead_list.js",
-    "Quotation":        "public/js/quotation_list.js",
-    "Sales Order":      "public/js/sales_order_list.js",
-    "Delivery Note":    "public/js/delivery_note_list.js",
-    "Sales Invoice":        "public/js/sales_invoice_list.js",
-    "IB Item Price List":   "public/js/ib_item_price_list_list.js",
-    "Customer":             "public/js/customer_list.js",
+    "Employee Checkin":  "public/js/employee_checkin_list.js",
+    "Lead":              "public/js/lead_list.js",
+    "Quotation":         "public/js/quotation_list.js",
+    "Sales Order":       "public/js/sales_order_list.js",
+    "Delivery Note":     "public/js/delivery_note_list.js",
+    "Sales Invoice":     "public/js/sales_invoice_list.js",
+    "Purchase Order":    "public/js/purchase_order_list.js",
+    "Purchase Receipt":  "public/js/purchase_receipt_list.js",
+    "Purchase Invoice":  "public/js/purchase_invoice_list.js",
+    "IB Item Price List": "public/js/ib_item_price_list_list.js",
+    "Customer":          "public/js/customer_list.js",
 }
 
 doctype_js = {
@@ -290,5 +306,8 @@ doctype_js = {
     "Job Applicant":           "public/js/job_applicant.js",
     "Sales Invoice":           "public/js/sales_invoice.js",
     "Delivery Note":           "public/js/delivery_note.js",
+    "Purchase Order":          "public/js/ib_purchase_common.js",
+    "Purchase Receipt":        "public/js/ib_purchase_common.js",
+    "Purchase Invoice":        "public/js/ib_purchase_common.js",
     "IB WA Session":           "public/js/ib_wa_session.js",
 }

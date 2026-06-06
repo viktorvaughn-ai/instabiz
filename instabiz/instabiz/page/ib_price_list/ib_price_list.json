@@ -1,14 +1,17 @@
 {
-    "creation": "2026-05-02 00:00:00.000000",
-    "doctype": "Page",
-    "module": "Instabiz",
-    "name": "ib-price-list",
-    "page_name": "ib-price-list",
-    "roles": [
-        {"role": "Sales User"},
-        {"role": "Sales Manager"},
-        {"role": "System Manager"}
-    ],
-    "standard": "Yes",
-    "title": "IB Rate Card"
+ "creation": "2026-05-02 00:00:00.000000",
+ "doctype": "Page",
+ "module": "Instabiz",
+ "name": "ib-price-list",
+ "page_name": "ib-price-list",
+ "roles": [
+  {
+   "role": "Sales Manager"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
+ "standard": "Yes",
+ "title": "IB Rate Card"
 }

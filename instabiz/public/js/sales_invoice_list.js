@@ -43,6 +43,8 @@ frappe.listview_settings["Sales Invoice"] = {
 		ib_setup_status_multiselect(listview, "Sales Invoice", [
 			"Draft", "Unpaid", "Overdue", "Paid", "Return", "Cancelled",
 		]);
+		ib_setup_list_sales_user_filter(listview, "Sales Invoice");
+		ib_setup_list_date_filter(listview, "Sales Invoice", "posting_date", []);
 		const _orig_render_list = listview.render_list.bind(listview);
 		listview.render_list = function () {
 			_orig_render_list();

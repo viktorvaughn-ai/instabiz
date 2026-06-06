@@ -147,7 +147,10 @@ def _do_assign(doc):
     team_name = rows[0].name
 
     lock_key = f"ib_rr_{team_name}"
-    frappe.db.sql("SELECT GET_LOCK(%s, 10)", lock_key)
+    acquired = frappe.db.sql("SELECT GET_LOCK(%s, 30)", lock_key)[0][0]
+    if not acquired:
+        frappe.log_error(f"Round-robin lock timeout for team {team_name}", "IB Lead Assignment")
+        return
     try:
         team = frappe.get_doc("Lead Sales Team", team_name)
 

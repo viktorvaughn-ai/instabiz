@@ -3,6 +3,23 @@ from frappe import _
 from frappe.utils import now_datetime, today
 
 _PRIVILEGED_ROLES = {"System Manager", "HR Manager", "HR User"}
+_SALES_USER_ROLE  = "Sales User"
+
+
+def _is_sales_user(user=None):
+	return _SALES_USER_ROLE in frappe.get_roles(user or frappe.session.user)
+
+
+def employee_checkin_has_permission(doc, ptype, user=None):
+	if _is_sales_user(user or frappe.session.user):
+		return False
+	return None
+
+
+def employee_checkin_query_conditions(user=None):
+	if _is_sales_user(user or frappe.session.user):
+		return "1=0"
+	return ""
 
 
 def _is_privileged():

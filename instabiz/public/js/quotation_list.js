@@ -51,6 +51,9 @@ frappe.listview_settings["Quotation"] = {
         ib_setup_status_multiselect(listview, "Quotation", [
             "Pending", "Confirmed", "Cancelled", "Draft",
         ]);
+        ib_setup_list_sales_user_filter(listview, "Quotation");
+        ib_setup_list_date_filter(listview, "Quotation", "creation", ["transaction_date"]);
+        ib_setup_list_team_filter(listview, "Quotation");
         const _orig_render_list = listview.render_list.bind(listview);
         listview.render_list = function () {
             _orig_render_list();

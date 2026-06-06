@@ -1,14 +1,13 @@
 import frappe
 from frappe import _
 
-
 def get_context(context):
 	# Redirect guests to login
 	if frappe.session.user == "Guest":
 		frappe.local.flags.redirect_location = "/login?redirect-to=/checkin"
 		raise frappe.Redirect
 
-	# Resolve employee from logged-in user
+# Resolve employee from logged-in user
 	employee = frappe.db.get_value(
 		"Employee",
 		{"user_id": frappe.session.user, "status": "Active"},

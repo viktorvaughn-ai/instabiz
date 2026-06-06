@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"ib-h1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Quick Access</b></span>\",\"col\":12}},{\"id\":\"ib-sc-cb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Board\",\"col\":3}},{\"id\":\"ib-sc-q\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Quotation\",\"col\":3}},{\"id\":\"ib-sc-so\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Order\",\"col\":3}},{\"id\":\"ib-sc-cm\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Master\",\"col\":3}},{\"id\":\"ib-sc-rc\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"IB Rate Card\",\"col\":3}},{\"id\":\"ib-sc-aa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Assignment Admin\",\"col\":3}},{\"id\":\"ib-sc-ci\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Employee Check-in\",\"col\":3}},{\"id\":\"ib-stock-hdr\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>STOCK</b></span>\",\"col\":12}},{\"id\":\"ib-sc-dn\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Delivery Note\",\"col\":3}},{\"id\":\"ib-sc-sb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Live Stock Balance\",\"col\":3}},{\"id\":\"ib-sc-sl\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Stock Ledger\",\"col\":3}}]",
+ "content": "[{\"id\":\"ib-h1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Quick Access</b></span>\",\"col\":12}},{\"id\":\"ib-sc-q\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Quotation\",\"col\":3}},{\"id\":\"ib-sc-so\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Order\",\"col\":3}},{\"id\":\"ib-sc-cm\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Master\",\"col\":3}},{\"id\":\"ib-sc-rc\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"IB Rate Card\",\"col\":3}},{\"id\":\"ib-sc-aa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Assignment Admin\",\"col\":3}},{\"id\":\"ib-stock-hdr\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>STOCK</b></span>\",\"col\":12}},{\"id\":\"ib-sc-dn\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Delivery Note\",\"col\":3}},{\"id\":\"ib-sc-sb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Live Stock Balance\",\"col\":3}},{\"id\":\"ib-sc-sl\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Stock Ledger\",\"col\":3}}]",
  "creation": "2026-04-25 11:15:33.281823",
  "custom_blocks": [],
  "docstatus": 0,
@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz",
  "links": [],
- "modified": "2026-05-27 00:00:00.000000",
+ "modified": "2026-06-06 11:32:12.948318",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz",
@@ -20,15 +20,19 @@
  "parent_page": "",
  "public": 1,
  "quick_lists": [],
- "roles": [],
+ "roles": [
+  {
+   "role": "Sales Manager"
+  },
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Sales User"
+  }
+ ],
  "sequence_id": 1.0,
  "shortcuts": [
-  {
-   "doc_view": "",
-   "label": "Customer Board",
-   "link_to": "ib-customer-board",
-   "type": "Page"
-  },
   {
    "color": "Grey",
    "doc_view": "List",
@@ -65,12 +69,6 @@
    "label": "Assignment Admin",
    "link_to": "ib-assignment-admin",
    "type": "Page"
-  },
-  {
-   "doc_view": "",
-   "label": "Employee Check-in",
-   "type": "URL",
-   "url": "/app/employee-checkin"
   },
   {
    "color": "Green",

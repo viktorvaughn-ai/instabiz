@@ -32,6 +32,13 @@ frappe.listview_settings["Lead"] = Object.assign(
 			const _erpnext_onload = frappe.listview_settings["Lead"]._erpnext_onload;
 			if (_erpnext_onload) _erpnext_onload(listview);
 
+			// Force modified desc — overrides any saved user sort preference
+			listview.sort_by = "modified";
+			listview.sort_order = "desc";
+			if (listview.sort_selector) {
+				listview.sort_selector.set_value("modified", "desc");
+			}
+
 			listview.page.add_action_item(__("Transfer Lead(s)"), function () {
 				const selected = listview.get_checked_items();
 				if (!selected.length) {

@@ -118,10 +118,33 @@ def _notify_accounts(doc):
 
 
 def _update_customer_outstanding(doc):
-	"""Refresh custom_outstanding_amount on the customer after PE submit/cancel."""
-	if doc.party_type == "Customer" and doc.party:
-		from instabiz.overrides.customer import refresh_customer_outstanding
-		refresh_customer_outstanding(doc.party)
+	"""Refresh custom_outstanding_amount on the customer after PE submit/cancel.
+	Also clears the overdue block flag if the customer now has no overdue invoices.
+	"""
+	if doc.party_type != "Customer" or not doc.party:
+		return
+	from instabiz.overrides.customer import refresh_customer_outstanding
+	refresh_customer_outstanding(doc.party)
+	_maybe_clear_overdue_block(doc.party)
+
+
+def _maybe_clear_overdue_block(customer):
+	"""Lift custom_overdue_block when no more overdue invoices exist for customer."""
+	if not frappe.db.get_value("Customer", customer, "custom_overdue_block"):
+		return
+	from frappe.utils import today
+	still_overdue = frappe.db.sql(
+		"""
+		SELECT COUNT(*) FROM `tabSales Invoice`
+		WHERE customer = %s AND docstatus = 1
+		  AND outstanding_amount > 0
+		  AND due_date < %s
+		""",
+		(customer, today()),
+	)[0][0]
+	if not still_overdue:
+		frappe.db.set_value("Customer", customer, "custom_overdue_block", 0, update_modified=False)
+		frappe.logger().info(f"IB: overdue block cleared for {customer} — all dues paid")
 
 
 def _update_so_advance(doc):

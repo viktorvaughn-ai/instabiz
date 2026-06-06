@@ -8,7 +8,14 @@
  "owner": "Administrator",
  "page_name": "ib-stock-dashboard",
  "restrict_to_domain": null,
- "roles": [],
+ "roles": [
+  {
+   "role": "Sales Manager"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
  "standard": "Yes",
  "system_page": 0,
  "title": "IB Stock Dashboard"

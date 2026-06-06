@@ -7,7 +7,7 @@ from erpnext.controllers.queries import get_filters_cond, get_match_cond
 from frappe.utils import nowdate
 
 # Finished-goods item groups that require batch tracking
-_FG_BATCH_GROUPS = {"BOPP", "CLOTH", "FOAM", "SPECIALTY"}
+_FG_BATCH_GROUPS = {"BOPP", "FOAM", "SPECIALTY"}
 
 
 def set_batch_no_for_fg(doc, method=None):

@@ -90,7 +90,7 @@ def _check_credit_limit(doc):
         return
     if row.bypass_credit_limit_check:
         return
-    if not row.credit_limit or not row.custom_days:
+    if row.credit_limit is None or row.custom_days is None:
         return
 
     result = frappe.db.sql(
@@ -126,12 +126,20 @@ def _check_credit_limit(doc):
 
 
 def _check_overdue_block(doc):
-    """Block SO submit when customer has a 30d+ overdue flag set by overdue_alert scheduler."""
-    if frappe.db.get_value("Customer", doc.customer, "custom_overdue_block"):
-        frappe.throw(
-            f"Cannot submit: {doc.customer_name or doc.customer} has invoices overdue 30+ days. "
-            "Clear outstanding dues to submit new orders. Contact Sales Manager to override."
-        )
+    """Block SO submit when customer has a 30d+ overdue flag set by overdue_alert scheduler.
+    Sales Manager / System Manager get a warning instead of a hard block.
+    """
+    if not frappe.db.get_value("Customer", doc.customer, "custom_overdue_block"):
+        return
+    from instabiz.overrides.permissions import _is_privileged
+    msg = (
+        f"{doc.customer_name or doc.customer} has invoices overdue 30+ days. "
+        "Clear outstanding dues before submitting new orders."
+    )
+    if _is_privileged(frappe.session.user):
+        frappe.msgprint(msg, title="Overdue Warning", indicator="orange")
+    else:
+        frappe.throw(f"Cannot submit: {msg} Contact Sales Manager to override.")
 
 
 # ── Reopen ────────────────────────────────────────────────────────────────────

@@ -90,9 +90,11 @@ def customer_query_conditions(user):
     u = frappe.db.escape(user)
     return (
         f"(`tabCustomer`.`owner` = {u}"
+        f" OR `tabCustomer`.`custom_sales_person_user` = {u}"
         f" OR `tabCustomer`.`name` IN ("
         f"   SELECT `customer` FROM `tabIB Customer Assignment`"
         f"   WHERE `assigned_to` = {u}"
+        f"   AND `assigned_date` >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)"
         f" ))"
     )
 

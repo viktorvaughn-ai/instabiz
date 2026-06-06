@@ -2300,6 +2300,7 @@ mark.ib-search-hl {
 .ib-cb-pill:active { transform: translateY(0); filter: brightness(0.85); }
 .ib-cb-pill--contact  { background: #d1fae5; color: #065f46; }
 .ib-cb-pill--quote    { background: #fef3c7; color: #92400e; }
+.ib-cb-pill--log      { background: #e0e7ff; color: #3730a3; }
 .ib-cb-pill--wa       { background: #dcfce7; color: #15803d; }
 .ib-cb-pill--neutral  { background: var(--subtle-bg); color: var(--text-color); }
 .ib-cb-pill--add      { background: #ffe8df; color: #b94a20; }

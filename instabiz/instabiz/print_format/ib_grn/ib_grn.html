@@ -1,0 +1,181 @@
+{% set co = frappe.get_doc("Company", doc.company) %}
+{% set co_addr = frappe.db.get_value("Address", doc.company_address,
+    ["address_line1","address_line2","city","state","pincode"], as_dict=True)
+    if doc.company_address else None %}
+{% set sup_addr = frappe.db.get_value("Address", doc.supplier_address,
+    ["address_line1","address_line2","city","state","pincode"], as_dict=True)
+    if doc.supplier_address else None %}
+
+{# Collect linked POs #}
+{% set ns = namespace(po_list=[]) %}
+{% for row in doc.items %}
+  {% if row.purchase_order and row.purchase_order not in ns.po_list %}
+    {% set _ = ns.po_list.append(row.purchase_order) %}
+  {% endif %}
+{% endfor %}
+
+<style>
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; }
+  .grn-header { text-align: center; margin-bottom: 10px; border-bottom: 2px solid #d97757; padding-bottom: 8px; }
+  .grn-header h2 { margin: 0 0 2px; font-size: 15px; }
+  .grn-header h3 { margin: 0; font-size: 12px; color: #555; }
+  .grn-title { text-align: center; font-size: 14px; font-weight: bold; letter-spacing: 1px;
+               background: #d97757; color: #fff; padding: 4px 0; margin-bottom: 12px; }
+  .grn-parties { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+  .grn-parties td { vertical-align: top; padding: 0 8px; width: 50%; }
+  .party-box { border: 1px solid #ddd; padding: 6px 10px; min-height: 70px; }
+  .party-label { font-weight: bold; font-size: 10px; color: #d97757; text-transform: uppercase; margin-bottom: 4px; }
+  .grn-meta { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+  .grn-meta td { padding: 2px 8px; }
+  .grn-meta .lbl { font-weight: bold; color: #444; width: 140px; }
+  .grn-meta tr:nth-child(odd) td { background: #fafafa; }
+  table.items { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+  table.items th { background: #d97757; color: #fff; padding: 5px 8px; text-align: left; font-size: 11px; }
+  table.items td { border-bottom: 1px solid #e8e8e8; padding: 4px 8px; vertical-align: top; }
+  table.items tr:nth-child(even) td { background: #fafafa; }
+  .num { text-align: right; }
+  .rej { color: #c0392b; font-weight: bold; }
+  .totals-table { width: 50%; margin-left: auto; border-collapse: collapse; margin-bottom: 12px; }
+  .totals-table td { padding: 3px 8px; }
+  .totals-table .grand { font-weight: bold; font-size: 12px; border-top: 2px solid #d97757; }
+  .words-box { background: #fdf6f3; border: 1px solid #e8cfc4; padding: 5px 10px;
+               font-style: italic; margin-bottom: 12px; }
+  .sig-row { width: 100%; border-collapse: collapse; margin-top: 20px; }
+  .sig-row td { width: 25%; text-align: center; padding: 0 6px; }
+  .sig-line { border-top: 1px solid #444; padding-top: 4px; font-size: 10px; color: #555; }
+</style>
+
+<div class="grn-header">
+  <h2>{{ doc.company }}</h2>
+  {% if co_addr %}
+  <h3>
+    {{ co_addr.address_line1 or "" }}{% if co_addr.address_line2 %}, {{ co_addr.address_line2 }}{% endif %},
+    {{ co_addr.city or "" }}, {{ co_addr.state or "" }} - {{ co_addr.pincode or "" }}
+  </h3>
+  {% endif %}
+  {% if doc.company_gstin %}
+  <h3>GSTIN: {{ doc.company_gstin }}</h3>
+  {% endif %}
+</div>
+
+<div class="grn-title">GOODS RECEIPT NOTE</div>
+
+<table class="grn-parties">
+  <tr>
+    <td>
+      <div class="party-box">
+        <div class="party-label">Supplier</div>
+        <strong>{{ doc.supplier }}</strong><br>
+        {% if sup_addr %}
+        {{ sup_addr.address_line1 or "" }}{% if sup_addr.address_line2 %}<br>{{ sup_addr.address_line2 }}{% endif %}<br>
+        {{ sup_addr.city or "" }}{% if sup_addr.state %}, {{ sup_addr.state }}{% endif %}{% if sup_addr.pincode %} - {{ sup_addr.pincode }}{% endif %}
+        {% endif %}
+        {% if doc.supplier_gstin %}<br><strong>GSTIN:</strong> {{ doc.supplier_gstin }}{% endif %}
+      </div>
+    </td>
+    <td>
+      <div class="party-box">
+        <div class="party-label">Received At</div>
+        {% if doc.set_warehouse %}
+        <strong>{{ doc.set_warehouse }}</strong><br>
+        {% endif %}
+        {% if doc.custom_location %}Location: {{ doc.custom_location }}<br>{% endif %}
+        {{ doc.company }}
+      </div>
+    </td>
+  </tr>
+</table>
+
+<table class="grn-meta">
+  <tr>
+    <td class="lbl">GRN No.</td><td>{{ doc.name }}</td>
+    <td class="lbl">Date</td><td>{{ frappe.utils.formatdate(doc.posting_date, "dd-MMM-yyyy") }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Purchase Order(s)</td>
+    <td colspan="3">{{ ns.po_list | join(", ") if ns.po_list else "—" }}</td>
+  </tr>
+  {% if doc.supplier_delivery_note %}
+  <tr>
+    <td class="lbl">Supplier DC No.</td><td>{{ doc.supplier_delivery_note }}</td>
+    <td class="lbl">DC Date</td><td>{{ frappe.utils.formatdate(doc.supplier_delivery_note_date, "dd-MMM-yyyy") if doc.supplier_delivery_note_date else "—" }}</td>
+  </tr>
+  {% endif %}
+  {% if doc.transporter or doc.vehicle_no %}
+  <tr>
+    <td class="lbl">Transporter</td><td>{{ doc.transporter or "—" }}</td>
+    <td class="lbl">Vehicle No.</td><td>{{ doc.vehicle_no or "—" }}</td>
+  </tr>
+  {% endif %}
+  {% if doc.driver_name %}
+  <tr>
+    <td class="lbl">Driver</td><td colspan="3">{{ doc.driver_name }}</td>
+  </tr>
+  {% endif %}
+  {% if doc.lr_no %}
+  <tr>
+    <td class="lbl">LR No.</td><td>{{ doc.lr_no }}</td>
+    <td class="lbl">LR Date</td><td>{{ frappe.utils.formatdate(doc.lr_date, "dd-MMM-yyyy") if doc.lr_date else "—" }}</td>
+  </tr>
+  {% endif %}
+</table>
+
+<table class="items">
+  <thead>
+    <tr>
+      <th style="width:30px">#</th>
+      <th>Item Code</th>
+      <th>Description</th>
+      <th class="num" style="width:70px">Ordered</th>
+      <th class="num" style="width:70px">Accepted</th>
+      <th class="num" style="width:70px">Rejected</th>
+      <th style="width:50px">UOM</th>
+      <th class="num" style="width:80px">Rate</th>
+      <th class="num" style="width:90px">Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for row in doc.items %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td>{{ row.item_code }}</td>
+      <td>{{ row.item_name }}{% if row.description and row.description != row.item_name %}<br><span style="color:#666;font-size:10px">{{ row.description }}</span>{% endif %}</td>
+      <td class="num">{{ row.received_qty or row.qty }}</td>
+      <td class="num">{{ row.qty }}</td>
+      <td class="num{% if row.rejected_qty %} rej{% endif %}">{{ row.rejected_qty or 0 }}</td>
+      <td>{{ row.uom }}</td>
+      <td class="num">{{ frappe.utils.fmt_money(row.rate, precision=2, currency=doc.currency) }}</td>
+      <td class="num">{{ frappe.utils.fmt_money(row.amount, precision=2, currency=doc.currency) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<table class="totals-table">
+  <tr><td class="lbl">Net Total</td><td class="num" style="text-align:right">{{ frappe.utils.fmt_money(doc.net_total, precision=2, currency=doc.currency) }}</td></tr>
+  {% for tax in doc.taxes %}
+  {% if tax.tax_amount %}
+  <tr><td class="lbl">{{ tax.description or tax.account_head }}</td><td class="num" style="text-align:right">{{ frappe.utils.fmt_money(tax.tax_amount, precision=2, currency=doc.currency) }}</td></tr>
+  {% endif %}
+  {% endfor %}
+  <tr class="grand"><td class="lbl">Grand Total</td><td class="num" style="text-align:right">{{ frappe.utils.fmt_money(doc.grand_total, precision=2, currency=doc.currency) }}</td></tr>
+</table>
+
+<div class="words-box">
+  Amount in Words: <strong>{{ frappe.utils.money_in_words(doc.grand_total, doc.currency) }}</strong>
+</div>
+
+{% if doc.remarks %}
+<div style="border-left:3px solid #d97757; padding:4px 10px; background:#fafafa; margin-bottom:14px; font-size:10px;">
+  <strong>Remarks:</strong> {{ doc.remarks }}
+</div>
+{% endif %}
+
+<table class="sig-row">
+  <tr>
+    <td><div class="sig-line">Received By</div></td>
+    <td><div class="sig-line">Store Incharge</div></td>
+    <td><div class="sig-line">Checked By</div></td>
+    <td><div class="sig-line">Authorised By</div></td>
+  </tr>
+</table>

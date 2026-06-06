@@ -23,9 +23,6 @@ class IBAssignmentAdmin {
 		this._excluded_users = new Set(JSON.parse(localStorage.getItem("ib_aa_excluded_users") || "[]"));
 		this._collapsed_teams = new Set(JSON.parse(localStorage.getItem("ib_aa_collapsed_teams") || "[]"));
 		this._roster_search = "";
-		this._queue_rows = [];
-		this._queue_search = "";
-		this._queue_claimer = "";
 		this._init();
 	}
 
@@ -86,8 +83,11 @@ class IBAssignmentAdmin {
 				self.refresh();
 			},
 		});
-		this.page.add_inner_button("+ Create New Team", () => self._show_create_team_modal());
-		this.page.add_inner_button("Config", () => self._show_config_modal());
+		const _is_full_manager = frappe.user.has_role("Sales Manager") || frappe.user.has_role("System Manager");
+		if (_is_full_manager) {
+			this.page.add_inner_button("+ Create New Team", () => self._show_create_team_modal());
+			this.page.add_inner_button("Config", () => self._show_config_modal());
+		}
 		this.page.add_inner_button("Refresh", () => self.refresh());
 	}
 
@@ -106,19 +106,6 @@ class IBAssignmentAdmin {
 					</div>
 					<div id="ib-aa-hidden-strip" style="display:none;" class="ib-aa-hidden-strip"></div>
 					<div class="ib-aa-roster" id="ib-aa-roster"></div>
-				</section>
-
-				<!-- ── Manager Queue ── -->
-				<section class="ib-aa-section ib-aa-queue-section" id="ib-aa-queue-section">
-					<div class="ib-aa-section-head">
-						<span class="ib-aa-section-title">Manager Queue</span>
-						<input class="ib-aa-roster-search" id="ib-aa-queue-search" type="text" placeholder="Search customers…">
-						<select class="ib-aa-queue-claimer-filter" id="ib-aa-queue-claimer-filter">
-							<option value="">All executives</option>
-						</select>
-						<span class="ib-aa-section-date" id="ib-aa-queue-count"></span>
-					</div>
-					<div id="ib-aa-queue-list"></div>
 				</section>
 
 				<!-- ── View As Banner ── -->
@@ -151,21 +138,6 @@ class IBAssignmentAdmin {
 			}, 150);
 		});
 
-		// Queue search
-		let _qst;
-		this.$main.on("input", "#ib-aa-queue-search", function () {
-			clearTimeout(_qst);
-			_qst = setTimeout(() => {
-				self._queue_search = this.value.trim();
-				self._apply_queue_filter();
-			}, 150);
-		});
-
-		this.$main.on("change", "#ib-aa-queue-claimer-filter", function () {
-			self._queue_claimer = this.value;
-			self._apply_queue_filter();
-		});
-
 		this.$main.on("click", "#ib-aa-exit-view", () => {
 			self._view_as_user = null;
 			$("#ib-aa-view-as-bar").hide();
@@ -191,7 +163,6 @@ class IBAssignmentAdmin {
 			},
 		});
 		this._fetch_users_cache();
-		if (this._is_manager) this._load_manager_queue();
 		if (this._view_as_user) this._reload_va_board();
 	}
 
@@ -202,7 +173,6 @@ class IBAssignmentAdmin {
 			["+ Create New Team", "Config"].includes($(el).text().trim())
 		).toggle(!isLeader);
 		this.page.fields_dict?.admin_territory?.$wrapper?.toggle(!isLeader);
-		$("#ib-aa-queue-section").toggle(!isLeader);
 	}
 
 	_fetch_users_cache() {
@@ -221,154 +191,6 @@ class IBAssignmentAdmin {
 			},
 		});
 	}
-
-	// ── Manager Queue ────────────────────────────────────────────────────────
-
-	_load_manager_queue() {
-		const self = this;
-		frappe.call({
-			method: "instabiz.overrides.customer_assignment.get_manager_queue",
-			callback(r) {
-				self._render_manager_queue(r.message || []);
-			},
-		});
-	}
-
-	_render_manager_queue(rows) {
-		this._queue_rows = rows;
-
-		const $section = $("#ib-aa-queue-section");
-		if (!rows.length) {
-			$section.hide();
-			return;
-		}
-		$section.show();
-
-		// Rebuild claimer filter options
-		const $sel = $("#ib-aa-queue-claimer-filter");
-		const prev = $sel.val();
-		const claimers = [...new Map(rows.map(r => [r.ib_claimed_by, r.claimer_name || r.ib_claimed_by])).entries()];
-		$sel.html('<option value="">All executives</option>' +
-			claimers.map(([v, l]) => `<option value="${frappe.utils.escape_html(v)}">${frappe.utils.escape_html(l)}</option>`).join(""));
-		if (prev && claimers.some(([v]) => v === prev)) $sel.val(prev);
-		else this._queue_claimer = "";
-
-		this._apply_queue_filter();
-	}
-
-	_apply_queue_filter() {
-		const tokens = this._queue_search.toLowerCase().split(/\s+/).filter(Boolean);
-		const claimer = this._queue_claimer;
-		const filtered = this._queue_rows.filter(r => {
-			if (claimer && r.ib_claimed_by !== claimer) return false;
-			if (!tokens.length) return true;
-			const hay = [r.customer_name, r.customer, r.territory, r.claimer_name, r.ib_claimed_by]
-				.filter(Boolean).join(" ").toLowerCase();
-			return tokens.every(t => hay.includes(t));
-		});
-
-		$("#ib-aa-queue-count").html(
-			`<span class="indicator-pill orange no-indicator-dot">${filtered.length} / ${this._queue_rows.length} claimed</span>`
-		);
-		this._render_queue_rows(filtered);
-	}
-
-	_render_queue_rows(rows) {
-		const self = this;
-		const users = this._dropdown_users_cache || [];
-		const $list = $("#ib-aa-queue-list").empty();
-
-		$list.append(`
-			<div class="ib-aa-queue-thead">
-				<div class="ib-aa-qth ib-aa-qth--customer">Customer</div>
-				<div class="ib-aa-qth ib-aa-qth--territory">Territory</div>
-				<div class="ib-aa-qth ib-aa-qth--last">Last Order</div>
-				<div class="ib-aa-qth ib-aa-qth--claimed">Claimed By</div>
-				<div class="ib-aa-qth ib-aa-qth--action"></div>
-			</div>
-		`);
-
-		if (!rows.length) {
-			$list.append(`<p class="ib-aa-empty">No customers match the current filter.</p>`);
-			return;
-		}
-
-		rows.forEach((r) => {
-			const last = r.last_so_date ? frappe.datetime.str_to_user(r.last_so_date) : "No orders";
-			const $row = $(`
-				<div class="ib-aa-queue-row">
-					<div class="ib-aa-qcol--customer">
-						<div class="ib-aa-qcol-name">${frappe.utils.escape_html(r.customer_name || r.customer)}</div>
-						<div class="ib-aa-qcol-code">${frappe.utils.escape_html(r.customer)}</div>
-					</div>
-					<div class="ib-aa-qcol--territory">${frappe.utils.escape_html(r.territory || "—")}</div>
-					<div class="ib-aa-qcol--last">${frappe.utils.escape_html(last)}</div>
-					<div class="ib-aa-qcol--claimed">
-						<span class="indicator-pill blue no-indicator-dot">${frappe.utils.escape_html(r.claimer_name || r.ib_claimed_by)}</span>
-					</div>
-					<div class="ib-aa-qcol--action">
-						<button class="ib-aa-queue-dot-btn" title="Assign to Rep" data-customer="${frappe.utils.escape_html(r.customer)}">
-							${IB_ICONS.svg("user", 13)}
-						</button>
-					</div>
-				</div>
-			`);
-
-			$row.find(".ib-aa-queue-dot-btn").on("click", function () {
-				const customer = $(this).data("customer");
-				const $btn = $(this);
-				const next_day = self._next_working_day(self._date);
-
-				const d = new frappe.ui.Dialog({
-					title: __("Assign {0} to Sales Rep", [r.customer_name || customer]),
-					fields: [
-						{
-							fieldname: "assigned_to",
-							fieldtype: "Select",
-							label: __("Sales User"),
-							options: users.map((u) => u.full_name || u.name).join("\n"),
-							reqd: 1,
-						},
-						{
-							fieldname: "date",
-							fieldtype: "Date",
-							label: __("Date"),
-							reqd: 1,
-							default: next_day,
-						},
-					],
-					primary_action_label: __("Assign & Release Claim"),
-					primary_action(values) {
-						const user_obj = users.find((u) => (u.full_name || u.name) === values.assigned_to);
-						const assigned_to = user_obj ? user_obj.name : values.assigned_to;
-						$btn.prop("disabled", true);
-						frappe.call({
-							method: "instabiz.overrides.customer_assignment.assign_claimed_to_user",
-							args: { customer, assigned_to, date: values.date },
-							callback(rr) {
-								if (rr.message && rr.message.status === "ok") {
-									frappe.show_alert({
-										message: __("{0} assigned to {1}", [r.customer_name || customer, values.assigned_to]),
-										indicator: "green",
-									});
-									d.hide();
-									self._load_manager_queue();
-									self._reload_roster();
-								} else {
-									$btn.prop("disabled", false);
-								}
-							},
-							error() { $btn.prop("disabled", false); },
-						});
-					},
-				});
-				d.show();
-			});
-
-			$list.append($row);
-		});
-	}
-
 	// ── Roster ────────────────────────────────────────────────────────────────
 
 	_save_excluded() {
@@ -478,7 +300,7 @@ class IBAssignmentAdmin {
 						<span class="ib-aa-team-label">${frappe.utils.escape_html(team_label)}</span>
 						${terr_chips ? `<span class="ib-aa-terr-chips">${terr_chips}</span>` : ""}
 						<span class="ib-aa-team-meta">${users.length} member${users.length > 1 ? "s" : ""} &middot; avg ${avg_pct}%</span>
-						${team_key !== "__none__" ? `<button class="ib-aa-btn-team-kebab" title="Manage team">⋮</button>` : ""}
+						${team_key !== "__none__" && this._is_manager ? `<button class="ib-aa-btn-team-kebab" title="Manage team">⋮</button>` : ""}
 					</div>
 					<div class="ib-aa-team-body${is_collapsed ? " ib-aa-team-body--collapsed" : ""}"></div>
 				</div>
@@ -581,17 +403,20 @@ class IBAssignmentAdmin {
 		const rect = btn.getBoundingClientRect();
 		const fmt_inr = v => v ? "₹" + Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 }) : "—";
 
+		const _mgr_only = this._is_manager;
 		$d.html(`
 			<div class="ib-aa-kdrop-header">
 				<div class="ib-aa-kdrop-name">${frappe.utils.escape_html(u.full_name || u.user)}</div>
 				${u.target ? `<div class="ib-aa-kdrop-target">${fmt_inr(u.actual)} / ${fmt_inr(u.target)} &mdash; ${u.target_pct || 0}%</div>` : ""}
 			</div>
 			<button class="ib-aa-kdrop-item ib-aa-kdrop-view">View board</button>
+			${_mgr_only ? `
 			<button class="ib-aa-kdrop-item ib-aa-kdrop-auto">Auto-fill</button>
 			<button class="ib-aa-kdrop-item ib-aa-kdrop-transfer">Transfer</button>
 			<button class="ib-aa-kdrop-item ib-aa-kdrop-set-target">Set target</button>
 			<div class="ib-aa-kdrop-sep"></div>
 			<button class="ib-aa-kdrop-item ib-aa-kdrop-hide">Hide user</button>
+			` : ""}
 		`);
 
 		const dropW = 210;
@@ -1114,7 +939,7 @@ class IBAssignmentAdmin {
 							${IB_ICONS.svg("calendar", 13)}<span class="ib-va-col-title">Today</span>
 							<span class="ib-va-col-date">${frappe.datetime.str_to_user(data.date)}</span>
 							<span class="ib-va-badge ib-va-badge--today" id="ib-va-today-count">0</span>
-							<button class="ib-va-remove-all-btn" id="ib-va-remove-all" title="Remove all pending">${IB_ICONS.svg("trash", 11)}</button>
+							${this._is_manager ? `<button class="ib-va-remove-all-btn" id="ib-va-remove-all" title="Remove all pending">${IB_ICONS.svg("trash", 11)}</button>` : ""}
 						</div>
 						<input class="ib-va-col-search" id="ib-va-today-search" placeholder="Search…" autocomplete="off">
 						<div class="ib-va-cards" id="ib-va-today-cards"></div>
@@ -1183,10 +1008,10 @@ class IBAssignmentAdmin {
 				<div class="ib-va-card-code">${frappe.utils.escape_html(r.customer)}</div>
 				<div class="ib-va-card-meta">${frappe.utils.escape_html(r.territory || "")}</div>
 				<div class="ib-va-card-last">${last}</div>
-				<div class="ib-va-card-btns">
+				${this._is_manager ? `<div class="ib-va-card-btns">
 					<button class="ib-va-add-btn" data-customer="${frappe.utils.escape_html(r.customer)}">${IB_ICONS.svg("plus", 11)} Today</button>
 					<button class="ib-va-tmrw-btn" data-customer="${frappe.utils.escape_html(r.customer)}">${IB_ICONS.svg("plus", 11)} Tomorrow</button>
-				</div>
+				</div>` : ""}
 			</div>
 		`);
 		$card.find(".ib-va-add-btn").on("click", function () {
@@ -1246,7 +1071,7 @@ class IBAssignmentAdmin {
 				</div>
 				<div class="ib-va-card-meta">${frappe.utils.escape_html(r.territory || "")}</div>
 				<div class="ib-va-card-last">${last}</div>
-				${is_pending ? `<button class="ib-va-remove-btn" data-id="${frappe.utils.escape_html(r.name)}">${IB_ICONS.svg("trash", 11)} Remove</button>` : ""}
+				${is_pending && this._is_manager ? `<button class="ib-va-remove-btn" data-id="${frappe.utils.escape_html(r.name)}">${IB_ICONS.svg("trash", 11)} Remove</button>` : ""}
 			</div>
 		`);
 

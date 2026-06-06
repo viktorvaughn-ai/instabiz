@@ -492,3 +492,60 @@ def _check_customer_item_spec(doc):
 			title=_("Spec Mismatch"),
 			indicator="orange",
 		)
+
+
+@frappe.whitelist()
+def update_item_dimensions(parent_doctype, parent_name, items):
+	"""Update dimension fields on submitted Q / SO item rows and recalculate qty + totals."""
+	import json
+	from frappe.utils import flt as _flt
+
+	data = json.loads(items)
+	parent = frappe.get_doc(parent_doctype, parent_name)
+	if not frappe.has_permission(parent_doctype, "write", parent):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+	child_doctype = parent_doctype + " Item"
+	_dim_fields = [
+		"color", "width_mm", "length_mtr", "qty_pkg", "total_pkg",
+		"custom_thickness", "custom_branding", "custom_marking",
+	]
+
+	for d in data:
+		if not d.get("docname"):
+			continue
+
+		child = frappe.get_doc(child_doctype, d["docname"])
+
+		for field in _dim_fields:
+			if field in d:
+				child.set(field, d[field] if d[field] not in ("", None) or not isinstance(d.get(field), str) else None)
+
+		if d.get("rate") is not None:
+			child.rate = _flt(d["rate"])
+
+		# Recalculate qty from dimensions (mirrors recalculate_items logic)
+		uom        = (child.uom or "").strip()
+		width_mm   = _flt(child.width_mm)
+		length_mtr = _flt(child.length_mtr)
+		qty_pkg    = _flt(child.qty_pkg)
+		total_pkg  = _flt(child.total_pkg)
+
+		if uom == "SQMT":
+			if width_mm and length_mtr and qty_pkg and total_pkg:
+				child.qty = round((width_mm / 1000) * length_mtr * qty_pkg * total_pkg, 6)
+		else:
+			if qty_pkg and total_pkg:
+				child.qty = qty_pkg * total_pkg
+
+		child.amount = round(_flt(child.qty) * _flt(child.rate), 2)
+		child.flags.ignore_validate_update_after_submit = True
+		child.save(ignore_permissions=True)
+
+	# Recalculate parent totals
+	parent.reload()
+	parent.flags.ignore_validate_update_after_submit = True
+	parent.calculate_taxes_and_totals()
+	parent.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"status": "ok"}

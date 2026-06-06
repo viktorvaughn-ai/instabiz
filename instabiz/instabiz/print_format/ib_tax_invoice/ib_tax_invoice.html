@@ -4,10 +4,11 @@
     ["address_line1","address_line2","city","state","pincode"], as_dict=True)
     if doc.company_address else None %}
 
-{# ── e-Invoice Log ────────────────────────────────────────────────────────────── #}
-{% set einv = frappe.db.get_value("e-Invoice Log", doc.irn,
-    ["signed_qr_code","acknowledgement_number","acknowledged_on"], as_dict=True)
-    if doc.irn else None %}
+{# ── e-Invoice Log (lookup by reference — reliable even when doc.irn not yet set) #}
+{% set einv = frappe.db.get_value("e-Invoice Log",
+    {"reference_doctype": "Sales Invoice", "reference_name": doc.name},
+    ["irn","signed_qr_code","acknowledgement_number","acknowledged_on"], as_dict=True) %}
+{% set _irn = (einv.irn if einv else None) or doc.irn or "" %}
 
 {# ── e-Waybill Log (SI first, then first linked DN) ───────────────────────────── #}
 {% set ewb_log = frappe.db.get_value("e-Waybill Log",
@@ -26,7 +27,20 @@
         ["data","e_waybill_number","created_on","valid_upto"], as_dict=True) %}
   {% endif %}
 {% endif %}
+
+{# Parse full EWB JSON when available; else ewb = None and fallback fields are used #}
 {% set ewb = _dict(json.loads(ewb_log.data)) if ewb_log and ewb_log.data else None %}
+
+{# Standalone EWB display fields — work with full JSON or fallback to log/doc data #}
+{% set ewb_number    = (ewb.ewbNo | string) if ewb else
+                       ((ewb_log.e_waybill_number | string) if ewb_log and ewb_log.e_waybill_number else
+                       (doc.ewaybill | string if doc.ewaybill else "")) %}
+{% set ewb_user_gstin = ewb.userGstin if ewb else doc.company_gstin %}
+{% set ewb_date_str   = ewb.ewayBillDate if ewb else
+                        (frappe.utils.formatdate(ewb_log.created_on, "dd/MM/yyyy") if ewb_log and ewb_log.created_on else "") %}
+{% set ewb_valid_upto = ewb.validUpto if ewb else
+                        (frappe.utils.formatdate(ewb_log.valid_upto, "dd/MM/yyyy") if ewb_log and ewb_log.valid_upto else "") %}
+{% set ewb_dist       = ewb.actualDist if ewb else "" %}
 
 {# ── Customer Addresses ───────────────────────────────────────────────────────── #}
 {% set ship_name = doc.shipping_address_name or doc.customer_address %}
@@ -54,6 +68,7 @@
 {% set ba = frappe.db.get_value("Bank Account", ba_name,
     ["account_name","bank","bank_account_no","branch_code","company"], as_dict=True)
     if ba_name else None %}
+{% set bank_display = frappe.db.get_value("Bank", ba.bank, "bank_name") if ba and ba.bank else (ba.bank if ba else "") %}
 
 {# ── State codes ──────────────────────────────────────────────────────────────── #}
 {% set co_state_code   = doc.company_gstin[:2]|int if doc.company_gstin and doc.company_gstin|length >= 2 else 0 %}
@@ -70,7 +85,7 @@
 {% set transporter = doc.transporter_name
     or (first_dn.transporter_name if first_dn else "")
     or (ewb.transporterName if ewb else "") or "" %}
-{% set destination = (ewb.toPlace if ewb else "") or "" %}
+{% set destination = (ewb.toPlace if ewb else "") or (ship_addr.city if ship_addr else "") or "" %}
 {% set lr_no       = doc.lr_no
     or (first_dn.lr_no if first_dn else "")
     or (first_dn.custom_lr_number if first_dn else "") or "" %}
@@ -83,6 +98,18 @@
 {% set prev_bal = prev_rows[0][0]|float if prev_rows else 0 %}
 {% set bill_amt = (doc.rounded_total or doc.grand_total or 0)|float %}
 {% set net_bal  = prev_bal + bill_amt %}
+
+{# ── Tax breakdown for EWB fallback ──────────────────────────────────────────── #}
+{% set ns_tax = namespace(cgst=0.0, sgst=0.0, igst=0.0) %}
+{% for tax in doc.taxes %}
+  {% if "cgst" in tax.description.lower() or "cgst" in tax.account_head.lower() %}
+    {% set ns_tax.cgst = tax.tax_amount %}
+  {% elif "sgst" in tax.description.lower() or "sgst" in tax.account_head.lower() %}
+    {% set ns_tax.sgst = tax.tax_amount %}
+  {% elif "igst" in tax.description.lower() or "igst" in tax.account_head.lower() %}
+    {% set ns_tax.igst = tax.tax_amount %}
+  {% endif %}
+{% endfor %}
 
 {# ── Helpers ──────────────────────────────────────────────────────────────────── #}
 {% macro fd(d) %}{% if d %}{{ frappe.utils.formatdate(d, "dd-MMM-yy") }}{% endif %}{% endmacro %}
@@ -102,10 +129,9 @@
 
   .ta-r   { text-align: right; }
   .ta-c   { text-align: center; }
-  .lbl    { color: #444; }           /* meta field labels */
+  .lbl    { color: #444; }
   .italic { font-style: italic; }
 
-  /* section heading (page 2) */
   .sh     { font-weight: bold; padding: 3px 6px;
             border-top: 1px solid #000; border-bottom: 1px solid #000; }
 </style>
@@ -118,16 +144,16 @@
   {# Title bar #}
   <div style="position:relative; text-align:center; padding:4px 6px; border-bottom:1px solid #000">
     <strong>Tax Invoice</strong>
-    <span style="position:absolute; right:6px; top:4px">e-Invoice</span>
+    {% if _irn %}<span style="position:absolute; right:6px; top:4px">e-Invoice</span>{% endif %}
   </div>
 
-  {# IRN + QR #}
-  {% if doc.irn %}
+  {# IRN + QR — always shown when IRN exists #}
+  {% if _irn %}
   <div class="bb" style="padding:4px 6px">
     <table>
       <tr>
         <td style="width:70%; vertical-align:middle">
-          <div>IRN &nbsp;&nbsp;: {{ doc.irn }}</div>
+          <div>IRN &nbsp;&nbsp;: {{ _irn }}</div>
           {% if einv %}
           <div>Ack No. : {{ einv.acknowledgement_number or "" }}</div>
           <div>Ack Date : <strong>{{ fd(einv.acknowledged_on) }}</strong></div>
@@ -153,8 +179,8 @@
         {% endif %}
         <strong>{{ doc.company }}</strong><br>
         {% if co_addr %}
-          {{ co_addr.address_line1 }}{% if co_addr.address_line2 %}, {{ co_addr.address_line2 }}{% endif %}<br>
-          {{ co_addr.city }}{% if co_addr.pincode %} {{ co_addr.pincode }}{% endif %}<br>
+          {{ co_addr.address_line1 }}{% if co_addr.address_line2 %},<br>{{ co_addr.address_line2 }}{% endif %}<br>
+          {% if co_addr.city %}{{ co_addr.city }}{% endif %}{% if co_addr.pincode %} {{ co_addr.pincode }}{% endif %}<br>
         {% endif %}
         GSTIN/UIN: {{ doc.company_gstin or "—" }}<br>
         State Name : {{ get_state(co_state_code) if co_state_code else "—" }}, Code : {{ co_state_code or "—" }}<br>
@@ -170,7 +196,7 @@
           </tr>
           <tr>
             <td class="bb br"><strong>{{ doc.name }}</strong></td>
-            <td class="bb br">{{ doc.ewaybill or "" }}</td>
+            <td class="bb br">{{ ewb_number or doc.ewaybill or "" }}</td>
             <td class="bb"><strong>{{ fd(doc.posting_date) }}</strong></td>
           </tr>
           <tr>
@@ -289,7 +315,6 @@
       </tr>
     </thead>
     <tbody>
-      {# doc-level GST rate fallback: sum all tax rows on the invoice #}
       {% set ns_doc = namespace(doc_gst=0) %}
       {% for t in doc.taxes %}
         {% set ns_doc.doc_gst = ns_doc.doc_gst + (t.rate or 0) %}
@@ -306,7 +331,6 @@
         <td class="b ta-c">{{ loop.index }}</td>
         <td class="b">
           <strong>{{ row.item_name or row.item_code }}</strong>
-          {# ── spec line: item_code · thickness · WxL · carton_marking · color ── #}
           {% set ns_s = namespace(v="") %}
           {% if row.item_code %}{% set ns_s.v = row.item_code %}{% endif %}
           {% if row.custom_thickness %}{% set ns_s.v = ns_s.v + " " + row.custom_thickness %}{% endif %}
@@ -391,7 +415,7 @@
           <tr>
             <td style="padding:3px 6px">Bill Amount</td>
             <td>:</td>
-            <td class="ta-r" style="padding:3px 6px">{{ fm(bill_amt) }} Dr</td>
+            <td class="ta-r" style="padding:3px 6px"><u>{{ fm(bill_amt) }} Dr</u></td>
           </tr>
           <tr>
             <td style="padding:3px 6px"><strong>Net Balance</strong></td>
@@ -403,9 +427,9 @@
               {% if ba %}
               <strong>Company's Bank Details</strong><br>
               A/c Holder's Name : <strong>{{ ba.company or doc.company }}</strong><br>
-              Bank Name &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: <strong>{{ ba.bank }}</strong><br>
+              Bank Name &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: <strong>{{ bank_display or ba.bank }}</strong><br>
               A/c No. &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: <strong>{{ ba.bank_account_no }}</strong><br>
-              IFS Code &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: <strong>{{ ba.branch_code }}</strong>
+              Branch &amp; IFS Code : <strong>{{ ba.branch_code }}</strong>
               {% endif %}
             </td>
           </tr>
@@ -428,8 +452,10 @@
 
 {# ═══════════════════════════════════════════════════════════════════════════════ #}
 {# PAGE 2 — e-WAY BILL                                                             #}
+{# Shown whenever an EWB number exists — uses full JSON when available,            #}
+{# falls back to doc/address data when ewb_log.data is NULL                        #}
 {# ═══════════════════════════════════════════════════════════════════════════════ #}
-{% if ewb %}
+{% if ewb_number %}
 <div class="box" style="page-break-before:always">
 
   {# Header #}
@@ -445,15 +471,18 @@
         <div><strong>Doc No.:</strong> Tax Invoice - {{ doc.name }}</div>
         <div><strong>Date &nbsp;&nbsp;:</strong> {{ fd(doc.posting_date) }}</div>
         <br>
-        <div><strong>IRN &nbsp;&nbsp;&nbsp;:</strong> {{ doc.irn or "—" }}</div>
+        <div><strong>IRN &nbsp;&nbsp;&nbsp;:</strong> {{ _irn or "—" }}</div>
         <div><strong>Ack No.:</strong> {{ einv.acknowledgement_number if einv else "—" }}</div>
         <div><strong>Ack Date:</strong>
           <strong>{{ fd(einv.acknowledged_on) if einv and einv.acknowledged_on else "—" }}</strong>
         </div>
       </td>
       <td style="width:30%; text-align:right; vertical-align:top">
+        {# QR only when full JSON available — needs exact NIC date format #}
+        {% if ewb and ewb.ewbNo and ewb.userGstin and ewb.ewayBillDate %}
         <img src="data:image/png;base64,{{ get_e_waybill_qr_code(ewb.ewbNo, ewb.userGstin, ewb.ewayBillDate) }}"
              style="height:90px; width:90px">
+        {% endif %}
       </td>
     </tr>
   </table>
@@ -462,14 +491,14 @@
   <div class="sh">1. e-Way Bill Details</div>
   <table class="bb">
     <tr>
-      <td>e-Way Bill No.: <strong>{{ ewb.ewbNo }}</strong></td>
-      <td>Mode : <strong>1 - Road</strong></td>
-      <td>Generated Date : <strong>{{ ewb.ewayBillDate }}</strong></td>
+      <td>e-Way Bill No.: <strong>{{ ewb_number }}</strong></td>
+      <td>Mode : <strong>{{ ("" ~ ewb.VehiclListDetails[-1].transMode ~ " - Road") if ewb and ewb.VehiclListDetails else "1 - Road" }}</strong></td>
+      <td>Generated Date : <strong>{{ ewb_date_str }}</strong></td>
     </tr>
     <tr>
-      <td>Generated By: <strong>{{ ewb.userGstin }}</strong></td>
-      <td>Approx Distance: <strong>{{ ewb.actualDist }} KM</strong></td>
-      <td>Valid Upto : <strong>{{ ewb.validUpto }}</strong></td>
+      <td>Generated By: <strong>{{ ewb_user_gstin }}</strong></td>
+      <td>Approx Distance: <strong>{{ ewb_dist ~ " KM" if ewb_dist else "—" }}</strong></td>
+      <td>Valid Upto : <strong>{{ ewb_valid_upto }}</strong></td>
     </tr>
     <tr>
       <td>Supply Type: <strong>Outward-Supply</strong></td>
@@ -481,31 +510,50 @@
   <div class="sh">2. Address Details</div>
   <table class="bb">
     <tr>
+      {# FROM side #}
       <td class="br" style="width:50%; vertical-align:top">
         <strong>From</strong><br><br>
-        {{ ewb.fromTrdName or doc.company }}<br>
-        GSTIN : {{ ewb.fromGstin or doc.company_gstin }}<br>
-        {{ get_state(ewb.fromStateCode|int) if ewb.fromStateCode else "" }}<br>
+        {{ (ewb.fromTrdName if ewb) or doc.company }}<br>
+        GSTIN : {{ (ewb.fromGstin if ewb) or doc.company_gstin }}<br>
+        {{ get_state((ewb.fromStateCode|int) if ewb else co_state_code) }}<br>
         <br>
         <strong>Dispatch From</strong><br>
-        {{ ewb.fromAddr1 or "" }}<br>
-        {% if ewb.fromAddr2 %}{{ ewb.fromAddr2 }}<br>{% endif %}
-        {{ ewb.fromPlace or "" }}
-        {{ get_state(ewb.actFromStateCode|int) if ewb.actFromStateCode else "" }}
-        {{ ewb.fromPincode or "" }}
+        {% if ewb %}
+          {{ ewb.fromAddr1 or "" }}<br>
+          {% if ewb.fromAddr2 %}{{ ewb.fromAddr2 }}<br>{% endif %}
+          {{ ewb.fromPlace or "" }}
+          {{ get_state(ewb.actFromStateCode|int) if ewb.actFromStateCode else "" }}
+          {{ ewb.fromPincode or "" }}
+        {% else %}
+          {% if co_addr %}
+            {{ co_addr.address_line1 or "" }}<br>
+            {% if co_addr.address_line2 %}{{ co_addr.address_line2 }}<br>{% endif %}
+            {{ co_addr.city or "" }} {{ co_addr.pincode or "" }}
+          {% endif %}
+        {% endif %}
       </td>
+      {# TO side #}
       <td style="width:50%; vertical-align:top">
         <strong>To</strong><br><br>
-        {{ ewb.toTrdName or doc.customer_name }}<br>
-        GSTIN : {{ ewb.toGstin or doc.billing_address_gstin or "—" }}<br>
-        {{ get_state(ewb.toStateCode|int) if ewb.toStateCode else "" }}<br>
+        {{ (ewb.toTrdName if ewb) or doc.customer_name }}<br>
+        GSTIN : {{ (ewb.toGstin if ewb) or bill_gstin or "—" }}<br>
+        {{ get_state((ewb.toStateCode|int) if ewb else cust_state_code) }}<br>
         <br>
         <strong>Ship To</strong><br>
-        {{ ewb.toAddr1 or "" }}<br>
-        {% if ewb.toAddr2 %}{{ ewb.toAddr2 }}<br>{% endif %}
-        {{ ewb.toPlace or "" }}
-        {{ get_state(ewb.actToStateCode|int) if ewb.actToStateCode else "" }}
-        {{ ewb.toPincode or "" }}
+        {% if ewb %}
+          {{ ewb.toAddr1 or "" }}<br>
+          {% if ewb.toAddr2 %}{{ ewb.toAddr2 }}<br>{% endif %}
+          {{ ewb.toPlace or "" }}
+          {{ get_state(ewb.actToStateCode|int) if ewb.actToStateCode else "" }}
+          {{ ewb.toPincode or "" }}
+        {% else %}
+          {% if ship_addr %}
+            {{ ship_addr.address_line1 or "" }}<br>
+            {% if ship_addr.address_line2 %}{{ ship_addr.address_line2 }}<br>{% endif %}
+            {{ ship_addr.city or "" }}{% if ship_addr.state %} {{ ship_addr.state }}{% endif %}
+            {{ ship_addr.pincode or "" }}
+          {% endif %}
+        {% endif %}
       </td>
     </tr>
   </table>
@@ -515,7 +563,7 @@
   <table class="bb">
     <thead>
       <tr>
-        <th class="b ta-c" style="width:10%">HSN Code</th>
+        <th class="b ta-c" style="width:10%">HSN<br>Code</th>
         <th class="b">Product Name &amp; Desc</th>
         <th class="b ta-c" style="width:12%">Quantity</th>
         <th class="b ta-r" style="width:14%">Taxable Amt</th>
@@ -523,32 +571,67 @@
       </tr>
     </thead>
     <tbody>
-      {% for item in ewb.itemList %}
-      <tr>
-        <td class="b ta-c">{{ item.hsnCode }}</td>
-        <td class="b">{{ item.productDesc }}</td>
-        <td class="b ta-r">{{ item.quantity }} {{ item.qtyUnit }}</td>
-        <td class="b ta-r">{{ fm(item.taxableAmount) }}</td>
-        <td class="b ta-c">
-          {% if item.cgstRate %}{{ item.cgstRate }}+{{ item.sgstRate }}
-          {% else %}{{ item.igstRate }}{% endif %}
-        </td>
-      </tr>
-      {% endfor %}
+      {% if ewb %}
+        {# Full JSON available — use NIC itemList #}
+        {% for item in ewb.itemList %}
+        <tr>
+          <td class="b ta-c">{{ item.hsnCode }}</td>
+          <td class="b">{{ item.productDesc }}</td>
+          <td class="b ta-r">{{ item.quantity }} {{ item.qtyUnit }}</td>
+          <td class="b ta-r">{{ fm(item.taxableAmount) }}</td>
+          <td class="b ta-c">
+            {% if item.cgstRate %}{{ item.cgstRate }}+{{ item.sgstRate }}
+            {% else %}{{ item.igstRate }}{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        {# Fallback — reconstruct from SI items #}
+        {% set ns_doc2 = namespace(doc_gst=0) %}
+        {% for t in doc.taxes %}
+          {% set ns_doc2.doc_gst = ns_doc2.doc_gst + (t.rate or 0) %}
+        {% endfor %}
+        {% for row in doc.items %}
+        {% set ns_t2 = namespace(gst=0, cgst=0, sgst=0, igst=0) %}
+        {% if row.item_tax_rate %}
+          {% for _acct, _r in json.loads(row.item_tax_rate).items() %}
+            {% set ns_t2.gst = ns_t2.gst + _r %}
+            {% if "cgst" in _acct.lower() %}{% set ns_t2.cgst = _r %}{% endif %}
+            {% if "sgst" in _acct.lower() %}{% set ns_t2.sgst = _r %}{% endif %}
+            {% if "igst" in _acct.lower() %}{% set ns_t2.igst = _r %}{% endif %}
+          {% endfor %}
+        {% endif %}
+        {% if ns_t2.gst == 0 %}{% set ns_t2.gst = ns_doc2.doc_gst %}{% endif %}
+        <tr>
+          <td class="b ta-c">{{ row.gst_hsn_code or "" }}</td>
+          <td class="b">{{ row.item_name or row.item_code }}</td>
+          <td class="b ta-r">{{ fm(row.qty) }} {{ row.uom }}</td>
+          <td class="b ta-r">{{ fm(row.amount) }}</td>
+          <td class="b ta-c">
+            {% if ns_t2.cgst %}{{ ns_t2.cgst }}+{{ ns_t2.sgst }}
+            {% elif ns_t2.igst %}{{ ns_t2.igst }}
+            {% else %}{{ ns_t2.gst }}{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      {% endif %}
     </tbody>
   </table>
 
   {# EWB totals #}
   <table class="bb">
     <tr>
-      <td>Tot.Taxable Amt : <strong>{{ fm(ewb.totalValue) }}</strong></td>
-      <td>Other Amt : {{ fm(ewb.otherValue) if ewb.otherValue else "—" }}</td>
-      <td class="ta-r">Total Inv Amt : <strong>{{ fm(ewb.totInvValue) }}</strong></td>
+      <td>Tot.Taxable Amt : <strong>{{ fm(ewb.totalValue if ewb else doc.net_total) }}</strong></td>
+      <td>Other Amt : {% if ewb and ewb.otherValue %}{{ fm(ewb.otherValue) }}{% endif %}</td>
+      <td class="ta-r">Total Inv Amt : <strong>{{ fm(ewb.totInvValue if ewb else (doc.rounded_total or doc.grand_total)) }}</strong></td>
     </tr>
     <tr>
-      <td>CGST Amt : <strong>{{ fm(ewb.cgstValue) }}</strong></td>
-      <td>SGST Amt : <strong>{{ fm(ewb.sgstValue) }}</strong></td>
-      <td>{% if ewb.igstValue %}IGST Amt : <strong>{{ fm(ewb.igstValue) }}</strong>{% endif %}</td>
+      <td>CGST Amt : <strong>{{ fm(ewb.cgstValue if ewb else ns_tax.cgst) }}</strong></td>
+      <td>SGST Amt : <strong>{{ fm(ewb.sgstValue if ewb else ns_tax.sgst) }}</strong></td>
+      <td>
+        {% set _igst_val = (ewb.igstValue if ewb else ns_tax.igst) %}
+        {% if _igst_val and _igst_val > 0 %}IGST Amt : <strong>{{ fm(_igst_val) }}</strong>{% endif %}
+      </td>
     </tr>
   </table>
 
@@ -556,31 +639,28 @@
   <div class="sh">4. Transportation Details</div>
   <table class="bb">
     <tr>
-      <td style="width:50%">Transporter ID : {{ ewb.transporterId or "—" }}</td>
-      <td style="width:25%">Doc No. : {{ ewb.transDocNo or "—" }}</td>
-      <td style="width:25%">Date : {{ ewb.transDocDate or "—" }}</td>
-    </tr>
-    <tr>
-      <td>Name : {{ ewb.transporterName or "—" }}</td>
-      <td colspan="2"></td>
+      <td style="width:30%">Transporter ID : {{ (ewb.transporterId if ewb) or "" }}</td>
+      <td style="width:20%">Doc No. : {{ (ewb.transDocNo if ewb) or "" }}</td>
+      <td style="width:30%">Name : {{ (ewb.transporterName if ewb) or transporter or "" }}</td>
+      <td style="width:20%">Date : {{ (ewb.transDocDate if ewb) or "" }}</td>
     </tr>
   </table>
 
   {# 5. Vehicle Details #}
   <div class="sh">5. Vehicle Details</div>
   <table>
-    {% if ewb.VehiclListDetails %}
+    {% if ewb and ewb.VehiclListDetails %}
     {% set veh = ewb.VehiclListDetails[-1] %}
     <tr>
       <td style="width:40%">Vehicle No. : <strong>{{ veh.vehicleNo or "—" }}</strong></td>
       <td style="width:40%">From : <strong>{{ veh.fromPlace or "—" }}</strong></td>
-      <td style="width:20%">CEWB No. : {{ veh.cebwNo or "—" }}</td>
+      <td style="width:20%">CEWB No. : {{ veh.cebwNo or "" }}</td>
     </tr>
     {% else %}
     <tr>
-      <td>Vehicle No. : <strong>{{ vehicle_no or "—" }}</strong></td>
-      <td>From : —</td>
-      <td>CEWB No. : —</td>
+      <td style="width:40%">Vehicle No. : <strong>{{ vehicle_no or "—" }}</strong></td>
+      <td style="width:40%">From : <strong>{{ (co_addr.city if co_addr else "") or "—" }}</strong></td>
+      <td style="width:20%">CEWB No. : </td>
     </tr>
     {% endif %}
   </table>

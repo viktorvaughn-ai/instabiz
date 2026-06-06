@@ -1,6 +1,47 @@
 // Shared list view utilities — status multi-select filter + helpers.
 // Loaded globally via app_include_js so all *_list.js files can use these.
 
+// ── Global default: newest docs at top for every list view ────────────────────
+// Patches ListView.prototype.setup_defaults once. Runs on every route change so
+// it fires even if the ListView class is lazy-loaded after initial boot.
+(function _ib_patch_listview_sort() {
+    function _patch() {
+        const proto = frappe?.views?.ListView?.prototype;
+        if (!proto || proto._ib_sort_patched) return;
+        proto._ib_sort_patched = true;
+
+        // Patch setup_defaults — runs first, sets this.sort_by before SortSelector is created.
+        const _orig_defaults = proto.setup_defaults;
+        proto.setup_defaults = function () {
+            _orig_defaults.call(this);
+            this.sort_by    = "modified";
+            this.sort_order = "desc";
+        };
+
+        // Patch setup_sort_selector — runs just before SortSelector is instantiated,
+        // ensuring the widget gets sort_by="modified" even if setup_defaults was wrong.
+        const _orig_sort_sel = proto.setup_sort_selector;
+        if (_orig_sort_sel) {
+            proto.setup_sort_selector = function () {
+                this.sort_by    = "modified";
+                this.sort_order = "desc";
+                _orig_sort_sel.call(this);
+            };
+        }
+    }
+    frappe.after_ajax(_patch);
+    $(document).on("frappe:ready", _patch);
+    if (frappe?.router) frappe.router.on("change", _patch);
+})();
+
+// Remove ALL active filter rows for a fieldname (filter_area.remove() only drops one per call).
+function _ib_remove_filters(listview, fieldname) {
+    let guard = 20;
+    while (guard-- > 0 && listview.filter_area.get().some((f) => f[1] === fieldname)) {
+        listview.filter_area.remove(fieldname);
+    }
+}
+
 function ib_extract_filter_values(value) {
     if (Array.isArray(value)) return value.filter(Boolean);
     if (typeof value === "string") {
@@ -55,7 +96,7 @@ function ib_setup_status_multiselect(listview, doctype, statuses) {
             },
             onchange() {
                 const selected = ib_extract_filter_values(control.get_value());
-                listview.filter_area.remove("status");
+                _ib_remove_filters(listview, "status");
                 if (selected.length) {
                     listview.filter_area.add([[doctype, "status", "in", selected]]);
                 }
@@ -82,6 +123,201 @@ function ib_setup_status_multiselect(listview, doctype, statuses) {
             .on(`click.${eventNs}`, () => control.set_value([]));
     }
 }
+
+// ── Generic sales person (User link) filter ───────────────────────────────────
+function ib_setup_list_sales_user_filter(listview, doctype) {
+    const slug    = doctype.toLowerCase().replace(/ /g, "-");
+    const css     = `ib-${slug}-sales-user-filter`;
+    const eventNs = `ib_${slug.replace(/-/g, "_")}_sales_user_clear`;
+
+    $(`.${css}`).remove();
+
+    const $wrapper = $(
+        `<div class="form-group frappe-control input-max-width ${css}" ` +
+        `data-fieldtype="Link" data-fieldname="custom_sales_person_user"></div>`
+    );
+    $wrapper.css({ flex: "0 0 160px", maxWidth: "160px" });
+
+    const statusWrap = $(`.ib-${slug}-status-multi-filter`);
+    if (statusWrap.length) {
+        $wrapper.insertAfter(statusWrap);
+    } else {
+        $wrapper.appendTo(listview.page.page_form);
+    }
+
+    const control = frappe.ui.form.make_control({
+        df: {
+            label: "",
+            fieldtype: "Link",
+            options: "User",
+            placeholder: __("Sales Person"),
+            onchange() {
+                const val = control.get_value();
+                _ib_remove_filters(listview, "custom_sales_person_user");
+                if (val) {
+                    listview.filter_area.add([
+                        [doctype, "custom_sales_person_user", "=", val],
+                    ]);
+                }
+                listview.refresh();
+            },
+        },
+        parent: $wrapper,
+        only_input: true,
+        render_input: 1,
+    });
+    control.$wrapper.removeClass("form-group");
+    control.$wrapper.css("margin-bottom", 0);
+
+    const $clearBtn = listview.filter_area && listview.filter_area.filter_x_button;
+    if ($clearBtn && $clearBtn.length) {
+        $clearBtn
+            .off(`click.${eventNs}`)
+            .on(`click.${eventNs}`, () => control.set_value(""));
+    }
+}
+
+// ── Generic date range filter ─────────────────────────────────────────────────
+function ib_setup_list_date_filter(listview, doctype, dateField, nativeFieldsToHide) {
+    (nativeFieldsToHide || []).forEach(function (fn) {
+        const f = listview.page.fields_dict[fn];
+        if (f && f.$wrapper) f.$wrapper.hide();
+    });
+
+    const slug    = doctype.toLowerCase().replace(/ /g, "-");
+    const css     = `ib-${slug}-date-range-filter`;
+    const eventNs = `ib_${slug.replace(/-/g, "_")}_date_clear`;
+
+    $(`.${css}`).remove();
+
+    const $wrapper = $(
+        `<div class="form-group frappe-control input-max-width ${css}" ` +
+        `data-fieldtype="DateRange" data-fieldname="${dateField}_range"></div>`
+    );
+    $wrapper.css({ flex: "0 0 210px", maxWidth: "210px" });
+
+    const userWrap   = $(`.ib-${slug}-sales-user-filter`);
+    const statusWrap = $(`.ib-${slug}-status-multi-filter`);
+    if (userWrap.length) {
+        $wrapper.insertAfter(userWrap);
+    } else if (statusWrap.length) {
+        $wrapper.insertAfter(statusWrap);
+    } else {
+        $wrapper.appendTo(listview.page.page_form);
+    }
+
+    const control = frappe.ui.form.make_control({
+        df: {
+            label: "",
+            fieldtype: "DateRange",
+            placeholder: __("From – To"),
+            onchange() {
+                const val = control.get_value();
+                _ib_remove_filters(listview, dateField);
+                if (val && val[0] && val[1]) {
+                    listview.filter_area.add([
+                        [doctype, dateField, ">=", val[0]],
+                        [doctype, dateField, "<=", val[1]],
+                    ]);
+                }
+                listview.refresh();
+            },
+        },
+        parent: $wrapper,
+        only_input: true,
+        render_input: 1,
+    });
+    control.$wrapper.removeClass("form-group");
+    control.$wrapper.css("margin-bottom", 0);
+
+    const $clearBtn = listview.filter_area && listview.filter_area.filter_x_button;
+    if ($clearBtn && $clearBtn.length) {
+        $clearBtn
+            .off(`click.${eventNs}`)
+            .on(`click.${eventNs}`, () => control.set_value(null));
+    }
+}
+
+// ── Generic Lead Sales Team filter ────────────────────────────────────────────
+function ib_setup_list_team_filter(listview, doctype) {
+    const slug    = doctype.toLowerCase().replace(/ /g, "-");
+    const css     = `ib-${slug}-team-filter`;
+    const eventNs = `ib_${slug.replace(/-/g, "_")}_team_clear`;
+
+    $(`.${css}`).remove();
+
+    const $wrapper = $(
+        `<div class="form-group frappe-control input-max-width ${css}" ` +
+        `data-fieldtype="Link" data-fieldname="lead_sales_team"></div>`
+    );
+    $wrapper.css({ flex: "0 0 160px", maxWidth: "160px" });
+
+    // Insert after date filter (slug-based or SO legacy), else user filter, else status, else append
+    const dateWrap   = $(`.ib-${slug}-date-range-filter, .ib-so-date-range-filter`);
+    const userWrap   = $(`.ib-${slug}-sales-user-filter, .ib-so-sales-user-filter`);
+    const statusWrap = $(`.ib-${slug}-status-multi-filter`);
+    if (dateWrap.length) {
+        $wrapper.insertAfter(dateWrap.last());
+    } else if (userWrap.length) {
+        $wrapper.insertAfter(userWrap.last());
+    } else if (statusWrap.length) {
+        $wrapper.insertAfter(statusWrap);
+    } else {
+        $wrapper.appendTo(listview.page.page_form);
+    }
+
+    const control = frappe.ui.form.make_control({
+        df: {
+            label: "",
+            fieldtype: "Link",
+            options: "Lead Sales Team",
+            placeholder: __("Sales Team"),
+            onchange() {
+                const teamName = control.get_value();
+                listview.filter_area.remove("custom_sales_person_user");
+                if (!teamName) {
+                    listview.refresh();
+                    return;
+                }
+                frappe.db.get_list("Lead Sales Team Member", {
+                    filters: { parent: teamName, parenttype: "Lead Sales Team" },
+                    fields: ["user"],
+                    limit: 200,
+                }).then(function (members) {
+                    const users = members.map(function (m) { return m.user; }).filter(Boolean);
+                    if (users.length) {
+                        listview.filter_area.add([
+                            [doctype, "custom_sales_person_user", "in", users],
+                        ]);
+                    }
+                    listview.refresh();
+                });
+            },
+        },
+        parent: $wrapper,
+        only_input: true,
+        render_input: 1,
+    });
+    control.$wrapper.removeClass("form-group");
+    control.$wrapper.css("margin-bottom", 0);
+
+    const $clearBtn = listview.filter_area && listview.filter_area.filter_x_button;
+    if ($clearBtn && $clearBtn.length) {
+        $clearBtn
+            .off(`click.${eventNs}`)
+            .on(`click.${eventNs}`, () => control.set_value(""));
+    }
+}
+
+// Redirect Sales Users who land on the Customer Board workspace page to the actual board page.
+function _ib_maybe_redirect_to_board() {
+	const route = frappe.get_route_str();
+	if (route === "customer-board" && !frappe.user.has_role(["Sales Manager", "System Manager"])) {
+		frappe.set_route("ib-customer-board");
+	}
+}
+frappe.router.on("change", _ib_maybe_redirect_to_board);
+frappe.after_ajax(function () { _ib_maybe_redirect_to_board(); });
 
 function ib_disable_status_click_filter(listview) {
     listview.$result.find(".indicator-pill").each(function () {
@@ -147,33 +383,65 @@ function ib_watch_ewaybill_dialog(frm) {
 async function _ib_populate_distance(frm) {
     try {
         const src_addr = frm.doc.company_address;
-        const dst_addr = frm.doc.customer_address || frm.doc.shipping_address_name;
-        if (!src_addr || !dst_addr) return;
+        const dst_addr = frm.doc.shipping_address_name || frm.doc.customer_address;
+        if (!src_addr && !dst_addr) return;
 
         const [src_val, dst_val] = await Promise.all([
-            frappe.db.get_value("Address", src_addr, ["pincode", "city", "state"]),
-            frappe.db.get_value("Address", dst_addr, ["pincode", "city", "state"]),
+            src_addr ? frappe.db.get_value("Address", src_addr, ["pincode", "city", "state"]) : null,
+            dst_addr ? frappe.db.get_value("Address", dst_addr, ["pincode", "city", "state"]) : null,
         ]);
 
         const src = src_val?.message;
         const dst = dst_val?.message;
-        if (!src || !dst) return;
 
+        // Pre-fill pincode fields in the dialog UI
+        const fromIn = document.getElementById("ib-from-pin");
+        const toIn   = document.getElementById("ib-to-pin");
+        if (fromIn && src?.pincode) fromIn.value = src.pincode;
+        if (toIn   && dst?.pincode) toIn.value   = dst.pincode;
+
+        // Auto-calculate if both pincodes available
+        if (src?.pincode && dst?.pincode) {
+            await _ib_calc_and_fill(src.pincode, dst.pincode, src, dst);
+        }
+    } catch (_) {}
+}
+
+async function _ib_calc_and_fill(fromPin, toPin, srcFallback, dstFallback) {
+    const $result = $("#ib-dist-result");
+    const $btn    = $("#ib-calc-dist");
+    $result.text("Calculating…").css("color", "var(--text-muted)");
+    $btn.prop("disabled", true);
+    try {
         const [src_geo, dst_geo] = await Promise.all([
-            _ib_geocode_addr(src.pincode, src.city, src.state),
-            _ib_geocode_addr(dst.pincode, dst.city, dst.state),
+            _ib_geocode_addr(fromPin, srcFallback?.city, srcFallback?.state),
+            _ib_geocode_addr(toPin,   dstFallback?.city, dstFallback?.state),
         ]);
-        if (!src_geo || !dst_geo) return;
 
-        const dist = parseInt(_ib_haversine(src_geo.lat, src_geo.lng, dst_geo.lat, dst_geo.lng), 10);
+        if (!src_geo || !dst_geo) {
+            $result.text("Could not locate one or both pincodes.").css("color", "var(--red-500, #e74c3c)");
+            return;
+        }
+
+        const dist = Math.max(1, Math.round(_ib_haversine(src_geo.lat, src_geo.lng, dst_geo.lat, dst_geo.lng)));
+
+        // Set dialog distance field
         const distInput = document.querySelector('input[data-fieldname="distance"]');
         if (distInput) {
             distInput.value = dist;
             distInput.dispatchEvent(new Event("change", { bubbles: true }));
+            distInput.dispatchEvent(new Event("input",  { bubbles: true }));
         }
-        const d = frappe.cur_dialog;
-        if (d) d.set_value("distance", dist);
-    } catch (_) {}
+        if (frappe.cur_dialog) frappe.cur_dialog.set_value("distance", dist);
+
+        $result
+            .html(`<span style="color:var(--green-600,#27ae60)">✓</span> <strong>${dist} km</strong> straight-line distance (pincode ${fromPin} → ${toPin})`)
+            .css("color", "");
+    } catch (e) {
+        $result.text("Error calculating distance.").css("color", "var(--red-500, #e74c3c)");
+    } finally {
+        $btn.prop("disabled", false);
+    }
 }
 
 async function _ib_geocode_addr(pincode, city, state) {
@@ -297,6 +565,67 @@ function _ib_inject_self_pickup(modal_el) {
     });
 
 
+
+    // ── Pincode distance calculator ───────────────────────────────────────────────
+    const $distField = $modal.find('[data-fieldname="distance"]').closest(".frappe-control");
+    if ($distField.length) {
+        const $calcWrap = $(`
+            <div class="ib-dist-calc" style="
+                margin: 8px 0 4px;
+                padding: 10px 12px;
+                background: var(--subtle-fg, #f7f7f7);
+                border: 1px solid var(--border-color);
+                border-radius: 6px;
+            ">
+                <div style="font-size:10px; font-weight:700; letter-spacing:.5px;
+                             color:var(--text-muted); margin-bottom:7px; text-transform:uppercase;">
+                    Pincode Distance Calculator
+                </div>
+                <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:90px;">
+                        <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:2px;">From Pincode</label>
+                        <input id="ib-from-pin" type="text" maxlength="6"
+                            placeholder="421302"
+                            class="form-control"
+                            style="font-size:12px; height:28px; padding:2px 8px;">
+                    </div>
+                    <div style="flex:1; min-width:90px;">
+                        <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:2px;">To Pincode</label>
+                        <input id="ib-to-pin" type="text" maxlength="6"
+                            placeholder="400703"
+                            class="form-control"
+                            style="font-size:12px; height:28px; padding:2px 8px;">
+                    </div>
+                    <button id="ib-calc-dist" class="btn btn-xs"
+                        style="height:28px; padding:0 12px; background:var(--primary,#d97757);
+                               color:#fff; border:none; border-radius:4px; font-size:11px;
+                               cursor:pointer; flex-shrink:0;">
+                        Calculate
+                    </button>
+                </div>
+                <div id="ib-dist-result" style="margin-top:6px; font-size:11px; min-height:16px;"></div>
+            </div>
+        `);
+        $distField.before($calcWrap);
+
+        // Calculate button click
+        $(document).off("click.ib_calc_dist").on("click.ib_calc_dist", "#ib-calc-dist", async function () {
+            const fromPin = ($("#ib-from-pin").val() || "").trim();
+            const toPin   = ($("#ib-to-pin").val()   || "").trim();
+            if (!fromPin || !toPin) {
+                $("#ib-dist-result")
+                    .text("Enter both pincodes.")
+                    .css("color", "var(--orange-500, #e67e22)");
+                return;
+            }
+            await _ib_calc_and_fill(fromPin, toPin, null, null);
+        });
+
+        // Recalculate on pincode field Enter key
+        $(document).off("keydown.ib_pin").on("keydown.ib_pin", "#ib-from-pin, #ib-to-pin", async function (e) {
+            if (e.key === "Enter") $("#ib-calc-dist").trigger("click");
+        });
+    }
 
     document.addEventListener("change", function (e) {
         if (e.target.id === "ib-self-pickup") {

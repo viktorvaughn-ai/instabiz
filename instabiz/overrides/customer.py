@@ -1,6 +1,6 @@
 import frappe
 from frappe.utils import flt
-from erpnext.selling.doctype.customer.customer import Customer, get_customer_outstanding
+from erpnext.selling.doctype.customer.customer import Customer
 
 
 def compute_customer_outstanding(customer):
@@ -38,6 +38,7 @@ class CustomCustomer(Customer):
 			saved_name = frappe.db.get_value("Customer", self.name, "customer_name")
 			if saved_name:
 				self.customer_name = saved_name
+		_sync_territory_from_billing_state(self)
 		super().validate()
 
 	def onload(self):
@@ -199,12 +200,171 @@ def _sync_contact(doc):
 	frappe.db.set_value("Customer", doc.name, "customer_primary_contact", contact.name)
 
 
+# ── Territory sync from billing state ────────────────────────────────────────
+
+# Handles common abbreviations and alternate spellings in billing state field
+_STATE_ALIASES = {
+	"tamilnadu": "Tamil Nadu",
+	"tn": "Tamil Nadu",
+	"mh": "Maharashtra",
+	"gj": "Gujarat",
+	"gujrat": "Gujarat",
+	"wb": "West Bengal",
+	"ap": "Andhra Pradesh",
+	"ka": "Karnataka",
+	"kl": "Kerala",
+	"up": "Uttar Pradesh",
+	"mp": "Madhya Pradesh",
+	"rj": "Rajasthan",
+	"hr": "Haryana",
+	"pb": "Punjab",
+	"ts": "Telangana",
+	"od": "Odisha",
+	"uk": "Uttarakhand",
+	"hp": "Himachal Pradesh",
+	"jh": "Jharkhand",
+	"ga": "Goa",
+	"dl": "Delhi",
+	"dd": "Daman & Diu",
+	"dn": "Dadra & Nagar",
+	"dadra and nagar haveli and daman and diu": "Daman & Diu",
+	"dadra & nagar haveli": "Dadra & Nagar",
+}
+
+
+def _sync_territory_from_billing_state(doc):
+	"""Derive territory from billing state and set it on the Customer.
+
+	Fires in validate() so territory is always consistent with billing address.
+	Skips if billing state is blank. Falls back to alias map for common
+	abbreviations/variations before giving up.
+	"""
+	state = (doc.custom_bt_state or "").strip()
+	if not state:
+		return
+
+	# Exact match against Territory names (case-insensitive)
+	territory = frappe.db.get_value("Territory", {"name": state})
+	if not territory:
+		# Try case-insensitive exact match via SQL
+		rows = frappe.db.sql(
+			"SELECT name FROM `tabTerritory` WHERE LOWER(name) = LOWER(%s) AND is_group = 0 LIMIT 1",
+			state,
+		)
+		territory = rows[0][0] if rows else None
+
+	if not territory:
+		# Alias fallback
+		canonical = _STATE_ALIASES.get(state.lower())
+		if canonical:
+			territory = frappe.db.get_value("Territory", canonical) or canonical
+
+	if territory and territory != doc.territory:
+		doc.territory = territory
+
+
+@frappe.whitelist()
+def backfill_territory_from_billing_state():
+	"""One-time or on-demand fix: set territory = billing state for all
+	customers where they differ. Sales Manager / System Manager only."""
+	from instabiz.overrides.permissions import _PRIVILEGED_ROLES
+	if not (_PRIVILEGED_ROLES & set(frappe.get_roles())):
+		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+
+	customers = frappe.db.sql(
+		"""
+		SELECT name, territory, custom_bt_state
+		FROM `tabCustomer`
+		WHERE custom_bt_state IS NOT NULL AND custom_bt_state != ''
+		AND (territory IS NULL OR territory = ''
+		     OR LOWER(territory) != LOWER(custom_bt_state))
+		""",
+		as_dict=True,
+	)
+
+	updated = []
+	skipped = []
+	for c in customers:
+		state = (c.custom_bt_state or "").strip()
+		territory = frappe.db.get_value("Territory", {"name": state})
+		if not territory:
+			rows = frappe.db.sql(
+				"SELECT name FROM `tabTerritory` WHERE LOWER(name) = LOWER(%s) AND is_group = 0 LIMIT 1",
+				state,
+			)
+			territory = rows[0][0] if rows else None
+		if not territory:
+			canonical = _STATE_ALIASES.get(state.lower())
+			if canonical:
+				territory = frappe.db.get_value("Territory", canonical) or None
+
+		if territory:
+			frappe.db.set_value("Customer", c.name, "territory", territory, update_modified=False)
+			updated.append({"customer": c.name, "old": c.territory, "new": territory})
+		else:
+			skipped.append({"customer": c.name, "bt_state": c.custom_bt_state})
+
+	frappe.db.commit()
+	return {"updated": len(updated), "skipped": len(skipped), "details": updated, "unresolved": skipped}
+
+
 # ── Whitelisted helpers ───────────────────────────────────────────────────────
 
 @frappe.whitelist()
 def get_outstanding(customer):
-	company = frappe.defaults.get_global_default("company")
-	return get_customer_outstanding(customer, company)
+	return compute_customer_outstanding(customer)
+
+
+@frappe.whitelist()
+def clear_overdue_block(customer):
+	"""Manually lift the overdue block flag. Sales Manager / System Manager only."""
+	from instabiz.overrides.permissions import _PRIVILEGED_ROLES
+	if not (_PRIVILEGED_ROLES & set(frappe.get_roles())):
+		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+	frappe.db.set_value("Customer", customer, "custom_overdue_block", 0, update_modified=False)
+	actor = frappe.db.get_value("User", frappe.session.user, "full_name") or frappe.session.user
+	frappe.get_doc({
+		"doctype": "Comment",
+		"comment_type": "Info",
+		"reference_doctype": "Customer",
+		"reference_name": customer,
+		"content": f"Overdue block manually cleared by {actor}.",
+		"owner": frappe.session.user,
+	}).insert(ignore_permissions=True)
+	return "ok"
+
+
+@frappe.whitelist()
+def log_customer_activity(customer, activity_type, outcome, notes):
+	"""Log a call/meeting/WA/email/visit activity on a Customer timeline."""
+	if not frappe.has_permission("Customer", "write", customer):
+		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+
+	VALID_TYPES = {"Call", "Meeting", "WhatsApp", "Email", "Visit"}
+	VALID_OUTCOMES = {"Interested", "Not Interested", "Follow Up", "No Response"}
+	if activity_type not in VALID_TYPES:
+		frappe.throw(frappe._("Invalid activity type"))
+	if outcome not in VALID_OUTCOMES:
+		frappe.throw(frappe._("Invalid outcome"))
+
+	actor = frappe.db.get_value("User", frappe.session.user, "full_name") or frappe.session.user
+	icon_map = {"Call": "📞", "Meeting": "🤝", "WhatsApp": "💬", "Email": "📧", "Visit": "📍"}
+
+	parts = [f"{icon_map[activity_type]} <b>{activity_type}</b> — Outcome: <b>{outcome}</b>"]
+	if notes:
+		parts.append(frappe.utils.escape_html(notes).replace("\n", "<br>"))
+	parts.append(f"<i>Logged by {actor}</i>")
+
+	frappe.get_doc({
+		"doctype": "Comment",
+		"comment_type": "Info",
+		"reference_doctype": "Customer",
+		"reference_name": customer,
+		"content": "<br>".join(parts),
+		"owner": frappe.session.user,
+	}).insert(ignore_permissions=True)
+
+	return "ok"
 
 
 @frappe.whitelist()
