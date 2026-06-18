@@ -89,6 +89,76 @@ def _generate_ewaybill_async(doc_name):
 		)
 
 
+def _fetch_coords(pincode):
+	"""Return (lat, lon) for an Indian pincode via Nominatim, or (None, None)."""
+	try:
+		import requests as _req
+		r = _req.get(
+			"https://nominatim.openstreetmap.org/search",
+			params={"postalcode": str(pincode), "countrycodes": "in", "format": "json", "limit": 1},
+			headers={"User-Agent": "instabiz-erp/1.0", "Accept-Language": "en"},
+			timeout=6,
+		)
+		data = r.json()
+		if data:
+			return float(data[0]["lat"]), float(data[0]["lon"])
+	except Exception:
+		pass
+	return None, None
+
+
+def _haversine_km(lat1, lon1, lat2, lon2):
+	from math import atan2, cos, radians, sin, sqrt
+	R = 6371
+	dlat = radians(lat2 - lat1)
+	dlon = radians(lon2 - lon1)
+	a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+	return max(1, round(R * 2 * atan2(sqrt(a), sqrt(1 - a))))
+
+
+def _compute_doc_distance(doc):
+	"""Straight-line distance (km) between dispatch warehouse/company address and customer address."""
+	from instabiz.overrides.utils import LOCATION_WAREHOUSE
+
+	loc = (doc.get("custom_location") or "").lower()
+	wh_name = LOCATION_WAREHOUSE.get(loc)
+
+	src_pin = None
+	if wh_name:
+		src_pin = frappe.db.get_value("Warehouse", wh_name, "pin")
+	if not src_pin and doc.get("company_address"):
+		src_pin = frappe.db.get_value("Address", doc.company_address, "pincode")
+
+	dst_addr = doc.get("shipping_address_name") or doc.get("customer_address")
+	dst_pin = frappe.db.get_value("Address", dst_addr, "pincode") if dst_addr else None
+
+	if not src_pin or not dst_pin:
+		return None
+
+	frappe.logger().info(f"[IB EWB] Distance lookup: {src_pin} → {dst_pin}")
+	lat1, lon1 = _fetch_coords(src_pin)
+	lat2, lon2 = _fetch_coords(dst_pin)
+
+	if None in (lat1, lon1, lat2, lon2):
+		frappe.logger().warning(f"[IB EWB] Could not geocode pincodes {src_pin}/{dst_pin}")
+		return None
+
+	return _haversine_km(lat1, lon1, lat2, lon2)
+
+
+def _is_distance_error(exc_str):
+	s = (exc_str or "").lower()
+	if "distance" not in s:
+		return False
+	return any(
+		kw in s
+		for kw in (
+			"greater", "less", "more than", "km", "pincode", "pin code", "between",
+			"exceed", "acceptable", "too high", "too low", "not available",
+		)
+	)
+
+
 def _addr_fields(address_name):
 	"""Return address_line1, city, pincode from an Address doc, or None if not found."""
 	if not address_name:
@@ -189,9 +259,87 @@ def custom_generate_e_waybill(
 
 	EWaybillData.set_party_address_details = _patched
 	try:
-		return generate_e_waybill(doctype=doctype, docname=docname, values=values, force=force)
+		try:
+			return generate_e_waybill(doctype=doctype, docname=docname, values=values, force=force)
+		except Exception as e:
+			if not _is_distance_error(str(e)):
+				raise
+			# Distance rejected by NIC — compute from pincodes and retry once
+			computed_km = _compute_doc_distance(doc)
+			if not computed_km:
+				raise
+			values_dict = frappe.parse_json(values) if isinstance(values, str) else dict(values or {})
+			values_dict["distance"] = computed_km
+			frappe.logger().info(f"[IB EWB] Distance error — retrying with computed {computed_km} km")
+			return generate_e_waybill(doctype=doctype, docname=docname, values=values_dict, force=force)
 	finally:
 		EWaybillData.set_party_address_details = _orig
+
+
+@frappe.whitelist()
+def get_transport_gstin(transport_name):
+	"""
+	Return the GST transporter ID for an IB Transport entry.
+	Priority: IB Transport.custom_transport_gst → local DB name match → GST public API name search.
+	"""
+	if not transport_name:
+		return ""
+
+	gstin = frappe.db.get_value("IB Transport", transport_name, "custom_transport_gst") or ""
+	if gstin:
+		return gstin
+
+	# Local DB fallback: address or supplier records with a similar name
+	gstin = _search_gstin_local(transport_name)
+	if gstin:
+		return gstin
+
+	# GST public API fallback: search by trade name
+	gstin = _search_gstin_by_name(transport_name)
+	return gstin or ""
+
+
+def _search_gstin_local(name):
+	"""Search Address and Supplier tables for a GSTIN matching the given name."""
+	like = f"%{name}%"
+
+	row = frappe.db.sql(
+		"SELECT gstin FROM `tabAddress` WHERE gstin IS NOT NULL AND gstin != '' "
+		"AND (address_title LIKE %s OR name LIKE %s) LIMIT 1",
+		(like, like),
+		as_dict=True,
+	)
+	if row:
+		return row[0].gstin
+
+	row = frappe.db.sql(
+		"SELECT tax_id FROM `tabSupplier` WHERE tax_id IS NOT NULL AND tax_id != '' "
+		"AND supplier_name LIKE %s LIMIT 1",
+		(like,),
+		as_dict=True,
+	)
+	if row:
+		return row[0].tax_id
+
+	return ""
+
+
+def _search_gstin_by_name(name):
+	"""Try GST public API name-based taxpayer search via india_compliance."""
+	try:
+		from india_compliance.gst_india.api_classes.public import PublicAPI  # pyright: ignore[reportMissingImports]
+		api = PublicAPI()
+		resp = api.get("search", params={"action": "TP", "CMPNM": name, "from": "1", "to": "5"})
+		# API may return a list of matches or a single dict
+		if isinstance(resp, list) and resp:
+			item = resp[0]
+		elif isinstance(resp, dict) and resp.get("gstin"):
+			item = resp
+		else:
+			return ""
+		return item.get("gstin") or item.get("GSTIN") or ""
+	except Exception:
+		return ""
 
 
 def run_ewaybill_on_submit(doc, method=None):

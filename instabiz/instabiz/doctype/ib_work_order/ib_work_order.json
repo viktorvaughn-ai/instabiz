@@ -1,0 +1,208 @@
+{
+ "actions": [],
+ "autoname": "IB-WO-.YYYY.-.#####",
+ "creation": "2026-06-06 00:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "order_sheet",
+  "sales_order",
+  "item_code",
+  "item_name",
+  "stage",
+  "priority",
+  "status",
+  "col_break_1",
+  "machine",
+  "jumbo_roll",
+  "operator",
+  "target_qty",
+  "target_uom",
+  "completed_qty",
+  "wastage_qty",
+  "wastage_pct",
+  "section_timeline",
+  "started_at",
+  "completed_at",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "order_sheet",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Order Sheet",
+   "options": "IB Order Sheet"
+  },
+  {
+   "fieldname": "sales_order",
+   "fieldtype": "Data",
+   "fetch_from": "order_sheet.sales_order",
+   "label": "Sales Order",
+   "read_only": 1
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Item Code",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "fetch_from": "item_code.item_name",
+   "label": "Item Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stage",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Stage",
+   "options": "Coating\nSlitting\nRewinding\nCutting\nPacking\nReady to Deliver\nDelivered",
+   "reqd": 1
+  },
+  {
+   "fieldname": "priority",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Priority",
+   "options": "Urgent\nHigh\nNormal\nLow",
+   "default": "Normal"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Pending\nIn Progress\nCompleted\nOn Hold\nCancelled",
+   "default": "Pending"
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "machine",
+   "fieldtype": "Link",
+   "label": "Machine",
+   "options": "IB Machine"
+  },
+  {
+   "fieldname": "jumbo_roll",
+   "fieldtype": "Link",
+   "label": "Jumbo Roll",
+   "options": "IB Jumbo Roll",
+   "description": "For Coating: the JR being coated. For Slitting/Rewinding: the input JR from Coating."
+  },
+  {
+   "fieldname": "operator",
+   "fieldtype": "Link",
+   "label": "Operator",
+   "options": "User"
+  },
+  {
+   "fieldname": "target_qty",
+   "fieldtype": "Float",
+   "label": "Target Qty"
+  },
+  {
+   "fieldname": "target_uom",
+   "fieldtype": "Link",
+   "label": "Target UOM",
+   "options": "UOM"
+  },
+  {
+   "fieldname": "completed_qty",
+   "fieldtype": "Float",
+   "label": "Completed Qty",
+   "read_only": 1
+  },
+  {
+   "fieldname": "wastage_qty",
+   "fieldtype": "Float",
+   "label": "Wastage Qty",
+   "read_only": 1
+  },
+  {
+   "fieldname": "wastage_pct",
+   "fieldtype": "Percent",
+   "label": "Wastage %",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_timeline",
+   "fieldtype": "Section Break",
+   "label": "Timeline"
+  },
+  {
+   "fieldname": "started_at",
+   "fieldtype": "Datetime",
+   "label": "Started At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "completed_at",
+   "fieldtype": "Datetime",
+   "label": "Completed At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "links": [],
+ "modified": "2026-06-06 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "IB Work Order",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Factory Management",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 0,
+   "role": "Factory Production",
+   "share": 0,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

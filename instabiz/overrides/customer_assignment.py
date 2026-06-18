@@ -154,9 +154,68 @@ def _already_assigned_customers(date):
 	return {r.customer for r in rows}
 
 
-def get_dormant_pool(territories, exclude_customers, threshold_days, limit=50, offset=0, count_only=False, search=None, for_user=None):
+def get_user_assigned_pool(user, limit=200):
+	"""Return customers for the 'My Customers' board column:
+	1. Permanently owned (custom_sales_person_user = user).
+	2. Shared with user via IB Customer Share (and not owned by user).
+	share_relation field distinguishes 'owned' vs 'shared' for UI rendering.
+	"""
+	rows = frappe.db.sql(
+		"""
+		SELECT sub.customer, sub.customer_name, sub.territory, sub.mobile_no,
+		       sub.custom_contact_person_name, sub.custom_primary_contact_person,
+		       sub.custom_sales_person_user, sub.last_so_date, sub.share_relation
+		FROM (
+		    SELECT c.name AS customer, c.customer_name, c.territory, c.mobile_no,
+		           c.custom_contact_person_name, c.custom_primary_contact_person,
+		           c.custom_sales_person_user,
+		           MAX(so.transaction_date) AS last_so_date,
+		           'owned' AS share_relation
+		    FROM `tabCustomer` c
+		    LEFT JOIN `tabSales Order` so ON so.customer = c.name AND so.docstatus = 1
+		    WHERE c.custom_sales_person_user = %(user)s
+		      AND c.disabled = 0
+		    GROUP BY c.name
+		    UNION ALL
+		    SELECT c.name AS customer, c.customer_name, c.territory, c.mobile_no,
+		           c.custom_contact_person_name, c.custom_primary_contact_person,
+		           c.custom_sales_person_user,
+		           MAX(so.transaction_date) AS last_so_date,
+		           'shared' AS share_relation
+		    FROM `tabCustomer` c
+		    INNER JOIN `tabIB Customer Share` cs ON cs.customer = c.name AND cs.shared_with = %(user)s
+		    LEFT JOIN `tabSales Order` so ON so.customer = c.name AND so.docstatus = 1
+		    WHERE c.disabled = 0
+		      AND (c.custom_sales_person_user IS NULL OR c.custom_sales_person_user != %(user)s)
+		    GROUP BY c.name
+		) sub
+		ORDER BY sub.last_so_date ASC
+		LIMIT %(limit)s
+		""",
+		{"user": user, "limit": limit},
+		as_dict=True,
+	)
+	total_rows = frappe.db.sql(
+		"""
+		SELECT COUNT(*) FROM (
+		    SELECT c.name FROM `tabCustomer` c
+		    WHERE c.custom_sales_person_user = %(user)s AND c.disabled = 0
+		    UNION
+		    SELECT c.name FROM `tabCustomer` c
+		    INNER JOIN `tabIB Customer Share` cs ON cs.customer = c.name AND cs.shared_with = %(user)s
+		    WHERE c.disabled = 0
+		      AND (c.custom_sales_person_user IS NULL OR c.custom_sales_person_user != %(user)s)
+		) sub
+		""",
+		{"user": user},
+	)
+	return rows, int(total_rows[0][0])
+
+
+def get_dormant_pool(territories, exclude_customers, threshold_days, limit=50, offset=0, count_only=False, search=None, for_user=None, unowned_only=False):
 	"""Customers in territories with no/old SO, not already assigned on target date.
-	for_user: when set, exclude customers owned by a DIFFERENT user (custom_sales_person_user).
+	for_user: exclude customers owned by a DIFFERENT user.
+	unowned_only: show only customers with no sales person assigned.
 	"""
 	if not territories:
 		return 0 if count_only else []
@@ -166,9 +225,15 @@ def get_dormant_pool(territories, exclude_customers, threshold_days, limit=50, o
 	excl_placeholders = ", ".join(["%s"] * len(excluded))
 	search_clause = " AND c.name LIKE %s" if search else ""
 	search_val = [f"%{search}%"] if search else []
-	# Ownership filter: only show unowned OR owned-by-this-user customers
-	owner_clause = " AND (c.custom_sales_person_user IS NULL OR c.custom_sales_person_user = '' OR c.custom_sales_person_user = %s)" if for_user else ""
-	owner_val = [for_user] if for_user else []
+	if unowned_only:
+		owner_clause = " AND (c.custom_sales_person_user IS NULL OR c.custom_sales_person_user = '')"
+		owner_val = []
+	elif for_user:
+		owner_clause = " AND (c.custom_sales_person_user IS NULL OR c.custom_sales_person_user = '' OR c.custom_sales_person_user = %s)"
+		owner_val = [for_user]
+	else:
+		owner_clause = ""
+		owner_val = []
 	if count_only:
 		rows = frappe.db.sql(
 			f"""
@@ -216,9 +281,10 @@ def get_dormant_pool(territories, exclude_customers, threshold_days, limit=50, o
 	return rows
 
 
-def get_regular_pool(territories, exclude_customers, threshold_days, limit=50, offset=0, count_only=False, search=None, for_user=None):
+def get_regular_pool(territories, exclude_customers, threshold_days, limit=50, offset=0, count_only=False, search=None, for_user=None, unowned_only=False):
 	"""Customers in territories with recent SO, not already assigned on target date.
-	for_user: when set, exclude customers owned by a DIFFERENT user (custom_sales_person_user).
+	for_user: exclude customers owned by a DIFFERENT user.
+	unowned_only: show only customers with no sales person assigned.
 	"""
 	if not territories:
 		return 0 if count_only else []
@@ -228,8 +294,15 @@ def get_regular_pool(territories, exclude_customers, threshold_days, limit=50, o
 	excl_placeholders = ", ".join(["%s"] * len(excluded))
 	search_clause = " AND c.name LIKE %s" if search else ""
 	search_val = [f"%{search}%"] if search else []
-	owner_clause = " AND (c.custom_sales_person_user IS NULL OR c.custom_sales_person_user = '' OR c.custom_sales_person_user = %s)" if for_user else ""
-	owner_val = [for_user] if for_user else []
+	if unowned_only:
+		owner_clause = " AND (c.custom_sales_person_user IS NULL OR c.custom_sales_person_user = '')"
+		owner_val = []
+	elif for_user:
+		owner_clause = " AND (c.custom_sales_person_user IS NULL OR c.custom_sales_person_user = '' OR c.custom_sales_person_user = %s)"
+		owner_val = [for_user]
+	else:
+		owner_clause = ""
+		owner_val = []
 	if count_only:
 		rows = frappe.db.sql(
 			f"""
@@ -277,6 +350,59 @@ def get_regular_pool(territories, exclude_customers, threshold_days, limit=50, o
 	return rows
 
 
+def get_territory_pool(territories, exclude_customers, limit=50, offset=0, count_only=False, search=None):
+	"""All unowned customers in territories for the Territory board column.
+	No SO-date filter — shows dormant and active prospects alike.
+	Ordered: most-recently-ordered first (warm leads at top), never-ordered last.
+	"""
+	if not territories:
+		return 0 if count_only else []
+	placeholders = ", ".join(["%s"] * len(territories))
+	excluded = list(exclude_customers) if exclude_customers else ["__none__"]
+	excl_placeholders = ", ".join(["%s"] * len(excluded))
+	search_clause = ""
+	search_val = []
+	if search:
+		search_clause = " AND (c.name LIKE %s OR c.customer_name LIKE %s OR c.custom_contact_person_name LIKE %s)"
+		search_val = [f"%{search}%", f"%{search}%", f"%{search}%"]
+	if count_only:
+		rows = frappe.db.sql(
+			f"""
+			SELECT COUNT(*) AS cnt
+			FROM `tabCustomer` c
+			WHERE c.territory IN ({placeholders})
+			  AND c.disabled = 0
+			  AND c.name NOT IN ({excl_placeholders})
+			  AND (c.custom_sales_person_user IS NULL OR c.custom_sales_person_user = '')
+			  {search_clause}
+			""",
+			territories + excluded + search_val,
+			as_dict=True,
+		)
+		return rows[0].cnt if rows else 0
+	rows = frappe.db.sql(
+		f"""
+		SELECT c.name AS customer, c.customer_name, c.territory, c.gstin,
+		       c.mobile_no, c.custom_contact_person_name, c.custom_primary_contact_person,
+		       c.custom_sales_person_user,
+		       MAX(so.transaction_date) AS last_so_date
+		FROM `tabCustomer` c
+		LEFT JOIN `tabSales Order` so ON so.customer = c.name AND so.docstatus = 1
+		WHERE c.territory IN ({placeholders})
+		  AND c.disabled = 0
+		  AND c.name NOT IN ({excl_placeholders})
+		  AND (c.custom_sales_person_user IS NULL OR c.custom_sales_person_user = '')
+		  {search_clause}
+		GROUP BY c.name, c.territory
+		ORDER BY ISNULL(MAX(so.transaction_date)) ASC, MAX(so.transaction_date) DESC
+		LIMIT %s OFFSET %s
+		""",
+		territories + excluded + search_val + [limit, offset],
+		as_dict=True,
+	)
+	return rows
+
+
 # ── Assignment creation ───────────────────────────────────────────────────────
 
 def _create_assignment(customer, territory, assigned_to, date, source_pool):
@@ -293,9 +419,9 @@ def _create_assignment(customer, territory, assigned_to, date, source_pool):
 def auto_assign_for_user(user, date):
 	"""Create assignments for user on date up to assignments_per_day quota.
 
-	Priority order:
-	1. Owned customers (custom_sales_person_user = user) from ANY territory — assigned first.
-	2. Territory pool customers (no owner or owned by this user) — fill remaining slots.
+	Fills from territory pool only. Owned customers (custom_sales_person_user) appear
+	in the Regular pool column so reps can manually add them — they are NOT auto-scheduled
+	to avoid flooding Today/Tomorrow with the full owned-customer list.
 	"""
 	config = get_assignment_config()
 	territories = get_user_territories(user)
@@ -309,44 +435,13 @@ def auto_assign_for_user(user, date):
 		return 0
 
 	exclude = _already_assigned_customers(date)
-	excluded_list = list(exclude) if exclude else ["__none__"]
-	excl_ph = ", ".join(["%s"] * len(excluded_list))
-
-	# ── Pass 1: owned customers (any territory, not already assigned today) ──────
-	owned_rows = frappe.db.sql(
-		f"""
-		SELECT c.name AS customer, c.territory,
-		       MAX(so.transaction_date) AS last_so_date
-		FROM `tabCustomer` c
-		LEFT JOIN `tabSales Order` so ON so.customer = c.name AND so.docstatus = 1
-		WHERE c.custom_sales_person_user = %s
-		  AND c.disabled = 0
-		  AND c.name NOT IN ({excl_ph})
-		GROUP BY c.name, c.territory
-		ORDER BY last_so_date ASC
-		LIMIT %s
-		""",
-		[user] + excluded_list + [slots],
-		as_dict=True,
-	)
-
-	created = 0
 	assigned_today = set(exclude)
 
-	for row in owned_rows:
-		if row.customer in assigned_today:
-			continue
-		territory = row.territory or (territories[0] if territories else "")
-		source_pool = classify_customer(row.customer, config["dormant_threshold_days"])
-		_create_assignment(row.customer, territory, user, date, source_pool)
-		assigned_today.add(row.customer)
-		created += 1
-
-	# ── Pass 2: territory pool for remaining slots (owned-by-others excluded) ────
-	remaining = slots - created
+	# Territory pool only (owned-by-others excluded via for_user filter)
+	remaining = slots
 	if remaining <= 0 or not territories:
 		frappe.db.commit()
-		return created
+		return 0
 
 	dormant_slots = round(remaining * config["dormant_ratio"] / 100)
 	regular_slots = remaining - dormant_slots
@@ -368,6 +463,7 @@ def auto_assign_for_user(user, date):
 	batch = dormant_pick + regular_pick
 	random.shuffle(batch)
 
+	created = 0
 	for row in batch:
 		if row.customer in assigned_today:
 			continue
@@ -438,7 +534,7 @@ def mark_assignment_done_on_so(doc, method):
 
 @frappe.whitelist()
 def get_customer_board_data(date=None):
-	"""Return board data for the current user: dormant pool, regular pool, today, tomorrow."""
+	"""Return board data for the current user: Currently Handling, Prospect Pool, Today, Tomorrow."""
 	user = frappe.session.user
 	date = date or today()
 	tomorrow = _next_working_day(date)
@@ -451,7 +547,7 @@ def get_customer_board_data(date=None):
 		SELECT ca.name, ca.customer, ca.status, ca.outcome, ca.source_pool, ca.territory,
 		       c.customer_name, c.territory AS cust_territory, c.mobile_no,
 		       c.custom_contact_person_name, c.custom_primary_contact_person,
-		       c.ib_claimed_by,
+		       c.custom_sales_person_user,
 		       MAX(so.transaction_date) AS last_so_date,
 		       (SELECT prev.outcome FROM `tabIB Customer Assignment` prev
 		        WHERE prev.customer = ca.customer AND prev.status = 'Contacted'
@@ -493,62 +589,28 @@ def get_customer_board_data(date=None):
 		as_dict=True,
 	)
 
-	# Dormant pool (territory-filtered, info only)
-	# Exclude customers already assigned today so pool stays clean after "Add to Today"
-	dormant_pool = []
-	regular_pool = []
-	dormant_total = 0
-	regular_total = 0
 	is_manager = any(r in frappe.get_roles() for r in ["Sales Manager", "System Manager"])
-
 	display_territories = territories or _all_leaf_territories()
-	exclude = _already_assigned_customers(date)
-	pool_for_user = None if is_manager else user
 
-	dormant_pool = get_dormant_pool(display_territories, exclude, config["dormant_threshold_days"], limit=50, for_user=pool_for_user)
-	regular_pool = get_regular_pool(display_territories, exclude, config["dormant_threshold_days"], limit=50, for_user=pool_for_user)
-	dormant_total = get_dormant_pool(display_territories, exclude, config["dormant_threshold_days"], count_only=True, for_user=pool_for_user)
-	regular_total = get_regular_pool(display_territories, exclude, config["dormant_threshold_days"], count_only=True, for_user=pool_for_user)
+	# Col 1 "My Accounts": permanently assigned + shared customers (user's permanent account list)
+	# Col 2 "Territory": all unowned territory customers (warm + dormant) available to add to Today
+	# Managers use ib-assignment-admin for the full territory pool view.
+	my_accounts_pool, my_accounts_total = get_user_assigned_pool(user)
 
-	# Inject owned customers from outside user's territories into regular pool
-	# so they're always visible and can be manually added to Today
-	if not is_manager and user:
-		pool_customer_set = {r.customer for r in dormant_pool + regular_pool}
-		excl_for_owned = list(exclude | pool_customer_set) or ["__none__"]
-		excl_ph = ", ".join(["%s"] * len(excl_for_owned))
-		owned_outside = frappe.db.sql(
-			f"""
-			SELECT c.name AS customer, c.customer_name, c.territory, c.mobile_no,
-			       c.custom_contact_person_name, c.custom_primary_contact_person,
-			       c.custom_sales_person_user,
-			       MAX(so.transaction_date) AS last_so_date
-			FROM `tabCustomer` c
-			LEFT JOIN `tabSales Order` so ON so.customer = c.name AND so.docstatus = 1
-			WHERE c.custom_sales_person_user = %s
-			  AND c.disabled = 0
-			  AND c.name NOT IN ({excl_ph})
-			GROUP BY c.name, c.territory
-			ORDER BY last_so_date ASC
-			LIMIT 50
-			""",
-			[user] + excl_for_owned,
-			as_dict=True,
-		)
-		if owned_outside:
-			# Merge into regular pool — owned customers always in regular bucket
-			regular_pool = list(owned_outside) + regular_pool
-			regular_total += len(owned_outside)
-
-	claimed_pool = _get_claimed_pool(user) if is_manager else []
+	# Territory column: only exclude customers already in this user's Today (avoids board duplicates).
+	# Do NOT use _already_assigned_customers here — that wide exclude (Contacted <7d etc.) is for the
+	# scheduler only and would hide most territory customers from the browseable list.
+	today_customer_set = {a.customer for a in today_assignments}
+	territory_pool  = get_territory_pool(display_territories, today_customer_set, limit=50)
+	territory_total = get_territory_pool(display_territories, today_customer_set, count_only=True)
 
 	return {
 		"today": today_assignments,
 		"tomorrow": tomorrow_assignments,
-		"dormant": dormant_pool,
-		"regular": regular_pool,
-		"dormant_total": dormant_total,
-		"regular_total": regular_total,
-		"claimed": claimed_pool,
+		"dormant": my_accounts_pool,
+		"regular": territory_pool,
+		"dormant_total": my_accounts_total,
+		"regular_total": territory_total,
 		"is_manager": is_manager,
 		"date": date,
 		"tomorrow_date": tomorrow,
@@ -561,17 +623,22 @@ def search_customer_pool(pool_type, search):
 	user = frappe.session.user
 	config = get_assignment_config()
 	territories = get_user_territories(user) or _all_leaf_territories()
-	exclude = _already_assigned_customers(today())
 	threshold = config["dormant_threshold_days"]
+	# Territory search: only exclude today's Pending (same logic as Territory board column).
+	# Dormant/My-Accounts search: use wide exclude to match scheduler behaviour.
+	if pool_type == "regular":
+		exclude = {r[0] for r in frappe.db.sql(
+			"SELECT customer FROM `tabIB Customer Assignment` WHERE assigned_to=%s AND assigned_date=%s AND status='Pending'",
+			[user, today()], as_list=True,
+		)}
+	else:
+		exclude = _already_assigned_customers(today())
 	cutoff = frappe.utils.add_days(today(), -threshold)
+	is_manager = any(r in frappe.get_roles() for r in ["Sales Manager", "System Manager"])
 
 	tokens = [t.strip() for t in (search or "").split() if t.strip()]
 	if not tokens:
 		return []
-
-	placeholders = ", ".join(["%s"] * len(territories))
-	excluded = list(exclude) if exclude else ["__none__"]
-	excl_placeholders = ", ".join(["%s"] * len(excluded))
 
 	token_clauses = []
 	token_vals = []
@@ -584,11 +651,50 @@ def search_customer_pool(pool_type, search):
 		token_vals.extend([t, t, t, t])
 	search_sql = " AND ".join(token_clauses)
 
-	is_manager = any(r in frappe.get_roles() for r in ["Sales Manager", "System Manager"])
-	owner_clause = "" if is_manager else " AND (c.custom_sales_person_user IS NULL OR c.custom_sales_person_user = '' OR c.custom_sales_person_user = %s)"
-	owner_val = [] if is_manager else [user]
+	# Non-managers: "dormant" key = Currently Handling column — their assigned + shared customers
+	if not is_manager and pool_type == "dormant":
+		sql = f"""
+			SELECT sub.customer, sub.customer_name, sub.territory,
+			       sub.mobile_no, sub.custom_contact_person_name, sub.custom_primary_contact_person,
+			       sub.last_so_date, sub.share_relation
+			FROM (
+			    SELECT c.name AS customer, c.customer_name, c.territory,
+			           c.mobile_no, c.custom_contact_person_name, c.custom_primary_contact_person,
+			           MAX(so.transaction_date) AS last_so_date, 'owned' AS share_relation
+			    FROM `tabCustomer` c
+			    LEFT JOIN `tabSales Order` so ON so.customer = c.name AND so.docstatus = 1
+			    WHERE c.custom_sales_person_user = %s AND c.disabled = 0 AND {search_sql}
+			    GROUP BY c.name
+			    UNION ALL
+			    SELECT c.name AS customer, c.customer_name, c.territory,
+			           c.mobile_no, c.custom_contact_person_name, c.custom_primary_contact_person,
+			           MAX(so.transaction_date) AS last_so_date, 'shared' AS share_relation
+			    FROM `tabCustomer` c
+			    INNER JOIN `tabIB Customer Share` cs ON cs.customer = c.name AND cs.shared_with = %s
+			    LEFT JOIN `tabSales Order` so ON so.customer = c.name AND so.docstatus = 1
+			    WHERE c.disabled = 0
+			      AND (c.custom_sales_person_user IS NULL OR c.custom_sales_person_user != %s)
+			      AND {search_sql}
+			    GROUP BY c.name
+			) sub
+			ORDER BY sub.last_so_date ASC
+			LIMIT 30
+		"""
+		return frappe.db.sql(sql, [user] + token_vals + [user, user] + token_vals, as_dict=True)
 
+	placeholders = ", ".join(["%s"] * len(territories))
+	excluded = list(exclude) if exclude else ["__none__"]
+	excl_placeholders = ", ".join(["%s"] * len(excluded))
+
+	# "dormant" pool_type = My Accounts search (owned+shared for non-managers, full dormant for managers)
+	# "regular" pool_type = Territory search (all unowned territory customers, no SO-date filter)
 	if pool_type == "dormant":
+		if is_manager:
+			owner_clause = ""
+			owner_val = []
+		else:
+			owner_clause = ""  # handled above via user-owned+shared UNION
+			owner_val = []
 		sql = f"""
 			SELECT c.name AS customer, c.customer_name, c.territory,
 			       c.mobile_no, c.custom_contact_person_name, c.custom_primary_contact_person,
@@ -598,32 +704,31 @@ def search_customer_pool(pool_type, search):
 			WHERE c.territory IN ({placeholders})
 			  AND c.disabled = 0
 			  AND c.name NOT IN ({excl_placeholders})
-			  {owner_clause}
 			  AND {search_sql}
 			GROUP BY c.name
 			HAVING MAX(so.transaction_date) IS NULL OR MAX(so.transaction_date) < %s
 			ORDER BY last_so_date ASC
 			LIMIT 30
 		"""
-		params = territories + excluded + owner_val + token_vals + [cutoff]
+		params = territories + excluded + token_vals + [cutoff]
 	else:
+		# Territory column: all unowned customers, no SO-date restriction
 		sql = f"""
 			SELECT c.name AS customer, c.customer_name, c.territory,
 			       c.mobile_no, c.custom_contact_person_name, c.custom_primary_contact_person,
 			       MAX(so.transaction_date) AS last_so_date
 			FROM `tabCustomer` c
-			INNER JOIN `tabSales Order` so ON so.customer = c.name AND so.docstatus = 1
+			LEFT JOIN `tabSales Order` so ON so.customer = c.name AND so.docstatus = 1
 			WHERE c.territory IN ({placeholders})
 			  AND c.disabled = 0
 			  AND c.name NOT IN ({excl_placeholders})
-			  {owner_clause}
+			  AND (c.custom_sales_person_user IS NULL OR c.custom_sales_person_user = '')
 			  AND {search_sql}
-			  AND so.transaction_date >= %s
 			GROUP BY c.name
-			ORDER BY last_so_date ASC
+			ORDER BY ISNULL(MAX(so.transaction_date)) ASC, MAX(so.transaction_date) DESC
 			LIMIT 30
 		"""
-		params = territories + excluded + owner_val + token_vals + [cutoff]
+		params = territories + excluded + token_vals
 
 	return frappe.db.sql(sql, params, as_dict=True)
 
@@ -756,6 +861,30 @@ def unskip_assignment(assignment_id):
 
 
 @frappe.whitelist()
+def self_assign_customer(customer):
+	"""Sales user claims ownership of an unowned (or self-owned) customer.
+	Fails if the customer already belongs to a DIFFERENT user."""
+	user = frappe.session.user
+	existing = frappe.db.get_value("Customer", customer, "custom_sales_person_user")
+	if existing and existing != user:
+		claimer_name = frappe.db.get_value("User", existing, "full_name") or existing
+		frappe.throw(_(f"Customer is already assigned to {claimer_name}. Ask a manager to reassign."))
+	full_name = frappe.db.get_value("User", user, "full_name") or user
+	frappe.db.set_value("Customer", customer, {
+		"custom_sales_person_user": user,
+		"custom_sales_person": full_name,
+	})
+	frappe.db.commit()
+	# Notify all board viewers that this customer is now owned (leaves Territory column)
+	frappe.publish_realtime(
+		"ib_territory_taken",
+		{"customer": customer, "taken_by": user},
+		after_commit=True,
+	)
+	return {"status": "ok"}
+
+
+@frappe.whitelist()
 def add_customer_to_today(customer, date=None, target_user=None):
 	"""Any sales user can manually add a customer to their own Today board. No quota limit.
 	Managers may pass target_user to act on behalf of another user."""
@@ -771,25 +900,46 @@ def add_customer_to_today(customer, date=None, target_user=None):
 		user = frappe.session.user
 	date = date or today()
 
-	existing = frappe.db.get_value(
-		"IB Customer Assignment",
-		{"customer": customer, "assigned_date": date, "status": ["in", ["Pending", "Contacted"]]},
-		"name",
-	)
-	if existing:
-		frappe.throw(_(f"Customer {customer} already has an active assignment on {date}."))
+	# Advisory lock scoped to user+customer+date prevents concurrent duplicate creation
+	lock_key = f"ib_add_{user}_{customer}_{date}"
+	acquired = frappe.db.sql("SELECT GET_LOCK(%s, 10)", lock_key)[0][0]
+	if not acquired:
+		frappe.throw(_("Could not acquire lock. Please try again."))
 
-	territory = frappe.db.get_value("Customer", customer, "territory")
-	config = get_assignment_config()
-	source_pool = classify_customer(customer, config["dormant_threshold_days"])
-	_create_assignment(customer, territory, user, date, source_pool)
-	frappe.db.commit()
+	try:
+		# Check scoped to this user only — other users can independently add the same customer
+		existing = frappe.db.get_value(
+			"IB Customer Assignment",
+			{
+				"customer": customer,
+				"assigned_to": user,
+				"assigned_date": date,
+				"status": ["in", ["Pending", "Contacted"]],
+			},
+			"name",
+		)
+		if existing:
+			frappe.throw(_(f"Customer {customer} is already in your board for {date}."))
+
+		territory = frappe.db.get_value("Customer", customer, "territory")
+		config = get_assignment_config()
+		source_pool = classify_customer(customer, config["dormant_threshold_days"])
+		_create_assignment(customer, territory, user, date, source_pool)
+		frappe.db.commit()
+	finally:
+		frappe.db.sql("SELECT RELEASE_LOCK(%s)", lock_key)
 
 	assignment_name = frappe.db.get_value(
 		"IB Customer Assignment",
 		{"customer": customer, "assigned_to": user, "assigned_date": date, "status": "Pending"},
 		"name",
 		order_by="creation desc",
+	)
+	# Notify all board viewers that this customer left the Territory column
+	frappe.publish_realtime(
+		"ib_territory_taken",
+		{"customer": customer, "taken_by": user},
+		after_commit=True,
 	)
 	return {"status": "ok", "assignment": assignment_name}
 
@@ -1204,69 +1354,107 @@ def get_assignments_for_customers(customers):
 
 @frappe.whitelist()
 def bulk_assign_to_user(customers, assigned_to, date=None):
-	"""Assign multiple customers to a sales user for a given date. Manager only."""
+	"""Permanently assign customers to a sales user (sets Handled By on Customer master).
+	No daily-quota limit. Customers appear in the user's My Accounts board column.
+	Clears existing shares — new owner manages their own sharing.
+	Manager only."""
 	import json
 	_require_manager()
 	if isinstance(customers, str):
 		customers = json.loads(customers)
-	date = date or today()
-
-	# Block past dates — rolled-over immediately by scheduler
-	if str(date) < str(today()):
-		frappe.throw(_("Cannot assign to a past date."))
-
-	config = get_assignment_config()
-
-	# Quota: count existing active assignments for this user on this date
-	existing_count = frappe.db.count(
-		"IB Customer Assignment",
-		{"assigned_to": assigned_to, "assigned_date": date, "status": ["in", ["Pending", "Contacted"]]},
-	)
-	remaining_slots = config["assignments_per_day"] - existing_count
-	if remaining_slots <= 0:
-		frappe.throw(_(
-			f"{assigned_to} already has {existing_count} active assignments on {date} "
-			f"(limit: {config['assignments_per_day']}). Remove some before adding more."
-		))
 
 	full_name = frappe.db.get_value("User", assigned_to, "full_name") or assigned_to
 	assigned = 0
-	skipped_already_assigned = []
-	skipped_claimed = []
-	skipped_quota = []
+	today_date    = today()
+	tomorrow_date = _next_working_day(today_date)
+	now_ts        = now()
 
 	for customer in customers:
-		# Quota cap — stop once slots exhausted
-		if assigned >= remaining_slots:
-			skipped_quota.append(customer)
-			continue
-
-		# Cancel any existing active assignment for this customer on this date (manager override)
-		existing = frappe.db.get_value(
-			"IB Customer Assignment",
-			{"customer": customer, "assigned_date": date, "status": ["in", ["Pending", "Contacted"]]},
-			"name",
+		# Clear old shares on reassignment
+		frappe.db.delete("IB Customer Share", {"customer": customer})
+		frappe.db.set_value("Customer", customer, {
+			"custom_sales_person_user": assigned_to,
+			"custom_sales_person": full_name,
+		})
+		# Roll over any Pending Today/Tomorrow assignments owned by OTHER users so
+		# the old assignee's Today board no longer shows this customer.
+		frappe.db.sql(
+			"""
+			UPDATE `tabIB Customer Assignment`
+			SET status = 'Rolled Over', completed_at = %(now)s, modified = %(now)s
+			WHERE customer = %(customer)s
+			  AND assigned_to != %(assigned_to)s
+			  AND assigned_date IN (%(today)s, %(tomorrow)s)
+			  AND status = 'Pending'
+			""",
+			{
+				"now": now_ts,
+				"customer": customer,
+				"assigned_to": assigned_to,
+				"today": today_date,
+				"tomorrow": tomorrow_date,
+			},
 		)
-		if existing:
-			frappe.db.set_value("IB Customer Assignment", existing, "status", "Skipped")
-
-		# Claim only blocks auto-pool; managers can still manually assign claimed customers
-		territory = frappe.db.get_value("Customer", customer, "territory")
-		source_pool = classify_customer(customer, config["dormant_threshold_days"])
-		_create_assignment(customer, territory, assigned_to, date, source_pool)
-		# Update Handled By fields on Customer
-		frappe.db.set_value("Customer", customer, "custom_sales_person_user", assigned_to)
-		frappe.db.set_value("Customer", customer, "custom_sales_person", full_name)
 		assigned += 1
 
 	if assigned:
 		frappe.db.commit()
 
+	return {"assigned": assigned}
+
+
+@frappe.whitelist()
+def cleanup_excess_assignments(date=None):
+	"""Fix users with excess Pending assignments.
+
+	Two passes per user:
+	1. Delete Pending assignments where the customer is 'owned' by that user
+	   (custom_sales_person_user = assigned_to). These appeared because of the old
+	   auto-assign Pass 1 — owned customers now live in the Regular pool only.
+	2. If remaining Pending count still exceeds assignments_per_day quota,
+	   delete the newest excess rows (keep oldest quota entries).
+
+	Runs for today + tomorrow.
+	"""
+	_require_manager()
+	from frappe.utils import add_days
+	config = get_assignment_config()
+	quota = config["assignments_per_day"]
+	today_date = date or today()
+	dates = [today_date, _next_working_day(today_date)]
+	users = get_active_sales_users()
+	removed_owned = 0
+	removed_excess = 0
+
+	for user in users:
+		for d in dates:
+			# Pass 1 (owned-customer removal) was removed: reps legitimately add My Account
+			# customers to Today manually, and can also Claim Territory customers mid-session.
+			# Deleting those assignments would incorrectly nuke valid work items.
+
+			# Trim any Pending count exceeding the daily quota (keep oldest entries)
+			remaining = frappe.db.sql(
+				"""
+				SELECT name FROM `tabIB Customer Assignment`
+				WHERE assigned_to = %(user)s
+				  AND assigned_date = %(date)s
+				  AND status = 'Pending'
+				ORDER BY creation ASC
+				""",
+				{"user": user, "date": d},
+				as_dict=True,
+			)
+			if len(remaining) > quota:
+				to_delete = [r.name for r in remaining[quota:]]
+				for name in to_delete:
+					frappe.db.delete("IB Customer Assignment", {"name": name})
+					removed_excess += 1
+
+	frappe.db.commit()
 	return {
-		"assigned": assigned,
-		"skipped_already_assigned": skipped_already_assigned,
-		"skipped_claimed": skipped_claimed,
-		"skipped_quota": skipped_quota,
+		"removed_owned": removed_owned,
+		"removed_excess": removed_excess,
+		"total_removed": removed_owned + removed_excess,
 	}
 
 
@@ -1347,15 +1535,38 @@ def remove_team_territory(team_name, territory):
 
 @frappe.whitelist()
 def assign_customer_to_user(customer, sales_user):
-	"""Assign customer to a sales user's today board and set custom_sales_person_user on Customer."""
+	"""Assign customer to a sales user's today board and set custom_sales_person_user on Customer.
+	Clears any existing shares so the new owner starts fresh.
+	"""
 	_require_manager()
 
 	# Verify sales_user is an active Sales User
 	if not frappe.db.get_value("User", sales_user, "enabled"):
 		frappe.throw(_("User not found or disabled."))
 
-	# Create today's assignment (reuse existing logic; tolerates duplicates via throw)
-	date = today()
+	# Clear any existing shares — new owner should manage sharing themselves
+	frappe.db.delete("IB Customer Share", {"customer": customer})
+
+	date          = today()
+	tomorrow_date = _next_working_day(date)
+	now_ts        = now()
+
+	# Roll over any Pending Today/Tomorrow assignments owned by OTHER users first,
+	# so the old assignee's Today board stops showing this customer.
+	frappe.db.sql(
+		"""
+		UPDATE `tabIB Customer Assignment`
+		SET status = 'Rolled Over', completed_at = %(now)s, modified = %(now)s
+		WHERE customer = %(customer)s
+		  AND assigned_to != %(sales_user)s
+		  AND assigned_date IN (%(today)s, %(tomorrow)s)
+		  AND status = 'Pending'
+		""",
+		{"now": now_ts, "customer": customer, "sales_user": sales_user,
+		 "today": date, "tomorrow": tomorrow_date},
+	)
+
+	# Create today's assignment for the new owner
 	existing = frappe.db.get_value(
 		"IB Customer Assignment",
 		{"customer": customer, "assigned_to": sales_user, "assigned_date": date, "status": ["in", ["Pending", "Contacted"]]},
@@ -1377,9 +1588,175 @@ def assign_customer_to_user(customer, sales_user):
 
 @frappe.whitelist()
 def remove_customer_assignment(customer):
-	"""Clear Handled By (custom_sales_person + custom_sales_person_user) from Customer."""
+	"""Clear Handled By (custom_sales_person + custom_sales_person_user) from Customer.
+	Also clears any shares — unassigned customers return to the general pool.
+	"""
 	_require_manager()
+	frappe.db.delete("IB Customer Share", {"customer": customer})
 	frappe.db.set_value("Customer", customer, "custom_sales_person_user", "")
 	frappe.db.set_value("Customer", customer, "custom_sales_person", "")
 	frappe.db.commit()
 	return {"status": "ok"}
+
+
+# ── Customer Sharing (permission manager) ─────────────────────────────────────
+
+@frappe.whitelist()
+def get_customer_shares(customer):
+	"""Return list of users this customer is shared with.
+	Callable by: the customer's assigned user, Sales Manager, System Manager.
+	"""
+	user = frappe.session.user
+	is_manager = any(r in frappe.get_roles() for r in ["Sales Manager", "System Manager"])
+	assigned_to = frappe.db.get_value("Customer", customer, "custom_sales_person_user")
+	if not is_manager and assigned_to != user:
+		frappe.throw(_("Not authorized."), frappe.PermissionError)
+
+	rows = frappe.db.sql(
+		"""
+		SELECT cs.name, cs.shared_with, u.full_name AS shared_with_name,
+		       cs.shared_by, sb.full_name AS shared_by_name, cs.shared_at, cs.note
+		FROM `tabIB Customer Share` cs
+		LEFT JOIN `tabUser` u ON u.name = cs.shared_with
+		LEFT JOIN `tabUser` sb ON sb.name = cs.shared_by
+		WHERE cs.customer = %(customer)s
+		ORDER BY cs.shared_at DESC
+		""",
+		{"customer": customer},
+		as_dict=True,
+	)
+	return rows
+
+
+@frappe.whitelist()
+def share_customer(customer, share_with, note=None):
+	"""Share a customer with a sales user so they can see it in their board.
+	Callable by: the customer's assigned user or Sales Manager / System Manager.
+	"""
+	user = frappe.session.user
+	is_manager = any(r in frappe.get_roles() for r in ["Sales Manager", "System Manager"])
+	assigned_to = frappe.db.get_value("Customer", customer, "custom_sales_person_user")
+
+	if not is_manager and assigned_to != user:
+		frappe.throw(_("Not authorized. Only the assigned sales user or a manager can share this customer."), frappe.PermissionError)
+
+	if share_with == user:
+		frappe.throw(_("Cannot share with yourself."))
+
+	if share_with == assigned_to:
+		frappe.throw(_("Customer is already assigned to that user."))
+
+	# Dedup
+	if frappe.db.exists("IB Customer Share", {"customer": customer, "shared_with": share_with}):
+		return {"status": "ok", "existing": True}
+
+	# Validate target user is a Sales User
+	if not frappe.db.exists("Has Role", {"parent": share_with, "role": "Sales User", "parenttype": "User"}):
+		frappe.throw(_("{0} does not have the Sales User role.").format(share_with))
+
+	doc = frappe.new_doc("IB Customer Share")
+	doc.customer = customer
+	doc.shared_with = share_with
+	doc.shared_by = user
+	doc.shared_at = now()
+	doc.note = note or ""
+	doc.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"status": "ok", "share": doc.name}
+
+
+@frappe.whitelist()
+def unshare_customer(customer, share_with):
+	"""Remove a customer share.
+	Callable by: the customer's assigned user, the shared user (self-unshare), or a manager.
+	"""
+	user = frappe.session.user
+	is_manager = any(r in frappe.get_roles() for r in ["Sales Manager", "System Manager"])
+	assigned_to = frappe.db.get_value("Customer", customer, "custom_sales_person_user")
+
+	# Allowed: manager, assigned user (owns the customer), or the share recipient removing themselves
+	if not is_manager and assigned_to != user and share_with != user:
+		frappe.throw(_("Not authorized."), frappe.PermissionError)
+
+	share_name = frappe.db.get_value(
+		"IB Customer Share", {"customer": customer, "shared_with": share_with}, "name"
+	)
+	if share_name:
+		frappe.db.delete("IB Customer Share", {"name": share_name})
+		frappe.db.commit()
+	return {"status": "ok"}
+
+
+@frappe.whitelist()
+def bulk_unshare_all(customer):
+	"""Remove ALL shares for a customer (e.g., when reassigning to a new user). Manager only."""
+	_require_manager()
+	frappe.db.delete("IB Customer Share", {"customer": customer})
+	frappe.db.commit()
+	return {"status": "ok"}
+
+
+# ── Manager: Today board per-user filter ──────────────────────────────────────
+
+@frappe.whitelist()
+def get_active_sales_users_detail():
+	"""Return enabled Sales Users with full_name. For manager Today filter dropdown."""
+	_require_manager_or_leader()
+	rows = frappe.db.sql(
+		"""
+		SELECT DISTINCT u.name, u.full_name
+		FROM `tabUser` u
+		INNER JOIN `tabHas Role` hr ON hr.parent = u.name
+		WHERE hr.role = 'Sales User'
+		  AND u.enabled = 1
+		  AND u.name != 'Administrator'
+		ORDER BY u.full_name ASC
+		""",
+		as_dict=True,
+	)
+	return rows
+
+
+@frappe.whitelist()
+def get_user_today_assignments(view_user, date=None):
+	"""Return today's IB Customer Assignments for a specific sales user.
+	Used by manager to view any rep's Today column on the Customer Board.
+	Manager / Team Leader only.
+	"""
+	_require_manager_or_leader()
+	leader_team = None if any(r in frappe.get_roles() for r in ["Sales Manager", "System Manager"]) else _get_leader_team()
+	if leader_team and view_user not in _get_team_member_users(leader_team):
+		frappe.throw(_("Not authorized."), frappe.PermissionError)
+
+	date = date or today()
+
+	rows = frappe.db.sql(
+		"""
+		SELECT ca.name, ca.customer, ca.status, ca.outcome, ca.source_pool, ca.territory,
+		       c.customer_name, c.mobile_no,
+		       c.custom_contact_person_name, c.custom_primary_contact_person,
+		       c.custom_sales_person_user,
+		       MAX(so.transaction_date) AS last_so_date,
+		       (SELECT prev.outcome
+		        FROM `tabIB Customer Assignment` prev
+		        WHERE prev.customer = ca.customer AND prev.status = 'Contacted'
+		          AND prev.name != ca.name
+		        ORDER BY prev.completed_at DESC LIMIT 1) AS last_outcome,
+		       (SELECT DATE(prev.completed_at)
+		        FROM `tabIB Customer Assignment` prev
+		        WHERE prev.customer = ca.customer AND prev.status = 'Contacted'
+		          AND prev.name != ca.name
+		        ORDER BY prev.completed_at DESC LIMIT 1) AS last_contacted_at
+		FROM `tabIB Customer Assignment` ca
+		INNER JOIN `tabCustomer` c ON c.name = ca.customer
+		LEFT JOIN `tabSales Order` so ON so.customer = ca.customer AND so.docstatus = 1
+		WHERE ca.assigned_to = %(user)s
+		  AND ca.assigned_date = %(date)s
+		  AND ca.status IN ('Pending', 'Contacted', 'Order Placed', 'Skipped')
+		GROUP BY ca.name
+		ORDER BY ca.status = 'Pending' DESC, ca.creation DESC
+		""",
+		{"user": view_user, "date": date},
+		as_dict=True,
+	)
+	return rows

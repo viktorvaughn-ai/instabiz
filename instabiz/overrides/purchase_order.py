@@ -3,7 +3,7 @@ import frappe
 from frappe import _
 from erpnext.buying.doctype.purchase_order.purchase_order import PurchaseOrder  # pyright: ignore[reportMissingImports]
 
-from instabiz.overrides.utils import LOCATION_WAREHOUSE, LOCATION_COST_CENTER
+from instabiz.overrides.utils import LOCATION_WAREHOUSE, LOCATION_COST_CENTER, recalculate_purchase_items
 from instabiz.overrides.naming import autoname_purchase_order
 
 
@@ -92,8 +92,10 @@ class CustomPurchaseOrder(PurchaseOrder):
 		_set_location_from_warehouse(self)
 		_auto_correct_purchase_gst_template(self)
 		_apply_purchase_cost_center(self)
+		recalculate_purchase_items(self)
 		super().validate()
 
 	def before_cancel(self):
 		if not (self.get("custom_cancel_reason") or "").strip():
 			frappe.throw(_("Fill in Cancellation Reason before cancelling this Purchase Order."))
+		frappe.msgprint(_("Purchase Order cancelled successfully."), indicator="green")

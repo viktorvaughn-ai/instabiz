@@ -11,9 +11,12 @@
         proto._ib_sort_patched = true;
 
         // Patch setup_defaults — runs first, sets this.sort_by before SortSelector is created.
+        // Must be async: Frappe v15 setup_defaults awaits frappe.model.with_doctype() to load
+        // meta before setup_view() runs. A synchronous wrapper returns undefined, causing
+        // setup_view() to run immediately before meta is ready → "Cannot read 'fields'" crash.
         const _orig_defaults = proto.setup_defaults;
-        proto.setup_defaults = function () {
-            _orig_defaults.call(this);
+        proto.setup_defaults = async function () {
+            await _orig_defaults.call(this);
             this.sort_by    = "modified";
             this.sort_order = "desc";
         };
@@ -25,7 +28,7 @@
             proto.setup_sort_selector = function () {
                 this.sort_by    = "modified";
                 this.sort_order = "desc";
-                _orig_sort_sel.call(this);
+                return _orig_sort_sel.call(this);
             };
         }
     }
@@ -125,7 +128,8 @@ function ib_setup_status_multiselect(listview, doctype, statuses) {
 }
 
 // ── Generic sales person (User link) filter ───────────────────────────────────
-function ib_setup_list_sales_user_filter(listview, doctype) {
+function ib_setup_list_sales_user_filter(listview, doctype, placeholder) {
+    placeholder = placeholder || "Sales Person";
     const slug    = doctype.toLowerCase().replace(/ /g, "-");
     const css     = `ib-${slug}-sales-user-filter`;
     const eventNs = `ib_${slug.replace(/-/g, "_")}_sales_user_clear`;
@@ -150,7 +154,7 @@ function ib_setup_list_sales_user_filter(listview, doctype) {
             label: "",
             fieldtype: "Link",
             options: "User",
-            placeholder: __("Sales Person"),
+            placeholder: __(placeholder),
             onchange() {
                 const val = control.get_value();
                 _ib_remove_filters(listview, "custom_sales_person_user");
@@ -168,6 +172,62 @@ function ib_setup_list_sales_user_filter(listview, doctype) {
     });
     control.$wrapper.removeClass("form-group");
     control.$wrapper.css("margin-bottom", 0);
+
+    const $clearBtn = listview.filter_area && listview.filter_area.filter_x_button;
+    if ($clearBtn && $clearBtn.length) {
+        $clearBtn
+            .off(`click.${eventNs}`)
+            .on(`click.${eventNs}`, () => control.set_value(""));
+    }
+}
+
+// ── Customer "Handled By" filter (text search on custom_sales_person) ────────
+function ib_setup_customer_handled_by_filter(listview) {
+    const css     = "ib-customer-handled-by-filter";
+    const eventNs = "ib_customer_handled_by_clear";
+
+    $(`.${css}`).remove();
+
+    const $wrapper = $(
+        `<div class="form-group frappe-control input-max-width ${css}" ` +
+        `data-fieldtype="Data" data-fieldname="custom_sales_person"></div>`
+    );
+    $wrapper.css({ flex: "0 0 160px", maxWidth: "160px" });
+    $wrapper.appendTo(listview.page.page_form);
+
+    const control = frappe.ui.form.make_control({
+        df: {
+            label: "",
+            fieldtype: "Data",
+            placeholder: __("Handled By"),
+        },
+        parent: $wrapper,
+        only_input: true,
+        render_input: 1,
+    });
+    control.$wrapper.removeClass("form-group");
+    control.$wrapper.css("margin-bottom", 0);
+
+    function _apply() {
+        const val = (control.get_value() || "").trim();
+        _ib_remove_filters(listview, "custom_sales_person");
+        if (val) {
+            listview.filter_area.add([
+                ["Customer", "custom_sales_person", "like", `%${val}%`],
+            ]);
+        }
+        listview.refresh();
+    }
+
+    let _debounce;
+    $(control.input)
+        .on("input", function () {
+            clearTimeout(_debounce);
+            _debounce = setTimeout(_apply, 400);
+        })
+        .on("keydown", function (e) {
+            if (e.key === "Enter") { clearTimeout(_debounce); _apply(); }
+        });
 
     const $clearBtn = listview.filter_area && listview.filter_area.filter_x_button;
     if ($clearBtn && $clearBtn.length) {
@@ -311,10 +371,12 @@ function ib_setup_list_team_filter(listview, doctype) {
 
 // Redirect Sales Users who land on the Customer Board workspace page to the actual board page.
 function _ib_maybe_redirect_to_board() {
-	const route = frappe.get_route_str();
-	if (route === "customer-board" && !frappe.user.has_role(["Sales Manager", "System Manager"])) {
-		frappe.set_route("ib-customer-board");
-	}
+    const parts = frappe.get_route();
+    if (!parts || !parts.length) return;
+    const route = parts.join("/");
+    if (route === "customer-board" && !frappe.user.has_role(["Sales Manager", "System Manager"])) {
+        frappe.set_route("ib-customer-board");
+    }
 }
 frappe.router.on("change", _ib_maybe_redirect_to_board);
 frappe.after_ajax(function () { _ib_maybe_redirect_to_board(); });
@@ -334,10 +396,41 @@ function ib_disable_status_click_filter(listview) {
 // Latest frm to inject into — updated each time a submitted SI/DN form loads.
 let _ib_ewb_frm = null;
 
+// Guard: prevents infinite retry loop when distance error triggers a retry.
+let _ib_ewb_retrying = false;
+
 // Address controls created by make_control — referenced by the frappe.call interceptor.
 let _ib_ewb_bill_from_ctrl = null;
 let _ib_ewb_dispatch_ctrl  = null;
 let _ib_ewb_ship_to_ctrl   = null;
+
+function _ib_is_distance_error(msg) {
+    const s = (msg || "").toLowerCase();
+    return s.includes("distance") && (
+        s.includes("greater") || s.includes("less") ||
+        s.includes("more than") || s.includes("pincode") ||
+        s.includes("between") || s.includes("km") || s.includes("exceed")
+    );
+}
+
+async function _ib_recalc_and_retry() {
+    frappe.show_alert({ message: __("Distance error — recalculating from pincodes…"), indicator: "orange" });
+    const fromPin = ($("#ib-from-pin").val() || "").trim();
+    const toPin   = ($("#ib-to-pin").val()   || "").trim();
+    if (!fromPin || !toPin) {
+        _ib_ewb_retrying = false;
+        frappe.show_alert({ message: __("Pincodes not available for auto-retry. Update distance manually."), indicator: "red" });
+        return;
+    }
+    await _ib_calc_and_fill(fromPin, toPin, null, null);
+    // Brief pause so the dialog distance field is fully updated before retry
+    await new Promise(r => setTimeout(r, 600));
+    if (frappe.cur_dialog) {
+        frappe.cur_dialog.get_primary_btn().trigger("click");
+    } else {
+        _ib_ewb_retrying = false;
+    }
+}
 
 function ib_watch_ewaybill_dialog(frm) {
     _ib_ewb_frm = frm;
@@ -347,6 +440,7 @@ function ib_watch_ewaybill_dialog(frm) {
     frappe.ui.Dialog._ib_patched = true;
 
     // Persistent frappe.call interceptor — reads #ib-txn-type + address fields at call time.
+    // Also wraps callback/error to auto-retry on NIC distance validation errors.
     const _origCall = frappe.call.bind(frappe);
     frappe.call = function (opts, ...rest) {
         if (opts && typeof opts.method === "string" && opts.method.includes("generate_e_waybill")) {
@@ -360,6 +454,43 @@ function ib_watch_ewaybill_dialog(frm) {
             if (billFrom) opts.args.bill_from_address   = billFrom;
             if (dispatch) opts.args.dispatch_from_address = dispatch;
             if (shipTo)   opts.args.ship_to_address     = shipTo;
+
+            // Wrap error callback — NIC distance errors come as HTTP 417.
+            // Frappe v15 calls opts.error_callback(r) where r is the PARSED response
+            // object (not the XHR) for 417 errors. Handle both shapes.
+            const _origErr = opts.error;
+            opts.error = async function (r_or_xhr) {
+                let msg = "";
+                try {
+                    // r_or_xhr is the parsed response for 417, raw XHR for 500
+                    const resp = (r_or_xhr && (r_or_xhr.exception || r_or_xhr._server_messages))
+                        ? r_or_xhr
+                        : (r_or_xhr?.responseJSON || JSON.parse(r_or_xhr?.responseText || "{}"));
+                    let sm = "";
+                    try { sm = JSON.parse(resp._server_messages || "[]").map(m => { try { return JSON.parse(m).message; } catch(_) { return m; } }).join(" "); } catch (_) {}
+                    msg = [resp.exception, resp.exc_type, sm].filter(Boolean).join(" ");
+                } catch (_) { msg = String(r_or_xhr || ""); }
+
+                if (!_ib_ewb_retrying && _ib_is_distance_error(msg)) {
+                    _ib_ewb_retrying = true;
+                    await _ib_recalc_and_retry();
+                } else {
+                    _ib_ewb_retrying = false;
+                    if (_origErr) _origErr(r_or_xhr);
+                }
+            };
+
+            // Wrap success callback — rare but some paths return exc inline
+            const _origCb = opts.callback;
+            opts.callback = async function (r) {
+                if (!_ib_ewb_retrying && r && r.exc && _ib_is_distance_error(r.exc)) {
+                    _ib_ewb_retrying = true;
+                    await _ib_recalc_and_retry();
+                    return;
+                }
+                _ib_ewb_retrying = false;
+                if (_origCb) _origCb(r);
+            };
         }
         return _origCall(opts, ...rest);
     };
@@ -376,8 +507,47 @@ function ib_watch_ewaybill_dialog(frm) {
             if ($(el).find(".ib-sp-wrap").length) return;
             _ib_inject_self_pickup(el);
             _ib_populate_distance(_ib_ewb_frm);
+
+            if (!_ib_ewb_frm || !_ib_ewb_frm.doc) return;
+            const transport = (_ib_ewb_frm.doc.custom_transport || "").toUpperCase();
+
+            // Auto-check self-pickup when the transport is a self-pickup entry
+            if (transport.includes("SELF")) {
+                const cb = document.getElementById("ib-self-pickup");
+                if (cb && !cb.checked) {
+                    cb.checked = true;
+                    cb.dispatchEvent(new Event("change", { bubbles: true }));
+                }
+                return; // self-pickup uses company GSTIN — skip transporter lookup
+            }
+
+            // Populate gst_transporter_id from IB Transport (with fallback to name search)
+            if (_ib_ewb_frm.doc.custom_transport) {
+                _ib_fetch_and_fill_transporter_gstin(_ib_ewb_frm.doc.custom_transport);
+            }
         }, 80);
     };
+}
+
+function _ib_fetch_and_fill_transporter_gstin(transport_name) {
+    frappe.call({
+        method: "instabiz.overrides.ewaybill.get_transport_gstin",
+        args: { transport_name },
+        callback(r) {
+            const gstin = (r.message || "").trim();
+            if (!gstin) return;
+            const field = document.querySelector('input[data-fieldname="gst_transporter_id"]');
+            if (field && !field.value) {
+                field.value = gstin;
+                field.dispatchEvent(new Event("change", { bubbles: true }));
+                field.dispatchEvent(new Event("input",  { bubbles: true }));
+            }
+            // Also update via frappe dialog API so the value is serialized in values dict
+            if (frappe.cur_dialog) {
+                try { frappe.cur_dialog.set_value("gst_transporter_id", gstin); } catch (_) {}
+            }
+        },
+    });
 }
 
 async function _ib_populate_distance(frm) {
@@ -631,15 +801,19 @@ function _ib_inject_self_pickup(modal_el) {
         if (e.target.id === "ib-self-pickup") {
             const gst = document.querySelector('input[data-fieldname="gst_transporter_id"]');
             const trn = $modal.find('[data-fieldname="transporter"]').closest(".frappe-control")[0];
-            const gstin = localStorage.getItem("ib_ewb_gstin") || "";
+            // Self-pickup transporter = company itself — use company GSTIN, not customer GSTIN
+            const gstin = (_ib_ewb_frm && _ib_ewb_frm.doc && _ib_ewb_frm.doc.company_gstin) || "";
             if (e.target.checked) {
-                if (gst) gst.value = gstin;
+                if (gst) {
+                    gst.value = gstin;
+                    gst.dispatchEvent(new Event("change", { bubbles: true }));
+                    gst.dispatchEvent(new Event("input",  { bubbles: true }));
+                }
                 if (trn) trn.style.display = "none";
             } else {
                 if (gst) gst.value = "";
                 if (trn) trn.style.display = "";
             }
         }
-
     });
 }

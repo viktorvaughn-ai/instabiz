@@ -105,6 +105,11 @@ def autoname_purchase_invoice(doc, method=None):
 
 def autoname_sales_invoice(doc, method=None):
     wh = get_warehouse_code(doc)
+    # Credit Notes (returns) get their own CN series, independent of the INV/DN sequence.
+    if doc.get("is_return"):
+        prefix   = f"IB-{wh}-CN-"
+        doc.name = frappe.model.naming.make_autoname(f"{prefix}.#####")
+        return
     # If created from a Delivery Note, reuse its number so DN/SI share the same sequence slot.
     # Mapper sets delivery_note on the parent SI doc; fall back to checking item rows.
     dn_name = doc.get("delivery_note") or ""

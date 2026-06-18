@@ -39,6 +39,7 @@ frappe.listview_settings["Sales Invoice"] = {
 	},
 
 	onload(listview) {
+		ib_setup_list_print(listview, "Sales Invoice");
 		ib_hide_sidebar();
 		ib_setup_status_multiselect(listview, "Sales Invoice", [
 			"Draft", "Unpaid", "Overdue", "Paid", "Return", "Cancelled",

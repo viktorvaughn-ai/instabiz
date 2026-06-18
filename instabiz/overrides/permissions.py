@@ -80,7 +80,8 @@ def _is_sales_user_only(user):
 
 
 def customer_query_conditions(user):
-    """Sales Users see only customers they own or are assigned to.
+    """Sales Users see only customers they own, are permanently assigned to,
+    have an active assignment for, or that are shared with them.
     Everyone else (Sales Manager, Accounts, System Manager …) sees all.
     """
     if not user:
@@ -95,12 +96,16 @@ def customer_query_conditions(user):
         f"   SELECT `customer` FROM `tabIB Customer Assignment`"
         f"   WHERE `assigned_to` = {u}"
         f"   AND `assigned_date` >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)"
+        f" )"
+        f" OR `tabCustomer`.`name` IN ("
+        f"   SELECT `customer` FROM `tabIB Customer Share`"
+        f"   WHERE `shared_with` = {u}"
         f" ))"
     )
 
 
 def customer_has_permission(doc, ptype, user):
-    """Allow create always; for existing docs check ownership or assignment."""
+    """Allow create always; for existing docs check ownership, permanent assignment, or share."""
     if not user:
         user = frappe.session.user
     if not _is_sales_user_only(user):
@@ -109,9 +114,19 @@ def customer_has_permission(doc, ptype, user):
         return True
     if doc.owner == user:
         return True
-    return frappe.db.exists(
-        "IB Customer Assignment",
-        {"customer": doc.name, "assigned_to": user},
+    # Permanent assignment via custom_sales_person_user (set by bulk_assign_to_user)
+    assigned_user = (
+        doc.get("custom_sales_person_user")
+        or frappe.db.get_value("Customer", doc.name, "custom_sales_person_user")
+    )
+    if assigned_user and assigned_user == user:
+        return True
+    # Shared with this user via IB Customer Share
+    if frappe.db.exists("IB Customer Share", {"customer": doc.name, "shared_with": user}):
+        return True
+    # IB Customer Assignment (scheduled or manual daily board assignments)
+    return bool(
+        frappe.db.exists("IB Customer Assignment", {"customer": doc.name, "assigned_to": user})
     )
 
 

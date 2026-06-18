@@ -22,6 +22,7 @@ frappe.listview_settings["Purchase Order"] = {
 	},
 
 	onload(listview) {
+		ib_setup_list_print(listview, "Purchase Order");
 		ib_hide_sidebar();
 		ib_setup_status_multiselect(listview, "Purchase Order", [
 			"Draft", "To Receive and Bill", "To Bill", "To Receive", "Completed", "Cancelled", "Closed",

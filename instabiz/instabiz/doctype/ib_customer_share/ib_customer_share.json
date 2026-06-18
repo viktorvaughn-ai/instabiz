@@ -1,0 +1,103 @@
+{
+  "actions": [],
+  "allow_rename": 0,
+  "autoname": "hash",
+  "creation": "2026-06-17 00:00:00",
+  "doctype": "DocType",
+  "editable_grid": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "customer",
+    "shared_with",
+    "shared_by",
+    "shared_at",
+    "note"
+  ],
+  "fields": [
+    {
+      "fieldname": "customer",
+      "fieldtype": "Link",
+      "in_list_view": 1,
+      "label": "Customer",
+      "options": "Customer",
+      "reqd": 1,
+      "search_index": 1
+    },
+    {
+      "fieldname": "shared_with",
+      "fieldtype": "Link",
+      "in_list_view": 1,
+      "label": "Shared With",
+      "options": "User",
+      "reqd": 1,
+      "search_index": 1
+    },
+    {
+      "fieldname": "shared_by",
+      "fieldtype": "Link",
+      "in_list_view": 1,
+      "label": "Shared By",
+      "options": "User"
+    },
+    {
+      "fieldname": "shared_at",
+      "fieldtype": "Datetime",
+      "label": "Shared At",
+      "read_only": 1
+    },
+    {
+      "fieldname": "note",
+      "fieldtype": "Small Text",
+      "label": "Note"
+    }
+  ],
+  "in_create": 0,
+  "links": [],
+  "modified": "2026-06-17 00:00:00",
+  "modified_by": "Administrator",
+  "module": "Instabiz",
+  "name": "IB Customer Share",
+  "owner": "Administrator",
+  "permissions": [
+    {
+      "create": 1,
+      "delete": 1,
+      "email": 1,
+      "export": 1,
+      "print": 1,
+      "read": 1,
+      "report": 1,
+      "role": "System Manager",
+      "share": 1,
+      "write": 1
+    },
+    {
+      "create": 1,
+      "delete": 1,
+      "email": 0,
+      "export": 1,
+      "print": 0,
+      "read": 1,
+      "report": 1,
+      "role": "Sales Manager",
+      "share": 0,
+      "write": 1
+    },
+    {
+      "create": 0,
+      "delete": 0,
+      "email": 0,
+      "export": 0,
+      "print": 0,
+      "read": 1,
+      "report": 0,
+      "role": "Sales User",
+      "share": 0,
+      "write": 0
+    }
+  ],
+  "sort_field": "shared_at",
+  "sort_order": "DESC",
+  "states": [],
+  "track_changes": 0
+}

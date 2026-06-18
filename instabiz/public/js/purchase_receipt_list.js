@@ -19,6 +19,7 @@ frappe.listview_settings["Purchase Receipt"] = {
 	},
 
 	onload(listview) {
+		ib_setup_list_print(listview, "Purchase Receipt");
 		ib_hide_sidebar();
 		ib_setup_status_multiselect(listview, "Purchase Receipt", [
 			"Draft", "Return Issued", "Completed", "Cancelled",

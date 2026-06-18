@@ -9,6 +9,7 @@ from instabiz.overrides.purchase_order import (
 	_set_location_from_warehouse,
 	_first_warehouse,
 )
+from instabiz.overrides.utils import recalculate_purchase_items
 from instabiz.overrides.naming import autoname_purchase_invoice
 
 
@@ -22,6 +23,7 @@ class CustomPurchaseInvoice(PurchaseInvoice):
 		_set_location_from_warehouse(self)
 		_auto_correct_purchase_gst_template(self)
 		_apply_purchase_cost_center(self)
+		recalculate_purchase_items(self)
 		super().validate()
 		# Re-apply after super() resets cost centers to company default
 		_apply_purchase_cost_center(self)

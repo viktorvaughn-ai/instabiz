@@ -24,19 +24,38 @@ def _month_days(d=None):
 	return calendar.monthrange(d.year, d.month)[1]
 
 
-def _get_actuals(sales_user, month_first):
-	"""Sum of submitted SO grand_total for the user in the given month."""
+def _get_actuals(sales_user, month_first, return_count=False):
+	"""Sum of submitted SI grand_total for the user in the given month.
+	Uses Sales Invoice posting_date — revenue is realized when invoice is raised, not when SO is placed.
+	Excludes returns (is_return=1). Falls back to custom_sales_person display name for legacy docs.
+	"""
 	month_last = _month_last(month_first)
+	full_name = frappe.db.get_value("User", sales_user, "full_name") or ""
 	result = frappe.db.sql(
 		"""
-		SELECT COALESCE(SUM(grand_total), 0) AS total
-		FROM `tabSales Order`
+		SELECT COALESCE(SUM(grand_total), 0) AS total, COUNT(*) AS cnt
+		FROM `tabSales Invoice`
 		WHERE docstatus = 1
-		  AND custom_sales_person_user = %(user)s
-		  AND transaction_date BETWEEN %(from_date)s AND %(to_date)s
+		  AND is_return = 0
+		  AND (
+		      TRIM(custom_sales_person_user) = %(user)s
+		      OR (
+		          (custom_sales_person_user IS NULL OR TRIM(custom_sales_person_user) = '')
+		          AND %(full_name)s != ''
+		          AND TRIM(custom_sales_person) = %(full_name)s
+		      )
+		  )
+		  AND posting_date BETWEEN %(from_date)s AND %(to_date)s
 		""",
-		{"user": sales_user, "from_date": month_first, "to_date": month_last},
+		{
+			"user": sales_user,
+			"full_name": full_name,
+			"from_date": month_first,
+			"to_date": month_last,
+		},
 	)
+	if return_count:
+		return flt(result[0][0]) if result else 0.0, int(result[0][1]) if result else 0
 	return flt(result[0][0]) if result else 0.0
 
 
@@ -58,7 +77,7 @@ def get_my_target(month=None):
 	mf = _month_first(month)
 	doc = _get_target_doc(user, mf)
 	target = flt(doc.target_amount) if doc else 0.0
-	actual = _get_actuals(user, mf)
+	actual, invoice_count = _get_actuals(user, mf, return_count=True)
 	pct = round(actual / target * 100) if target else 0
 	return {
 		"month": mf,
@@ -66,6 +85,7 @@ def get_my_target(month=None):
 		"actual": actual,
 		"pct": min(pct, 100),
 		"has_target": bool(doc),
+		"order_count": invoice_count,  # key kept for JS compat; now counts invoices
 	}
 
 

@@ -39,12 +39,72 @@ class CustomSalesInvoice(IbStatusMixin, SalesInvoice):
         set_sales_person(self)
         sync_sales_team(self)
         recalculate_items(self)
+        self._pre_transport_charges()   # set freight Actual row before ERPNext calc
         super().validate()
+        self._apply_transport_gst()     # add extra GST on transport after ERPNext calc
         # Must run AFTER super().validate() — ERPNext's set_missing_values() resets
         # company_gstin and cost_center to company defaults; re-apply location values last.
         self._apply_location_gstin()
         apply_location_cost_center(self)
         _auto_correct_gst_template(self)
+
+    # ── Transport charges helpers ──────────────────────────────────────────────
+
+    def _pre_transport_charges(self):
+        """Set Actual freight row amount from custom_transport_charges BEFORE
+        super().validate() so ERPNext includes it in total_taxes_and_charges."""
+        from frappe.utils import flt
+        transport = flt(self.get("custom_transport_charges") or 0)
+        for tax in self.taxes:
+            if tax.charge_type == "Actual" and "freight" in (tax.account_head or "").lower():
+                tax.tax_amount = transport
+                break
+
+    def _apply_transport_gst(self):
+        """After ERPNext calculates taxes On Net Total (items only), add the
+        proportional GST on transport charges to each GST row and update totals.
+
+        Formula: GST row extra = transport × row_rate / 100
+        Grand total = items + transport + GST on (items + transport)
+        """
+        from frappe.utils import flt
+        transport = flt(self.get("custom_transport_charges") or 0)
+        if not transport:
+            return
+
+        has_freight_row = any(
+            t.charge_type == "Actual" and "freight" in (t.account_head or "").lower()
+            for t in self.taxes
+        )
+
+        # Add transport × rate to every On Net Total GST row
+        total_extra = 0.0
+        for tax in self.taxes:
+            if tax.charge_type == "On Net Total" and flt(tax.rate) > 0:
+                extra = flt(transport * flt(tax.rate) / 100, 2)
+                tax.tax_amount = flt(tax.tax_amount) + extra
+                tax.base_tax_amount = flt(tax.base_tax_amount) + extra
+                total_extra += extra
+
+        # If no freight Actual row exists, transport itself isn't in totals yet —
+        # add it now and append a display row so it shows on the invoice.
+        if not has_freight_row:
+            total_extra += transport
+            self.append("taxes", {
+                "charge_type": "Actual",
+                "account_head": "Freight and Forwarding Charges - IB",
+                "description": "Transport Charges",
+                "tax_amount": transport,
+                "base_tax_amount": transport,
+            })
+
+        if total_extra:
+            self.total_taxes_and_charges = flt(self.total_taxes_and_charges) + total_extra
+            self.grand_total            = flt(self.grand_total) + total_extra
+            self.base_grand_total       = flt(self.base_grand_total) + total_extra
+            self.outstanding_amount     = flt(self.outstanding_amount) + total_extra
+            if self.rounded_total is not None:
+                self.rounded_total = flt(self.grand_total, 2)
 
     def _apply_location_gstin(self):
         loc = (self.custom_location or "").lower()

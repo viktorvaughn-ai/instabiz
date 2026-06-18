@@ -6,6 +6,13 @@ frappe.ui.form.on("Lead", {
 	},
 
 	refresh(frm) {
+		// Hide "Assigned To" (lead_owner) from regular sales users — team leaders and above only
+		const can_reassign = frappe.user.has_role("Sales Manager")
+			|| frappe.user.has_role("System Manager")
+			|| frappe.user.has_role("Team Leader");
+		frm.set_df_property("lead_owner", "hidden", can_reassign ? 0 : 1);
+		frm.set_df_property("lead_owner", "read_only", can_reassign ? 0 : 1);
+
 		if (!frm.is_new()) {
 			frm.add_custom_button(__("Log Activity"), () => _ib_log_activity_dialog(frm));
 			if (frappe.user.has_role("Sales Manager") || frappe.user.has_role("System Manager")) {

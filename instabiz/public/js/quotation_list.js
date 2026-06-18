@@ -47,6 +47,7 @@ frappe.listview_settings["Quotation"] = {
     },
 
     onload(listview) {
+        ib_setup_list_print(listview, "Quotation");
         ib_hide_sidebar();
         ib_setup_status_multiselect(listview, "Quotation", [
             "Pending", "Confirmed", "Cancelled", "Draft",

@@ -285,6 +285,32 @@ def recalculate_items(doc):
         item.amount = round((item.get("qty") or 0) * rate, 2)
 
 
+def recalculate_purchase_items(doc):
+	"""
+	For purchase docs (PO / GRN / PI):
+	  - ROLL items where stock_uom=SQMT: enforce rate = custom_sqmt_rate × conversion_factor
+	  - SQMT items with dimensions: compute qty = (width_mm/1000) × length_mtr × qty_pkg × total_pkg
+	    Only when all four dimension fields are present (standalone PO entry).
+	"""
+	if doc.get("is_return"):
+		return
+	for item in doc.get("items") or []:
+		sqmt_rate = float(item.get("custom_sqmt_rate") or 0)
+		cf        = float(item.get("conversion_factor") or 1)
+		uom       = (item.get("uom") or "").strip().upper()
+		stock_uom = (item.get("stock_uom") or "").strip().upper()
+		if sqmt_rate and uom == "ROLL" and stock_uom == "SQMT" and cf > 0:
+			item.rate = round(sqmt_rate * cf, 2)
+			item.price_list_rate = item.rate  # prevent super().validate() from resetting to 0
+		elif uom == "SQMT":
+			w = float(item.get("width_mm") or 0)
+			l = float(item.get("length_mtr") or 0)
+			p = float(item.get("qty_pkg") or 0)
+			t = float(item.get("total_pkg") or 0)
+			if w and l and p and t:
+				item.qty = round((w / 1000) * l * p * t, 6)
+
+
 def map_dimension_fields(source_item, target_item):
     """Copy all dimension + brand/marking custom fields from source to target child row."""
     for field in DIMENSION_FIELDS:

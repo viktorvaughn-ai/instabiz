@@ -38,6 +38,7 @@ frappe.listview_settings["Delivery Note"] = {
 	},
 
 	onload(listview) {
+		ib_setup_list_print(listview, "Delivery Note");
 		ib_hide_sidebar();
 		const warehouseField = listview.page.fields_dict.set_warehouse;
 		if (warehouseField?.$wrapper) warehouseField.$wrapper.hide();

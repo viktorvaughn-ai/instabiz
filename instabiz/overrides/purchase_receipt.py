@@ -8,6 +8,7 @@ from instabiz.overrides.purchase_order import (
 	_apply_purchase_cost_center,
 	_set_location_from_warehouse,
 )
+from instabiz.overrides.utils import recalculate_purchase_items
 from instabiz.overrides.naming import autoname_purchase_receipt
 
 
@@ -19,6 +20,7 @@ class CustomPurchaseReceipt(PurchaseReceipt):
 		_set_location_from_warehouse(self)
 		_auto_correct_purchase_gst_template(self)
 		_apply_purchase_cost_center(self)
+		recalculate_purchase_items(self)
 		super().validate()
 
 	def before_cancel(self):

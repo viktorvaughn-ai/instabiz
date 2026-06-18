@@ -1,11 +1,20 @@
 frappe.listview_settings["Lead"] = Object.assign(
 	frappe.listview_settings["Lead"] || {},
 	{
-		add_fields: ["custom_lead_owner_name", "mobile_no", "phone", "email_id", "source", "custom_status"],
+		add_fields: ["custom_lead_owner_name", "mobile_no", "phone", "email_id", "source", "custom_status", "custom_last_activity_at"],
 
 		formatters: {
+			name: function (value, field, doc) {
+				const raw = doc.custom_last_activity_at || doc.creation || "";
+				const date = frappe.datetime.str_to_user((raw).split(" ")[0]);
+				const label = doc.custom_last_activity_at ? "Last activity" : "Created";
+				return `<span title="${frappe.utils.escape_html(value)}">`
+					+ `<span style="font-size:11px;color:var(--text-muted)">${label}: ${date || ""}</span><br>`
+					+ `<strong>${frappe.utils.escape_html(value)}</strong></span>`;
+			},
 			lead_owner: function (value, field, doc) {
 				if (!value) return "";
+				if (value === frappe.session.user) return __("You");
 				return frappe.utils.escape_html(doc.custom_lead_owner_name || value);
 			},
 		},
@@ -28,15 +37,17 @@ frappe.listview_settings["Lead"] = Object.assign(
 		},
 
 		onload: function (listview) {
+			ib_setup_list_print(listview, "Lead");
+
 			// Preserve ERPNext's own onload (Create Prospect action)
 			const _erpnext_onload = frappe.listview_settings["Lead"]._erpnext_onload;
 			if (_erpnext_onload) _erpnext_onload(listview);
 
-			// Force modified desc — overrides any saved user sort preference
-			listview.sort_by = "modified";
+			// Sort by last activity (most recently contacted first); fall back to modified for never-contacted leads
+			listview.sort_by = "custom_last_activity_at";
 			listview.sort_order = "desc";
 			if (listview.sort_selector) {
-				listview.sort_selector.set_value("modified", "desc");
+				listview.sort_selector.set_value("custom_last_activity_at", "desc");
 			}
 
 			listview.page.add_action_item(__("Transfer Lead(s)"), function () {

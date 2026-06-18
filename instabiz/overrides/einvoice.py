@@ -54,7 +54,8 @@ def run_einvoice_on_submit(doc, method=None):
 	if doc.get("is_return") or doc.get("is_debit_note"):
 		return
 	# B2C invoices don't need IRN
-	if not doc.get("customer_gstin"):
+	# india_compliance uses billing_address_gstin (not customer_gstin) in this version
+	if not (doc.get("billing_address_gstin") or doc.get("customer_gstin")):
 		return
 	# Already has IRN
 	if doc.get("irn"):

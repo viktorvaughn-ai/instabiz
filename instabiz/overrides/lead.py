@@ -339,6 +339,8 @@ def log_lead_activity(lead, activity_type, outcome, notes, next_follow_up_date=N
 		"owner": frappe.session.user,
 	}).insert(ignore_permissions=True)
 
+	frappe.db.set_value("Lead", lead, "custom_last_activity_at", frappe.utils.now(), update_modified=False)
+
 	if next_follow_up_date:
 		frappe.db.set_value("Lead", lead, "custom_next_follow_up_date", next_follow_up_date, update_modified=False)
 

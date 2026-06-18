@@ -31,6 +31,16 @@ def update_customer_outstanding_on_si(doc, method=None):
 
 
 class CustomCustomer(Customer):
+	def before_insert(self):
+		# Auto-assign creating user as the Handled By sales person if not already set.
+		# Skip for Administrator and system users who create customers on behalf of others.
+		if (
+			not self.get("custom_sales_person_user")
+			and frappe.session.user not in ("Administrator", "Guest")
+		):
+			from instabiz.overrides.utils import set_sales_person
+			set_sales_person(self)
+
 	def validate(self):
 		# Prevent the lead_name fetch (add_fetch in customer.js) from
 		# overwriting customer_name on existing records.

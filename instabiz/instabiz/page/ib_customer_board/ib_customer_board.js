@@ -12,6 +12,10 @@ frappe.pages["ib-customer-board"].on_page_show = function (wrapper) {
 	if (wrapper.page_obj) wrapper.page_obj.refresh();
 };
 
+frappe.pages["ib-customer-board"].on_page_hide = function (wrapper) {
+	if (wrapper.page_obj) wrapper.page_obj._stop_live();
+};
+
 class IBCustomerBoard {
 	constructor(page, wrapper) {
 		this.page = page;
@@ -28,6 +32,7 @@ class IBCustomerBoard {
 		this._is_manager = frappe.user.has_role("Sales Manager") || frappe.user.has_role("System Manager");
 		this._last_data = null;
 		this._search_timers = {};
+
 		this._init();
 	}
 
@@ -53,9 +58,48 @@ class IBCustomerBoard {
 				this._wa_templates = r.message.map((t) => t.message);
 			}
 		});
+
 		this._build_toolbar();
 		this._build_skeleton();
 		this.refresh();
+		this._start_live();
+	}
+
+	_start_live() {
+		const self = this;
+		this._live_handler = function (data) {
+			const customer = data && data.customer;
+			const taken_by = data && data.taken_by;
+			if (!customer) return;
+			// Remove the card from Territory column immediately (no full reload)
+			const $card = $(`#ib-cb-regular-cards .ib-cb-card[data-customer="${CSS.escape(customer)}"]`);
+			if ($card.length) {
+				$card.fadeOut(200, function () {
+					$(this).remove();
+					// Decrement badge
+					const $badge = $("#ib-cb-regular-count");
+					const parts = $badge.text().split("/");
+					const shown = Math.max(0, parseInt(parts[0], 10) - 1);
+					const total = parts.length > 1 ? Math.max(0, parseInt(parts[1], 10) - 1) : shown;
+					$badge.text(shown < total ? `${shown} / ${total}` : shown);
+					if (!$("#ib-cb-regular-cards .ib-cb-card").length) {
+						$("#ib-cb-regular-cards").html(`<div class="ib-cb-empty">No unassigned customers in your territory</div>`);
+					}
+				});
+				if (taken_by && taken_by !== frappe.session.user) {
+					const taker = frappe.boot.user_info?.[taken_by]?.fullname || taken_by;
+					frappe.show_alert({ message: `${customer} was taken by ${taker}`, indicator: "orange" }, 4);
+				}
+			}
+		};
+		frappe.realtime.on("ib_territory_taken", this._live_handler);
+	}
+
+	_stop_live() {
+		if (this._live_handler) {
+			frappe.realtime.off("ib_territory_taken", this._live_handler);
+			this._live_handler = null;
+		}
 	}
 
 	// ── Toolbar ──────────────────────────────────────────────────────────────
@@ -105,12 +149,13 @@ class IBCustomerBoard {
 							</div>
 							<span class="ib-cb-target-pct" id="ib-cb-target-pct">0%</span>
 						</div>
+						<div class="ib-cb-target-source" id="ib-cb-target-source"></div>
 					</div>
 				</div>
 				<div class="ib-cb-columns">
 					<div class="ib-cb-col" id="ib-cb-dormant">
 						<div class="ib-cb-col-header">
-							${IB_ICONS.svg("moon", 13)}<span class="ib-cb-col-title">No Recent Orders</span>
+							${IB_ICONS.svg("user", 13)}<span class="ib-cb-col-title">My Accounts</span>
 							<span class="ib-cb-col-badge" id="ib-cb-dormant-count">0</span>
 						</div>
 						<div class="ib-cb-col-search">
@@ -120,7 +165,7 @@ class IBCustomerBoard {
 					</div>
 					<div class="ib-cb-col" id="ib-cb-regular">
 						<div class="ib-cb-col-header">
-							${IB_ICONS.svg("users", 13)}<span class="ib-cb-col-title">Active Customers</span>
+							${IB_ICONS.svg("map_pin", 13)}<span class="ib-cb-col-title">Territory</span>
 							<span class="ib-cb-col-badge" id="ib-cb-regular-count">0</span>
 						</div>
 						<div class="ib-cb-col-search">
@@ -134,6 +179,7 @@ class IBCustomerBoard {
 							<span class="ib-cb-col-date" id="ib-cb-today-date"></span>
 							<span class="ib-cb-col-badge ib-cb-col-badge--today" id="ib-cb-today-count">0</span>
 						</div>
+
 						<div class="ib-cb-today-prog-wrap">
 							<div class="ib-cb-today-prog-fill" id="ib-cb-today-prog-fill"></div>
 						</div>
@@ -184,6 +230,7 @@ class IBCustomerBoard {
 		});
 		frappe.call({
 			method: "instabiz.overrides.sales_target.get_my_target",
+			args: { month: this._selected_date },
 			callback(r) { if (r.message) self._render_target(r.message); },
 		});
 	}
@@ -200,6 +247,26 @@ class IBCustomerBoard {
 		$("#ib-cb-target-goal").text(fmt(t.target));
 		$("#ib-cb-target-pct").text(pct + "%");
 		$("#ib-cb-target-bar-fill").css({ width: pct + "%", background: bar_color });
+		const cnt = t.order_count || 0;
+		const src_text = cnt === 1 ? "1 invoice" : `${cnt} invoices`;
+		// Month date range for SI filter deep-link
+		const _mp = (t.month || "").split("-").map(Number);
+		const _last_day = _mp.length === 3 ? new Date(_mp[0], _mp[1], 0).getDate() : 28;
+		const month_end = t.month ? `${t.month.slice(0, 7)}-${String(_last_day).padStart(2, "0")}` : "";
+		const view_user = frappe.session.user;
+		$("#ib-cb-target-source").html(
+			`From <a class="ib-cb-inv-link" href="#" title="View these invoices">${src_text}</a> · ${frappe.utils.escape_html(month_label)}`
+		);
+		$("#ib-cb-target-source .ib-cb-inv-link").off("click").on("click", function (e) {
+			e.preventDefault();
+			frappe.route_options = {
+				docstatus: 1,
+				is_return: 0,
+				custom_sales_person_user: view_user,
+				posting_date: ["between", [t.month, month_end]],
+			};
+			frappe.set_route("List", "Sales Invoice");
+		});
 		$("#ib-cb-target-card").show();
 	}
 
@@ -209,6 +276,9 @@ class IBCustomerBoard {
 		this._last_data = data;
 		this._tomorrow_date = data.tomorrow_date;
 		if (data.is_manager !== undefined) this._is_manager = data.is_manager;
+		// Track which customers already have active assignments so pool cards show status badges
+		this._today_customer_set    = new Set((data.today    || []).map(r => r.customer));
+		this._tomorrow_customer_set = new Set((data.tomorrow || []).map(r => r.customer));
 		$("#ib-cb-today-date").text(frappe.datetime.str_to_user(data.date));
 		$("#ib-cb-tomorrow-date").text(frappe.datetime.str_to_user(data.tomorrow_date));
 		this._render_pool("dormant", data.dormant, data.dormant_total);
@@ -229,7 +299,10 @@ class IBCustomerBoard {
 		const badge = total !== undefined && total > rows.length ? `${rows.length} / ${total}` : rows.length;
 		$(`#ib-cb-${col}-count`).text(badge);
 		if (!rows.length) {
-			$cards.append(`<div class="ib-cb-empty">No customers</div>`);
+			const empty_msg = col === "dormant"
+				? "No accounts assigned to you yet"
+				: "No unassigned customers in your territory";
+			$cards.append(`<div class="ib-cb-empty">${empty_msg}</div>`);
 		} else {
 			rows.forEach((r) => $cards.append(this._make_card(r, "pool")));
 		}
@@ -395,21 +468,46 @@ class IBCustomerBoard {
 		let inner_html = "";
 
 		if (ctx === "pool") {
+			const esc_cust = frappe.utils.escape_html(r.customer);
+			const in_today    = !!(this._today_customer_set    && this._today_customer_set.has(r.customer));
+			const in_tomorrow = !!(this._tomorrow_customer_set && this._tomorrow_customer_set.has(r.customer));
+			const today_btn = in_today
+				? `<span class="ib-cb-pill ib-cb-pill--in-today">${IB_ICONS.svg("check", 10)} In Today</span>`
+				: `<button class="ib-cb-pill ib-cb-pill--add ib-cb-btn-add-today" data-customer="${esc_cust}">${IB_ICONS.svg("plus", 10)} Add to Today</button>`;
+			const tmrw_btn = in_tomorrow
+				? `<span class="ib-cb-pill ib-cb-pill--in-tomorrow">${IB_ICONS.svg("check", 10)} Tomorrow</span>`
+				: `<button class="ib-cb-pill ib-cb-pill--tomorrow ib-cb-btn-add-tomorrow" data-customer="${esc_cust}">${IB_ICONS.svg("plus", 10)} Tomorrow</button>`;
+
+			// Share controls — only on Currently Handling column
+			// Owned customers show Share button; shared ones show "Shared" badge + self-unshare
+			const is_owned = r.share_relation === "owned" || !r.share_relation;
+			const is_shared_with_me = r.share_relation === "shared";
+			const shared_badge = is_shared_with_me
+				? `<span class="ib-cb-pill ib-cb-pill--shared-badge" title="Shared with you">${IB_ICONS.svg("users", 10)} Shared</span>`
+				: "";
+			const share_btn = is_owned && !this._is_manager
+				? `<button class="ib-cb-pill ib-cb-pill--share ib-cb-btn-share" data-customer="${esc_cust}" title="Share with another user">${IB_ICONS.svg("users", 10)} Share</button>`
+				: (this._is_manager && is_owned)
+					? `<button class="ib-cb-pill ib-cb-pill--share ib-cb-btn-share" data-customer="${esc_cust}" title="Manage sharing">${IB_ICONS.svg("users", 10)} Share</button>`
+					: "";
+			const unshare_btn = is_shared_with_me
+				? `<button class="ib-cb-pill ib-cb-pill--unshare ib-cb-btn-unshare" data-customer="${esc_cust}" title="Remove from my board">✕ Unshare</button>`
+				: "";
+
 			inner_html = `
 				<div class="ib-cb-card-top">
 					<div class="ib-cb-card-name">${name_html}</div>
+					${shared_badge}
 				</div>
 				${territory_line}
 				${contact_line}
 				${last_line}
 				<div class="ib-cb-card-actions">
-					<button class="ib-cb-pill ib-cb-pill--add ib-cb-btn-add-today" data-customer="${frappe.utils.escape_html(r.customer)}">
-						${IB_ICONS.svg("plus", 10)} Add to Today
-					</button>
-					<button class="ib-cb-pill ib-cb-pill--tomorrow ib-cb-btn-add-tomorrow" data-customer="${frappe.utils.escape_html(r.customer)}">
-						${IB_ICONS.svg("plus", 10)} Tomorrow
-					</button>
+					${today_btn}
+					${tmrw_btn}
 					${wa_btn}
+					${share_btn}
+					${unshare_btn}
 				</div>
 			`;
 		} else if (ctx === "today" || ctx === "today_done") {
@@ -433,6 +531,16 @@ class IBCustomerBoard {
 				? `<span class="ib-cb-done-badge ib-cb-done-badge--${r.status === "Skipped" ? "skip" : "done"}">${r.status === "Skipped" ? "SKIP" : "DONE"}</span>`
 				: `<span class="ib-cb-status ib-cb-status--pending">${r.status}</span>`;
 
+			// Claim button: show when customer has no owner or is owned by someone else
+			// (source_pool indicates this came from territory, not from My Accounts)
+			const is_unowned = !r.custom_sales_person_user || r.custom_sales_person_user !== frappe.session.user;
+			const from_territory = r.source_pool === "Dormant" || r.source_pool === "Regular";
+			const claim_btn = (!is_done && is_unowned && from_territory)
+				? `<button class="ib-cb-pill ib-cb-pill--claim ib-cb-btn-claim" data-customer="${frappe.utils.escape_html(r.customer)}" title="Add to My Accounts">
+						${IB_ICONS.svg("user", 10)} Claim Account
+					</button>`
+				: "";
+
 			let actions = "";
 			if (!is_done) {
 				actions = `
@@ -443,6 +551,7 @@ class IBCustomerBoard {
 						<button class="ib-cb-pill ib-cb-pill--quote ib-cb-btn-q" data-customer="${frappe.utils.escape_html(r.customer)}">
 							${IB_ICONS.svg("file", 10)} Quote
 						</button>
+						${claim_btn}
 						${wa_btn}
 					</div>`;
 			}
@@ -494,12 +603,51 @@ class IBCustomerBoard {
 			$card.find(".ib-cb-btn-add-tomorrow").on("click", function () {
 				self._add_to_tomorrow($(this).data("customer"), $(this));
 			});
+			$card.find(".ib-cb-btn-share").on("click", function () {
+				self._show_share_dialog(r.customer, r.customer_name || r.customer);
+			});
+			$card.find(".ib-cb-btn-unshare").on("click", function () {
+				frappe.confirm(
+					`Remove ${frappe.utils.escape_html(r.customer_name || r.customer)} from your board?`,
+					() => {
+						frappe.call({
+							method: "instabiz.overrides.customer_assignment.unshare_customer",
+							args: { customer: r.customer, share_with: frappe.session.user },
+							callback(res) {
+								if (!res.exc) {
+									frappe.show_alert({ message: "Removed from your board", indicator: "orange" });
+									self.refresh();
+								}
+							},
+						});
+					}
+				);
+			});
 		} else if (ctx === "today") {
 			$card.find(".ib-cb-btn-q").on("click", () =>
 				frappe.new_doc("Quotation", { party_name: r.customer, quotation_to: "Customer" })
 			);
 			$card.find(".ib-cb-btn-log").on("click", () => self._show_log_activity_dialog(r.customer, r.customer_name, r.name));
 			$card.find(".ib-cb-btn-skip").on("click", () => self._skip_with_undo(r.name, r.customer_name || r.customer, $card));
+			$card.find(".ib-cb-btn-claim").on("click", function () {
+				const cust = $(this).data("customer");
+				const cust_name = r.customer_name || cust;
+				frappe.confirm(
+					`Add <b>${frappe.utils.escape_html(cust_name)}</b> to your My Accounts?<br>` +
+					`This permanently assigns the customer to you.`,
+					() => {
+						frappe.call({
+							method: "instabiz.overrides.customer_assignment.self_assign_customer",
+							args: { customer: cust },
+							callback(res) {
+								if (res.exc) return;
+								frappe.show_alert({ message: `${cust_name} added to My Accounts`, indicator: "green" });
+								self.refresh();
+							},
+						});
+					}
+				);
+			});
 		}
 
 		if (ctx === "pool" || ctx === "today") {
@@ -912,6 +1060,121 @@ class IBCustomerBoard {
 				{ boxShadow: `0 0 0 2px ${color}, 0 0 18px rgba(${rgb},0.45)` },
 				{ boxShadow: `0 0 0 0px ${color}, 0 0 0px rgba(${rgb},0)`, duration: 1.6, ease: "power3.out", clearProps: "boxShadow" }
 			);
+		});
+	}
+
+	// ── Customer Sharing ─────────────────────────────────────────────────────
+
+	_show_share_dialog(customer, customer_name) {
+		const self = this;
+
+		frappe.call({
+			method: "instabiz.overrides.customer_assignment.get_customer_shares",
+			args: { customer },
+			callback(r) {
+				if (r.exc) return;
+				const current_shares = r.message || [];
+
+				frappe.call({
+					method: "frappe.client.get_list",
+					args: {
+						doctype: "User",
+						filters: [
+							["Has Role", "role", "=", "Sales User"],
+							["enabled", "=", 1],
+							["name", "!=", frappe.session.user],
+						],
+						fields: ["name", "full_name"],
+						limit: 200,
+					},
+					callback(r2) {
+						if (r2.exc) return;
+						const all_users = r2.message || [];
+						const shared_with_set = new Set(current_shares.map((s) => s.shared_with));
+
+						// Build current shares table HTML
+						const shares_html = current_shares.length
+							? `<div class="ib-share-current">
+								<div class="ib-share-section-lbl">Currently shared with:</div>
+								${current_shares.map((s) => `
+									<div class="ib-share-row" data-user="${frappe.utils.escape_html(s.shared_with)}">
+										<span class="ib-share-user">${frappe.utils.escape_html(s.shared_with_name || s.shared_with)}</span>
+										<button class="ib-share-remove btn btn-xs btn-danger" data-user="${frappe.utils.escape_html(s.shared_with)}">Remove</button>
+									</div>
+								`).join("")}
+							</div>`
+							: `<div class="ib-share-empty">Not shared with anyone yet.</div>`;
+
+						// Available users to share with (exclude already-shared + owner)
+						const owner = frappe.session.user;
+						const available = all_users.filter((u) => !shared_with_set.has(u.name) && u.name !== owner);
+
+						const d = new frappe.ui.Dialog({
+							title: `Share — ${customer_name}`,
+							fields: [
+								{
+									fieldname: "current_shares_html",
+									fieldtype: "HTML",
+									options: shares_html,
+								},
+								{
+									fieldname: "share_with_section",
+									fieldtype: "Section Break",
+									label: available.length ? "Add Share" : "",
+								},
+								...(available.length ? [{
+									fieldname: "share_with",
+									label: "Share With",
+									fieldtype: "Select",
+									options: available.map((u) => `${u.name}|${u.full_name || u.name}`).join("\n"),
+									reqd: 0,
+								}] : [{
+									fieldname: "_no_users_html",
+									fieldtype: "HTML",
+									options: `<div class="text-muted">All available users already have access.</div>`,
+								}]),
+							],
+							primary_action_label: available.length ? "Share" : "Close",
+							primary_action(values) {
+								if (!available.length) { d.hide(); return; }
+								const target = (values.share_with || "").split("|")[0];
+								if (!target) { frappe.show_alert({ message: "Select a user", indicator: "orange" }); return; }
+								frappe.call({
+									method: "instabiz.overrides.customer_assignment.share_customer",
+									args: { customer, share_with: target },
+									callback(res) {
+										if (!res.exc) {
+											const uname = available.find((u) => u.name === target);
+											frappe.show_alert({ message: `Shared with ${uname ? uname.full_name : target}`, indicator: "green" });
+											d.hide();
+											self.refresh();
+										}
+									},
+								});
+							},
+						});
+
+						d.show();
+
+						// Bind remove buttons in the current-shares section
+						d.$wrapper.find(".ib-share-remove").on("click", function () {
+							const target = $(this).data("user");
+							const $row = $(this).closest(".ib-share-row");
+							frappe.call({
+								method: "instabiz.overrides.customer_assignment.unshare_customer",
+								args: { customer, share_with: target },
+								callback(res) {
+									if (!res.exc) {
+										$row.fadeOut(200, function () { $(this).remove(); });
+										frappe.show_alert({ message: "Access removed", indicator: "orange" });
+										self.refresh();
+									}
+								},
+							});
+						});
+					},
+				});
+			},
 		});
 	}
 

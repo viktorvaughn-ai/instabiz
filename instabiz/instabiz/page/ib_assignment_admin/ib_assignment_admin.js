@@ -87,6 +87,7 @@ class IBAssignmentAdmin {
 		if (_is_full_manager) {
 			this.page.add_inner_button("+ Create New Team", () => self._show_create_team_modal());
 			this.page.add_inner_button("Config", () => self._show_config_modal());
+			this.page.add_inner_button("Fix Excess Assignments", () => self._run_cleanup());
 		}
 		this.page.add_inner_button("Refresh", () => self.refresh());
 	}
@@ -275,7 +276,6 @@ class IBAssignmentAdmin {
 				<div class="ib-aa-rth ib-aa-rth--stat">Done</div>
 				<div class="ib-aa-rth ib-aa-rth--stat">Pending</div>
 				<div class="ib-aa-rth ib-aa-rth--stat">Tomorrow</div>
-				<div class="ib-aa-rth ib-aa-rth--bar">Assignments</div>
 				<div class="ib-aa-rth ib-aa-rth--target">Sales Target</div>
 				<div class="ib-aa-rth ib-aa-rth--actions"></div>
 			</div>
@@ -284,7 +284,7 @@ class IBAssignmentAdmin {
 		const render_group = (team_key, users) => {
 			const av_color = self._avatar_color(users[0].user, users[0].team);
 			const team_label = team_key === "__none__" ? "Unassigned" : team_key;
-			const avg_pct = Math.round(users.reduce((s, u) => s + (u.completion_pct || 0), 0) / users.length);
+			const avg_pct = Math.round(users.reduce((s, u) => s + (u.target_pct || 0), 0) / users.length);
 			const is_collapsed = self._collapsed_teams.has(team_key);
 
 			const terr_list = (team_territories || {})[team_key] || [];
@@ -323,10 +323,7 @@ class IBAssignmentAdmin {
 			}
 
 			users.forEach(u => {
-				const pct = u.completion_pct || 0;
 				const initials = (u.full_name || u.user).split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
-				const bar_color = pct >= 80 ? "#22c55e" : pct >= 40 ? "var(--ib-primary)" : "#cbd5e1";
-				const pct_cls = pct >= 80 ? "good" : pct >= 40 ? "mid" : "low";
 				const av = self._avatar_color(u.user, u.team);
 				const is_today = self._date === frappe.datetime.get_today();
 				const no_tmrw = is_today && (u.tomorrow_count || 0) === 0;
@@ -339,11 +336,18 @@ class IBAssignmentAdmin {
 				};
 				const tpct = u.target_pct || 0;
 				const tpct_cls = tpct >= 80 ? "good" : tpct >= 40 ? "mid" : "low";
-				const target_html = `<div class="ib-aa-row-target-text">
-					<span class="ib-aa-target-actual ib-aa-pct--${tpct_cls}">${fmt_short(u.actual || 0)}</span>
-					<span class="ib-aa-target-sep">/</span>
-					<span class="ib-aa-target-goal">${fmt_short(u.target || 0)}</span>
-				</div>`;
+				const tbar_color = tpct >= 80 ? "#22c55e" : tpct >= 40 ? "var(--ib-primary)" : "#cbd5e1";
+				const target_html = u.target ? `<div class="ib-aa-row-target-wrap">
+					<div class="ib-aa-row-target-text">
+						<span class="ib-aa-target-actual ib-aa-pct--${tpct_cls}">${fmt_short(u.actual || 0)}</span>
+						<span class="ib-aa-target-sep">/</span>
+						<span class="ib-aa-target-goal">${fmt_short(u.target || 0)}</span>
+						<span class="ib-aa-target-pct ib-aa-pct--${tpct_cls}">${tpct}%</span>
+					</div>
+					<div class="ib-aa-target-bar-track">
+						<div class="ib-aa-target-bar-fill" style="width:${Math.min(tpct,100)}%;background:${tbar_color}"></div>
+					</div>
+				</div>` : `<div class="ib-aa-row-target-wrap"><span class="ib-aa-target-goal" style="padding-left:8px">—</span></div>`;
 
 				const $row = $(`
 					<div class="ib-aa-user-row">
@@ -358,12 +362,6 @@ class IBAssignmentAdmin {
 						<div class="ib-aa-row-stat ib-aa-row-stat--done">${u.done}</div>
 						<div class="ib-aa-row-stat ib-aa-row-stat--pending">${u.pending}</div>
 						<div class="ib-aa-row-stat ib-aa-row-stat--tmrw">${u.tomorrow_count}</div>
-						<div class="ib-aa-row-bar-wrap">
-							<span class="ib-aa-row-pct ib-aa-pct--${pct_cls}">${pct}%</span>
-							<div class="ib-aa-row-bar-track">
-								<div class="ib-aa-row-bar-fill" style="width:${pct}%;background:${bar_color}"></div>
-							</div>
-						</div>
 						${target_html}
 						<div class="ib-aa-row-actions">
 							<button class="ib-aa-btn-kebab" title="Actions">⋮</button>
@@ -920,7 +918,7 @@ class IBAssignmentAdmin {
 				<div class="ib-va-columns">
 					<div class="ib-va-col">
 						<div class="ib-va-col-header">
-							${IB_ICONS.svg("moon", 13)}<span class="ib-va-col-title">Dormant</span>
+							${IB_ICONS.svg("user", 13)}<span class="ib-va-col-title">My Accounts</span>
 							<span class="ib-va-badge" id="ib-va-dormant-count">0</span>
 						</div>
 						<input class="ib-va-col-search" id="ib-va-dormant-search" placeholder="Search…" autocomplete="off">
@@ -928,7 +926,7 @@ class IBAssignmentAdmin {
 					</div>
 					<div class="ib-va-col">
 						<div class="ib-va-col-header">
-							${IB_ICONS.svg("users", 13)}<span class="ib-va-col-title">Regular</span>
+							${IB_ICONS.svg("map_pin", 13)}<span class="ib-va-col-title">Territory</span>
 							<span class="ib-va-badge" id="ib-va-regular-count">0</span>
 						</div>
 						<input class="ib-va-col-search" id="ib-va-regular-search" placeholder="Search…" autocomplete="off">
@@ -1249,6 +1247,30 @@ class IBAssignmentAdmin {
 		});
 	}
 
+	_run_cleanup() {
+		const self = this;
+		frappe.confirm(
+			"This will trim Pending assignments exceeding the daily quota for today and tomorrow. Continue?",
+			() => {
+				frappe.call({
+					method: "instabiz.overrides.customer_assignment.cleanup_excess_assignments",
+					freeze: true,
+					freeze_message: "Cleaning up excess assignments…",
+					callback(r) {
+						if (r.message != null) {
+							const { removed_excess, total_removed } = r.message;
+							frappe.show_alert({
+								message: `Cleanup done: ${removed_excess} excess assignment${removed_excess !== 1 ? "s" : ""} removed`,
+								indicator: total_removed > 0 ? "green" : "blue",
+							});
+							self.refresh();
+						}
+					},
+				});
+			}
+		);
+	}
+
 	// ── Styles ────────────────────────────────────────────────────────────────
 
 	_inject_styles() {
@@ -1314,8 +1336,7 @@ class IBAssignmentAdmin {
 			}
 			.ib-aa-rth--name    { flex: 1; min-width: 0; }
 			.ib-aa-rth--stat    { width: 72px; text-align: center; border-left: 1px solid var(--border-color); }
-			.ib-aa-rth--bar     { width: 210px; padding-left: 8px; border-left: 1px solid var(--border-color); }
-			.ib-aa-rth--target  { width: 150px; padding-left: 8px; border-left: 1px solid var(--border-color); }
+			.ib-aa-rth--target  { width: 220px; padding-left: 8px; border-left: 1px solid var(--border-color); }
 
 			/* Team group */
 			.ib-aa-team-group { border-bottom: 2px solid var(--border-color); }
@@ -1393,27 +1414,28 @@ class IBAssignmentAdmin {
 			.ib-aa-row-stat--pending { color: #b45309; }
 			.ib-aa-row-stat--tmrw    { color: #1d4ed8; }
 
-			/* Bar cells — each 210px, always visible */
-			.ib-aa-row-bar-wrap {
-				width: 210px; flex-shrink: 0;
-				display: flex; align-items: center; gap: 8px;
-				border-left: 1px solid var(--border-color); padding-left: 8px;
-			}
-			.ib-aa-no-target {
-				width: 210px; flex-shrink: 0;
-				display: flex; align-items: center; padding-left: 8px;
-				font-size: 12px; color: var(--text-muted);
+			.ib-aa-row-target-wrap {
+				width: 220px; flex-shrink: 0;
+				display: flex; flex-direction: column; gap: 3px; padding-left: 8px;
 				border-left: 1px solid var(--border-color);
+				justify-content: center;
 			}
 			.ib-aa-row-target-text {
-				width: 150px; flex-shrink: 0;
-				display: flex; align-items: center; gap: 4px; padding-left: 8px;
-				border-left: 1px solid var(--border-color);
+				display: flex; align-items: center; gap: 4px;
 				font-size: 12px; font-variant-numeric: tabular-nums;
 			}
 			.ib-aa-target-actual { font-weight: 700; }
 			.ib-aa-target-sep { color: var(--text-muted); font-size: 11px; }
 			.ib-aa-target-goal { color: var(--text-muted); }
+			.ib-aa-target-pct { font-size: 10px; font-weight: 700; margin-left: auto; }
+			.ib-aa-target-bar-track {
+				height: 4px; background: var(--border-color);
+				border-radius: 3px; overflow: hidden;
+			}
+			.ib-aa-target-bar-fill {
+				height: 100%; border-radius: 3px;
+				transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
+			}
 			.ib-aa-row-bar-track {
 				flex: 1; height: 6px; background: var(--border-color);
 				border-radius: 4px; overflow: hidden;
@@ -1422,7 +1444,6 @@ class IBAssignmentAdmin {
 				height: 100%; border-radius: 4px;
 				transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
 			}
-			.ib-aa-row-pct { font-size: 11px; font-weight: 700; width: 34px; text-align: right; flex-shrink: 0; }
 			.ib-aa-pct--good { color: #16a34a; }
 			.ib-aa-pct--mid  { color: var(--ib-primary); }
 			.ib-aa-pct--low  { color: #94a3b8; }
@@ -1838,10 +1859,8 @@ class IBAssignmentAdmin {
 
 			@media (max-width: 900px) {
 				.ib-va-columns { grid-template-columns: repeat(2, 1fr); }
-				.ib-aa-rth--bar { width: 140px; }
-				.ib-aa-rth--target { display: none; }
-				.ib-aa-row-bar-wrap, .ib-aa-no-target { width: 140px; }
-				.ib-aa-row-target-text { display: none; }
+				.ib-aa-rth--target { width: 140px; }
+				.ib-aa-row-target-wrap { width: 140px; }
 				.ib-aa-btn-transfer { display: none; }
 				.ib-aa-qth--territory, .ib-aa-qcol--territory { display: none; }
 				.ib-aa-qth--last, .ib-aa-qcol--last { display: none; }

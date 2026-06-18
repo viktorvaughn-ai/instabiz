@@ -1,169 +1,247 @@
+{# ── Company ──────────────────────────────────────────────────────────────────── #}
 {% set co = frappe.get_doc("Company", doc.company) %}
 {% set co_addr = frappe.db.get_value("Address", doc.company_address,
     ["address_line1","address_line2","city","state","pincode"], as_dict=True)
     if doc.company_address else None %}
+{% set sup_name = frappe.db.get_value("Supplier", doc.supplier, "supplier_name") or doc.supplier %}
 {% set sup_addr = frappe.db.get_value("Address", doc.supplier_address,
-    ["address_line1","address_line2","city","state","pincode"], as_dict=True)
+    ["address_line1","address_line2","city","state","pincode","gstin"], as_dict=True)
     if doc.supplier_address else None %}
 
+{# ── State codes ───────────────────────────────────────────────────────────────── #}
+{% set co_state_code  = doc.company_gstin[:2]|int if doc.company_gstin and doc.company_gstin|length >= 2 else 0 %}
+{% set sup_gstin      = doc.supplier_gstin or (sup_addr.gstin if sup_addr else "") or "" %}
+{% set sup_state_code = sup_gstin[:2]|int if sup_gstin|length >= 2 else 0 %}
+
+{# ── Doc-level GST rate fallback ───────────────────────────────────────────────── #}
+{% set ns_doc = namespace(doc_gst=0) %}
+{% for t in doc.taxes %}{% set ns_doc.doc_gst = ns_doc.doc_gst + (t.rate or 0) %}{% endfor %}
+
+{# ── Helpers ───────────────────────────────────────────────────────────────────── #}
+{% macro fd(d) %}{% if d %}{{ frappe.utils.formatdate(d, "dd-MMM-yy") }}{% endif %}{% endmacro %}
+{% macro fm(v) %}{{ frappe.utils.fmt_money(v|float, precision=2, currency=doc.currency) }}{% endmacro %}
+
 <style>
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; }
-  .po-header { text-align: center; margin-bottom: 10px; border-bottom: 2px solid #d97757; padding-bottom: 8px; }
-  .po-header h2 { margin: 0 0 2px; font-size: 15px; }
-  .po-header h3 { margin: 0; font-size: 12px; color: #555; }
-  .po-title { text-align: center; font-size: 14px; font-weight: bold; letter-spacing: 1px;
-              background: #d97757; color: #fff; padding: 4px 0; margin-bottom: 12px; }
-  .po-parties { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-  .po-parties td { vertical-align: top; padding: 0 8px; width: 50%; }
-  .po-parties .party-box { border: 1px solid #ddd; padding: 6px 10px; min-height: 70px; }
-  .po-parties .party-label { font-weight: bold; font-size: 10px; color: #d97757;
-                              text-transform: uppercase; margin-bottom: 4px; }
-  .po-meta { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-  .po-meta td { padding: 2px 8px; }
-  .po-meta .lbl { font-weight: bold; color: #444; width: 130px; }
-  .po-meta tr:nth-child(odd) td { background: #fafafa; }
-  table.items { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-  table.items th { background: #d97757; color: #fff; padding: 5px 8px; text-align: left; font-size: 11px; }
-  table.items td { border-bottom: 1px solid #e8e8e8; padding: 4px 8px; vertical-align: top; }
-  table.items tr:nth-child(even) td { background: #fafafa; }
-  table.items .num { text-align: right; }
-  .totals-table { width: 50%; margin-left: auto; border-collapse: collapse; margin-bottom: 12px; }
-  .totals-table td { padding: 3px 8px; }
-  .totals-table .lbl { color: #444; }
-  .totals-table .grand { font-weight: bold; font-size: 12px; border-top: 2px solid #d97757; }
-  .words-box { background: #fdf6f3; border: 1px solid #e8cfc4; padding: 5px 10px;
-               font-style: italic; margin-bottom: 12px; }
-  .notes-box { border-left: 3px solid #d97757; padding: 4px 10px; background: #fafafa;
-               margin-bottom: 14px; font-size: 10px; }
-  .sig-row { width: 100%; border-collapse: collapse; margin-top: 20px; }
-  .sig-row td { width: 33%; text-align: center; padding: 0 10px; }
-  .sig-line { border-top: 1px solid #444; padding-top: 4px; font-size: 10px; color: #555; }
+  body   { font-family: Arial, sans-serif; font-size: 11px; color: #000; margin: 0; }
+  table  { width: 100%; border-collapse: collapse; }
+  td, th { padding: 4px 6px; vertical-align: top; }
+  strong { font-weight: bold; }
+  .box   { border: 1.5px solid #000; margin-bottom: 2px; }
+  .b     { border: 1px solid #000; }
+  .bb    { border-bottom: 1px solid #000; }
+  .bt    { border-top: 1px solid #000; }
+  .br    { border-right: 1px solid #000; }
+  .ta-r  { text-align: right; }
+  .ta-c  { text-align: center; }
+  .lbl   { color: #555; font-size: 10px; }
+  .italic{ font-style: italic; }
 </style>
 
-{# ── Header ── #}
-<div class="po-header">
-  <h2>{{ doc.company }}</h2>
-  {% if co_addr %}
-  <h3>
-    {{ co_addr.address_line1 or "" }}{% if co_addr.address_line2 %}, {{ co_addr.address_line2 }}{% endif %},
-    {{ co_addr.city or "" }}, {{ co_addr.state or "" }} - {{ co_addr.pincode or "" }}
-  </h3>
-  {% endif %}
-  {% if doc.company_gstin %}
-  <h3>GSTIN: {{ doc.company_gstin }}</h3>
-  {% endif %}
-</div>
+<div class="box">
 
-<div class="po-title">PURCHASE ORDER</div>
+  {# ── Title ── #}
+  <div style="text-align:center; padding:5px 6px; border-bottom:1px solid #000; font-size:13px; letter-spacing:1px">
+    <strong>Purchase Order</strong>
+  </div>
 
-{# ── Parties ── #}
-<table class="po-parties">
-  <tr>
-    <td>
-      <div class="party-box">
-        <div class="party-label">Supplier</div>
-        <strong>{{ doc.supplier }}</strong><br>
+  {# ── Company header (left) + PO meta grid (right) ── #}
+  <table class="bb">
+    <tr>
+      <td class="br" style="width:55%">
+        {% if co.company_logo %}
+        <img src="{{ co.company_logo }}" style="height:40px; float:left; margin-right:8px; margin-bottom:4px">
+        {% endif %}
+        <strong>{{ doc.company }}</strong><br>
+        {% if co_addr %}
+          {{ co_addr.address_line1 or "" }}{% if co_addr.address_line2 %}, {{ co_addr.address_line2 }}{% endif %}<br>
+          {% if co_addr.city %}{{ co_addr.city }}{% endif %}{% if co_addr.pincode %} {{ co_addr.pincode }}{% endif %}<br>
+        {% endif %}
+        GSTIN/UIN: {{ doc.company_gstin or "—" }}<br>
+        State: {{ get_state(co_state_code) if co_state_code else "—" }}, Code: {{ co_state_code or "—" }}<br>
+        {% if co.phone_no %}Contact: {{ co.phone_no }}<br>{% endif %}
+        {% if co.email %}E-Mail: {{ co.email }}{% endif %}
+      </td>
+      <td style="width:45%; padding:0; vertical-align:top">
+        <table>
+          <tr>
+            <td class="bb br lbl" style="width:50%">PO Number</td>
+            <td class="bb lbl">Dated</td>
+          </tr>
+          <tr>
+            <td class="bb br"><strong>{{ doc.name }}</strong></td>
+            <td class="bb"><strong>{{ fd(doc.transaction_date) }}</strong></td>
+          </tr>
+          <tr>
+            <td class="bb br lbl">Required By</td>
+            <td class="bb lbl">Currency</td>
+          </tr>
+          <tr>
+            <td class="bb br">{{ fd(doc.schedule_date) if doc.schedule_date else "—" }}</td>
+            <td class="bb">{{ doc.currency }}</td>
+          </tr>
+          <tr>
+            <td class="bb br lbl">Payment Terms</td>
+            <td class="bb lbl">Place of Supply</td>
+          </tr>
+          <tr>
+            <td class="bb br">{{ doc.payment_terms_template or "—" }}</td>
+            <td class="bb">{{ doc.place_of_supply or "—" }}</td>
+          </tr>
+          <tr>
+            <td class="bb br lbl">Location</td>
+            <td class="bb lbl">Tax Template</td>
+          </tr>
+          <tr>
+            <td class="bb br">{{ doc.custom_location or "—" }}</td>
+            <td class="bb">{{ doc.taxes_and_charges or "—" }}</td>
+          </tr>
+          <tr>
+            <td colspan="2" style="min-height:14px; padding:4px 6px;">&nbsp;</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  {# ── Supplier + Ship To ── #}
+  <table class="bb">
+    <tr>
+      <td class="br" style="width:55%">
+        <div class="lbl">Supplier</div>
+        <strong>{{ sup_name }}</strong><br>
         {% if sup_addr %}
-        {{ sup_addr.address_line1 or "" }}{% if sup_addr.address_line2 %}<br>{{ sup_addr.address_line2 }}{% endif %}<br>
-        {{ sup_addr.city or "" }}{% if sup_addr.state %}, {{ sup_addr.state }}{% endif %}{% if sup_addr.pincode %} - {{ sup_addr.pincode }}{% endif %}
+          {{ sup_addr.address_line1 or "" }}{% if sup_addr.address_line2 %}, {{ sup_addr.address_line2 }}{% endif %}<br>
+          {{ sup_addr.city or "" }}{% if sup_addr.state %}, {{ sup_addr.state }}{% endif %}{% if sup_addr.pincode %} {{ sup_addr.pincode }}{% endif %}<br>
         {% endif %}
-        {% if doc.supplier_gstin %}<br><strong>GSTIN:</strong> {{ doc.supplier_gstin }}{% endif %}
-      </div>
-    </td>
-    <td>
-      <div class="party-box">
-        <div class="party-label">Ship To / Deliver At</div>
-        {% if doc.set_warehouse %}
-        <strong>{{ doc.set_warehouse }}</strong>
-        {% else %}
+        GSTIN/UIN: {{ sup_gstin or "—" }}<br>
+        State: {{ get_state(sup_state_code) if sup_state_code else "—" }}, Code: {{ sup_state_code or "—" }}
+      </td>
+      <td style="width:45%">
+        <div class="lbl">Ship To / Deliver At</div>
+        <strong>{{ doc.set_warehouse or doc.company }}</strong><br>
+        {% if doc.custom_location %}Location: <strong>{{ doc.custom_location }}</strong><br>{% endif %}
         {{ doc.company }}
-        {% endif %}
-        {% if doc.custom_location %}<br>Location: {{ doc.custom_location }}{% endif %}
-      </div>
-    </td>
-  </tr>
-</table>
-
-{# ── Meta ── #}
-<table class="po-meta">
-  <tr>
-    <td class="lbl">PO Number</td><td>{{ doc.name }}</td>
-    <td class="lbl">Date</td><td>{{ frappe.utils.formatdate(doc.transaction_date, "dd-MMM-yyyy") }}</td>
-  </tr>
-  <tr>
-    <td class="lbl">Required By</td><td>{{ frappe.utils.formatdate(doc.schedule_date, "dd-MMM-yyyy") if doc.schedule_date else "—" }}</td>
-    <td class="lbl">Currency</td><td>{{ doc.currency }}</td>
-  </tr>
-  <tr>
-    <td class="lbl">Payment Terms</td><td>{{ doc.payment_terms_template or "—" }}</td>
-    <td class="lbl">Place of Supply</td><td>{{ doc.place_of_supply or "—" }}</td>
-  </tr>
-  {% if doc.taxes_and_charges %}
-  <tr>
-    <td class="lbl">Tax Template</td><td colspan="3">{{ doc.taxes_and_charges }}</td>
-  </tr>
-  {% endif %}
-</table>
-
-{# ── Items ── #}
-<table class="items">
-  <thead>
-    <tr>
-      <th style="width:30px">#</th>
-      <th>Item Code</th>
-      <th>Description</th>
-      <th class="num" style="width:60px">Qty</th>
-      <th style="width:50px">UOM</th>
-      <th class="num" style="width:80px">Rate</th>
-      <th class="num" style="width:90px">Amount</th>
+      </td>
     </tr>
-  </thead>
-  <tbody>
-  {% for row in doc.items %}
+  </table>
+
+  {# ── Items table ── #}
+  <table>
+    <thead>
+      <tr>
+        <th class="b ta-c" style="width:4%">Sl<br>No.</th>
+        <th class="b" style="width:32%">Description of Goods</th>
+        <th class="b ta-c" style="width:8%">HSN/<br>SAC</th>
+        <th class="b ta-c" style="width:6%">GST<br>Rate</th>
+        <th class="b ta-r" style="width:8%">Qty</th>
+        <th class="b ta-c" style="width:5%">UOM</th>
+        <th class="b ta-r" style="width:9%">Rate/<br>SQMT</th>
+        <th class="b ta-r" style="width:9%">Rate</th>
+        <th class="b ta-c" style="width:5%">per</th>
+        <th class="b ta-r" style="width:10%">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in doc.items %}
+      {# Per-row GST rate #}
+      {% set ns_gst = namespace(rate=0) %}
+      {% set _igst = (row.igst_rate or 0)|float %}
+      {% set _cgst = (row.cgst_rate or 0)|float %}
+      {% set _sgst = (row.sgst_rate or 0)|float %}
+      {% set ns_gst.rate = _igst + _cgst + _sgst %}
+      {% if ns_gst.rate == 0 %}{% set ns_gst.rate = ns_doc.doc_gst %}{% endif %}
+      {# ROLL/SQMT check #}
+      {% set is_roll = (row.uom or "")|upper == "ROLL" and (row.stock_uom or "")|upper == "SQMT" and (row.conversion_factor or 0)|float > 0 %}
+      <tr>
+        <td class="b ta-c">{{ loop.index }}</td>
+        <td class="b">
+          <strong>{{ row.item_name or row.item_code }}</strong>
+          {% if row.description and row.description != row.item_name %}
+          <br><span class="italic lbl">{{ row.description | striptags | trim }}</span>
+          {% endif %}
+        </td>
+        <td class="b ta-c">{{ row.gst_hsn_code or "" }}</td>
+        <td class="b ta-c">{% if ns_gst.rate %}{{ "%g" | format(ns_gst.rate) }}%{% endif %}</td>
+        <td class="b ta-r">{{ fm(row.qty) }}</td>
+        <td class="b ta-c">{{ row.uom }}</td>
+        <td class="b ta-r">{% if is_roll and row.custom_sqmt_rate %}{{ fm(row.custom_sqmt_rate) }}{% endif %}</td>
+        <td class="b ta-r">{{ fm(row.rate) }}</td>
+        <td class="b ta-c">{{ row.uom }}</td>
+        <td class="b ta-r">{{ fm(row.amount) }}</td>
+      </tr>
+      {% endfor %}
+
+      {# Net Total #}
+      <tr>
+        <td class="b" colspan="9" style="text-align:right"></td>
+        <td class="b ta-r">{{ fm(doc.net_total) }}</td>
+      </tr>
+
+      {# Tax rows #}
+      {% for tax in doc.taxes %}
+      {% if tax.tax_amount %}
+      <tr class="italic">
+        <td class="b" colspan="8" style="text-align:right">{{ tax.description }} {{ "%g" | format(tax.rate) }} %</td>
+        <td class="b ta-c">%</td>
+        <td class="b ta-r">{{ fm(tax.tax_amount) }}</td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+
+      {# Spacers #}
+      {% for _i in range(4) %}
+      <tr style="height:16px"><td class="b" colspan="10"></td></tr>
+      {% endfor %}
+
+      {# Grand Total #}
+      <tr>
+        <td class="b ta-r" colspan="9"><strong>Grand Total</strong></td>
+        <td class="b ta-r"><strong>&#8377;&nbsp;{{ fm(doc.grand_total) }}</strong></td>
+      </tr>
+    </tbody>
+  </table>
+
+  {# ── Amount in words ── #}
+  <table class="bt">
     <tr>
-      <td>{{ loop.index }}</td>
-      <td>{{ row.item_code }}</td>
-      <td>{{ row.item_name }}{% if row.description and row.description != row.item_name %}<br><span style="color:#666;font-size:10px">{{ row.description }}</span>{% endif %}</td>
-      <td class="num">{{ row.qty }}</td>
-      <td>{{ row.uom }}</td>
-      <td class="num">{{ frappe.utils.fmt_money(row.rate, precision=2, currency=doc.currency) }}</td>
-      <td class="num">{{ frappe.utils.fmt_money(row.amount, precision=2, currency=doc.currency) }}</td>
+      <td class="br" style="width:60%">
+        <strong>Amount Chargeable (in words)</strong><br>
+        <strong>{{ frappe.utils.money_in_words(doc.grand_total, doc.currency) }}</strong>
+      </td>
+      <td class="ta-r"><span class="italic">E. &amp; O.E</span></td>
     </tr>
-  {% endfor %}
-  </tbody>
-</table>
+  </table>
 
-{# ── Totals ── #}
-<table class="totals-table">
-  <tr><td class="lbl">Net Total</td><td class="num" style="text-align:right">{{ frappe.utils.fmt_money(doc.net_total, precision=2, currency=doc.currency) }}</td></tr>
-  {% for tax in doc.taxes %}
-  {% if tax.tax_amount %}
-  <tr><td class="lbl">{{ tax.description or tax.account_head }}</td><td class="num" style="text-align:right">{{ frappe.utils.fmt_money(tax.tax_amount, precision=2, currency=doc.currency) }}</td></tr>
+  {# ── Notes / Terms ── #}
+  {% if doc.custom_po_notes or doc.terms %}
+  <table class="bt">
+    <tr>
+      <td>
+        {% if doc.custom_po_notes %}<strong>Notes:</strong> {{ doc.custom_po_notes }}<br>{% endif %}
+        {% if doc.terms %}<strong>Terms &amp; Conditions:</strong><br>{{ doc.terms }}{% endif %}
+      </td>
+    </tr>
+  </table>
   {% endif %}
-  {% endfor %}
-  <tr class="grand"><td class="lbl">Grand Total</td><td class="num" style="text-align:right">{{ frappe.utils.fmt_money(doc.grand_total, precision=2, currency=doc.currency) }}</td></tr>
-</table>
 
-<div class="words-box">
-  Amount in Words: <strong>{{ frappe.utils.money_in_words(doc.grand_total, doc.currency) }}</strong>
+  {# ── Signature ── #}
+  <table class="bt">
+    <tr>
+      <td style="width:33%; text-align:center; padding:30px 6px 4px">
+        <strong>Prepared By</strong>
+      </td>
+      <td style="width:33%; text-align:center; padding:30px 6px 4px; border-left:1px solid #000">
+        <strong>Checked By</strong>
+      </td>
+      <td style="text-align:right; padding:30px 6px 4px; border-left:1px solid #000">
+        <strong>for {{ doc.company }}</strong><br><br>
+        <strong>Authorised Signatory</strong>
+      </td>
+    </tr>
+  </table>
+
+  <div style="text-align:center; padding:3px; border-top:1px solid #000">
+    This is a Computer Generated Purchase Order
+  </div>
+
 </div>
-
-{% if doc.custom_po_notes %}
-<div class="notes-box">
-  <strong>Notes:</strong> {{ doc.custom_po_notes }}
-</div>
-{% endif %}
-
-{% if doc.terms %}
-<div class="notes-box">
-  <strong>Terms &amp; Conditions:</strong><br>{{ doc.terms }}
-</div>
-{% endif %}
-
-<table class="sig-row">
-  <tr>
-    <td><div class="sig-line">Prepared By</div></td>
-    <td><div class="sig-line">Checked By</div></td>
-    <td><div class="sig-line">Authorised Signatory</div></td>
-  </tr>
-</table>

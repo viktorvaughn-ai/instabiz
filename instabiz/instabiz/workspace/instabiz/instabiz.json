@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"ib-h1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Quick Access</b></span>\",\"col\":12}},{\"id\":\"ib-sc-q\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Quotation\",\"col\":3}},{\"id\":\"ib-sc-so\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Order\",\"col\":3}},{\"id\":\"ib-sc-cm\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Master\",\"col\":3}},{\"id\":\"ib-sc-rc\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"IB Rate Card\",\"col\":3}},{\"id\":\"ib-sc-aa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Assignment Admin\",\"col\":3}},{\"id\":\"ib-stock-hdr\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>STOCK</b></span>\",\"col\":12}},{\"id\":\"ib-sc-dn\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Delivery Note\",\"col\":3}},{\"id\":\"ib-sc-sb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Live Stock Balance\",\"col\":3}},{\"id\":\"ib-sc-sl\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Stock Ledger\",\"col\":3}}]",
+ "content": "[{\"id\":\"ib-h1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Quick Access</b></span>\",\"col\":12}},{\"id\":\"ib-sc-q\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Quotation\",\"col\":3}},{\"id\":\"ib-sc-so\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Order\",\"col\":3}},{\"id\":\"ib-sc-cm\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Master\",\"col\":3}},{\"id\":\"ib-sc-rc\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"IB Rate Card\",\"col\":3}},{\"id\":\"ib-sc-aa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Assignment Admin\",\"col\":3}},{\"id\":\"ib-stock-hdr\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>STOCK</b></span>\",\"col\":12}},{\"id\":\"ib-sc-dn\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Delivery Note\",\"col\":3}},{\"id\":\"ib-sc-sb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Live Stock Balance\",\"col\":3}},{\"id\":\"ib-sc-sl\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Stock Ledger\",\"col\":3}},{\"id\":\"ib-prod-hdr\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>PRODUCTION</b></span>\",\"col\":12}},{\"id\":\"ib-sc-pd\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Production Dashboard\",\"col\":3}},{\"id\":\"ib-sc-ps\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Production Stages\",\"col\":3}},{\"id\":\"ib-sc-dpr\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"DPR Report\",\"col\":3}}]",
  "creation": "2026-04-25 11:15:33.281823",
  "custom_blocks": [],
  "docstatus": 0,
@@ -90,6 +90,27 @@
    "doc_view": "List",
    "label": "Stock Ledger",
    "link_to": "ib-stock-ledger",
+   "type": "Page"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "",
+   "label": "Production Dashboard",
+   "link_to": "ib-production-dashboard",
+   "type": "Page"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "",
+   "label": "Production Stages",
+   "link_to": "ib-production-stages",
+   "type": "Page"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "",
+   "label": "DPR Report",
+   "link_to": "ib-dpr",
    "type": "Page"
   }
  ],

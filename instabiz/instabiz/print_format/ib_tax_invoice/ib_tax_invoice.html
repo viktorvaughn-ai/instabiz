@@ -62,6 +62,22 @@
     ["name","posting_date","lr_no","custom_lr_number","vehicle_no","transporter_name"], as_dict=True)
     if ns.dn_list else None %}
 
+{# ── Sales Order (origin of the chain) ───────────────────────────────────────── #}
+{% set ns_so = namespace(v=[]) %}
+{% for item in doc.items %}
+  {% if item.sales_order and item.sales_order not in ns_so.v %}
+    {% set _ = ns_so.v.append(item.sales_order) %}
+  {% endif %}
+{% endfor %}
+{% set first_so = frappe.db.get_value("Sales Order", ns_so.v[0],
+    ["name","transaction_date"], as_dict=True)
+    if ns_so.v else None %}
+
+{# ── Original Invoice (for Credit Notes) ─────────────────────────────────────── #}
+{% set orig_si = frappe.db.get_value("Sales Invoice", doc.return_against,
+    ["name","posting_date"], as_dict=True)
+    if doc.is_return and doc.return_against else None %}
+
 {# ── Bank Details via Warehouse ───────────────────────────────────────────────── #}
 {% set wh_name = doc.set_warehouse or (doc.items[0].warehouse if doc.items else None) %}
 {% set ba_name = frappe.db.get_value("Warehouse", wh_name, "custom_bank_details") if wh_name else None %}
@@ -134,17 +150,48 @@
 
   .sh     { font-weight: bold; padding: 3px 6px;
             border-top: 1px solid #000; border-bottom: 1px solid #000; }
+
+  .cancelled-banner {
+    background: #c00; color: #fff; font-size: 14px; font-weight: bold;
+    text-align: center; padding: 5px 6px; letter-spacing: 2px;
+    border-bottom: 2px solid #900;
+  }
+  .cancelled-watermark {
+    position: fixed; top: 38%; left: 50%; transform: translate(-50%,-50%) rotate(-35deg);
+    font-size: 90px; font-weight: bold; color: rgba(180,0,0,0.12);
+    pointer-events: none; white-space: nowrap; z-index: 999;
+    letter-spacing: 8px;
+  }
+  .credit-note-banner {
+    background: #1a5276; color: #fff; font-size: 14px; font-weight: bold;
+    text-align: center; padding: 5px 6px; letter-spacing: 2px;
+    border-bottom: 2px solid #154360;
+  }
 </style>
 
 {# ═══════════════════════════════════════════════════════════════════════════════ #}
 {# PAGE 1 — TAX INVOICE                                                            #}
 {# ═══════════════════════════════════════════════════════════════════════════════ #}
+{% if doc.docstatus == 2 %}<div class="cancelled-watermark">CANCELLED</div>{% endif %}
+
 <div class="box">
+
+  {# Cancelled / Credit Note banner above title bar #}
+  {% if doc.docstatus == 2 %}
+  <div class="cancelled-banner">&#9888; THIS INVOICE HAS BEEN CANCELLED &#9888;</div>
+  {% elif doc.is_return %}
+  <div class="credit-note-banner">CREDIT NOTE</div>
+  {% endif %}
 
   {# Title bar #}
   <div style="position:relative; text-align:center; padding:4px 6px; border-bottom:1px solid #000">
+    {% if doc.is_return %}
+    <strong>Credit Note</strong>
+    {% else %}
     <strong>Tax Invoice</strong>
+    {% endif %}
     {% if _irn %}<span style="position:absolute; right:6px; top:4px">e-Invoice</span>{% endif %}
+    {% if doc.docstatus == 2 %}<span style="position:absolute; left:6px; top:4px; color:#c00"><strong>CANCELLED</strong></span>{% endif %}
   </div>
 
   {# IRN + QR — always shown when IRN exists #}
@@ -215,7 +262,11 @@
           </tr>
           <tr>
             <td colspan="2" class="bb br">
-              {% if first_dn %}{{ first_dn.name }} dt. {{ fd(first_dn.posting_date) }}{% endif %}
+              {% if orig_si %}
+                {{ orig_si.name }} dt. {{ fd(orig_si.posting_date) }}
+              {% elif first_so %}
+                {{ first_so.name }} dt. {{ fd(first_so.transaction_date) }}
+              {% endif %}
             </td>
             <td class="bb">{{ doc.remarks or "" }}</td>
           </tr>

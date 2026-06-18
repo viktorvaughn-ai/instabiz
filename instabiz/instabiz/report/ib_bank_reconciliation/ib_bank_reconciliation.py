@@ -15,9 +15,13 @@ def execute(filters=None):
 
 
 def _validate(filters):
-	if filters.get("from_date") and filters.get("to_date"):
-		if getdate(filters["from_date"]) > getdate(filters["to_date"]):
-			frappe.throw(_("From Date cannot be after To Date."))
+	from frappe.utils import get_first_day, nowdate
+	if not filters.get("from_date"):
+		filters["from_date"] = get_first_day(nowdate()).strftime("%Y-%m-%d")
+	if not filters.get("to_date"):
+		filters["to_date"] = nowdate()
+	if getdate(filters["from_date"]) > getdate(filters["to_date"]):
+		frappe.throw(_("From Date cannot be after To Date."))
 
 
 def _columns():

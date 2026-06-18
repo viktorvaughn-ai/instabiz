@@ -17,6 +17,7 @@
   "gsm",
   "width_mm",
   "length_mtr",
+  "sqm",
   "col_break_2",
   "liner_type",
   "notes"
@@ -87,6 +88,14 @@
    "fieldtype": "Float",
    "label": "Length (mtr)",
    "precision": "1"
+  },
+  {
+   "fieldname": "sqm",
+   "fieldtype": "Float",
+   "label": "Area (SQMT)",
+   "precision": "2",
+   "read_only": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "col_break_2",

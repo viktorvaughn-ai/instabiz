@@ -1,0 +1,456 @@
+{
+ "actions": [],
+ "autoname": "IB-PE-.YYYY.-.#####",
+ "creation": "2026-06-06 00:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "is_submittable": 1,
+ "field_order": [
+  "work_order",
+  "stage",
+  "machine",
+  "operator",
+  "entry_date",
+  "col_break_1",
+  "start_time",
+  "end_time",
+  "hours_worked",
+  "section_io",
+  "input_qty",
+  "input_uom",
+  "output_qty",
+  "output_uom",
+  "col_break_io",
+  "wastage_qty",
+  "wastage_pct",
+  "wastage_reason",
+  "wastage_notes",
+  "section_coating",
+  "jumbo_roll",
+  "jumbo_roll_width",
+  "jumbo_roll_length",
+  "jumbo_roll_weight",
+  "sqm_produced",
+  "col_break_coating",
+  "base_film_consumption",
+  "adhesive_consumption",
+  "liner_consumption",
+  "coating_speed",
+  "drying_temp",
+  "section_slitting",
+  "parent_roll_id",
+  "sqm_input",
+  "no_of_slits",
+  "slit_widths",
+  "edge_trim_width",
+  "sqm_output",
+  "section_rewinding",
+  "parent_roll_id_rew",
+  "no_of_logs",
+  "log_length",
+  "core_size",
+  "tension_setting",
+  "section_cutting",
+  "parent_roll_id_cut",
+  "cut_length",
+  "pieces_per_log",
+  "total_pieces",
+  "section_packing",
+  "packing_type",
+  "pieces_per_carton",
+  "cartons_packed",
+  "col_break_packing",
+  "net_weight",
+  "gross_weight",
+  "qc_status",
+  "qc_video_url"
+ ],
+ "fields": [
+  {
+   "fieldname": "work_order",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Work Order",
+   "options": "IB Work Order",
+   "reqd": 1
+  },
+  {
+   "fieldname": "stage",
+   "fieldtype": "Select",
+   "fetch_from": "work_order.stage",
+   "in_list_view": 1,
+   "label": "Stage",
+   "options": "Coating\nSlitting\nRewinding\nCutting\nPacking\nReady to Deliver\nDelivered",
+   "read_only": 1
+  },
+  {
+   "fieldname": "machine",
+   "fieldtype": "Link",
+   "fetch_from": "work_order.machine",
+   "label": "Machine",
+   "options": "IB Machine"
+  },
+  {
+   "fieldname": "operator",
+   "fieldtype": "Link",
+   "in_list_view": 0,
+   "label": "Operator",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "entry_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Entry Date",
+   "default": "Today",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "start_time",
+   "fieldtype": "Time",
+   "label": "Start Time"
+  },
+  {
+   "fieldname": "end_time",
+   "fieldtype": "Time",
+   "label": "End Time"
+  },
+  {
+   "fieldname": "hours_worked",
+   "fieldtype": "Float",
+   "label": "Hours Worked",
+   "read_only": 1,
+   "description": "Auto-computed from start/end time"
+  },
+  {
+   "fieldname": "section_io",
+   "fieldtype": "Section Break",
+   "label": "Input / Output"
+  },
+  {
+   "fieldname": "input_qty",
+   "fieldtype": "Float",
+   "label": "Input Qty",
+   "reqd": 1
+  },
+  {
+   "fieldname": "input_uom",
+   "fieldtype": "Link",
+   "label": "Input UOM",
+   "options": "UOM"
+  },
+  {
+   "fieldname": "output_qty",
+   "fieldtype": "Float",
+   "label": "Output Qty",
+   "reqd": 1
+  },
+  {
+   "fieldname": "output_uom",
+   "fieldtype": "Link",
+   "label": "Output UOM",
+   "options": "UOM"
+  },
+  {
+   "fieldname": "col_break_io",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "wastage_qty",
+   "fieldtype": "Float",
+   "label": "Wastage Qty"
+  },
+  {
+   "fieldname": "wastage_pct",
+   "fieldtype": "Percent",
+   "label": "Wastage %",
+   "read_only": 1
+  },
+  {
+   "fieldname": "wastage_reason",
+   "fieldtype": "Select",
+   "label": "Wastage Reason",
+   "options": "\nSetup\nDefect\nMaterial\nTrim\nAdhesive\nCore\nOther"
+  },
+  {
+   "fieldname": "wastage_notes",
+   "fieldtype": "Small Text",
+   "label": "Wastage Notes"
+  },
+  {
+   "fieldname": "section_coating",
+   "fieldtype": "Section Break",
+   "label": "Coating Details",
+   "depends_on": "eval:doc.stage=='Coating'"
+  },
+  {
+   "fieldname": "jumbo_roll",
+   "fieldtype": "Link",
+   "label": "Jumbo Roll",
+   "options": "IB Jumbo Roll",
+   "description": "The jumbo roll being coated in this entry"
+  },
+  {
+   "fieldname": "jumbo_roll_width",
+   "fieldtype": "Float",
+   "label": "Roll Width (mm)",
+   "fetch_from": "jumbo_roll.width_mm",
+   "fetch_if_empty": 1
+  },
+  {
+   "fieldname": "jumbo_roll_length",
+   "fieldtype": "Float",
+   "label": "Roll Length (mtr)",
+   "fetch_from": "jumbo_roll.length_mtr",
+   "fetch_if_empty": 1
+  },
+  {
+   "fieldname": "jumbo_roll_weight",
+   "fieldtype": "Float",
+   "label": "Roll Weight (kg)"
+  },
+  {
+   "fieldname": "sqm_produced",
+   "fieldtype": "Float",
+   "label": "SQM Produced",
+   "read_only": 1,
+   "fetch_from": "jumbo_roll.sqm",
+   "fetch_if_empty": 1
+  },
+  {
+   "fieldname": "col_break_coating",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "base_film_consumption",
+   "fieldtype": "Float",
+   "label": "Base Film Consumption"
+  },
+  {
+   "fieldname": "adhesive_consumption",
+   "fieldtype": "Float",
+   "label": "Adhesive Consumption"
+  },
+  {
+   "fieldname": "liner_consumption",
+   "fieldtype": "Float",
+   "label": "Liner Consumption"
+  },
+  {
+   "fieldname": "coating_speed",
+   "fieldtype": "Float",
+   "label": "Coating Speed (m/min)"
+  },
+  {
+   "fieldname": "drying_temp",
+   "fieldtype": "Float",
+   "label": "Drying Temp (°C)"
+  },
+  {
+   "fieldname": "section_slitting",
+   "fieldtype": "Section Break",
+   "label": "Slitting Details",
+   "depends_on": "eval:doc.stage=='Slitting'"
+  },
+  {
+   "fieldname": "parent_roll_id",
+   "fieldtype": "Data",
+   "label": "Parent Roll ID"
+  },
+  {
+   "fieldname": "sqm_input",
+   "fieldtype": "Float",
+   "label": "SQM Input"
+  },
+  {
+   "fieldname": "no_of_slits",
+   "fieldtype": "Int",
+   "label": "No of Slits"
+  },
+  {
+   "fieldname": "slit_widths",
+   "fieldtype": "Data",
+   "label": "Slit Widths (comma-separated mm)"
+  },
+  {
+   "fieldname": "edge_trim_width",
+   "fieldtype": "Float",
+   "label": "Edge Trim (mm)"
+  },
+  {
+   "fieldname": "sqm_output",
+   "fieldtype": "Float",
+   "label": "SQM Output"
+  },
+  {
+   "fieldname": "section_rewinding",
+   "fieldtype": "Section Break",
+   "label": "Rewinding Details",
+   "depends_on": "eval:doc.stage=='Rewinding'"
+  },
+  {
+   "fieldname": "parent_roll_id_rew",
+   "fieldtype": "Data",
+   "label": "Parent Roll ID"
+  },
+  {
+   "fieldname": "no_of_logs",
+   "fieldtype": "Int",
+   "label": "No of Logs"
+  },
+  {
+   "fieldname": "log_length",
+   "fieldtype": "Float",
+   "label": "Log Length (mtr)"
+  },
+  {
+   "fieldname": "core_size",
+   "fieldtype": "Select",
+   "label": "Core Size",
+   "options": "\n1 inch\n1.5 inch\n2 inch\n3 inch"
+  },
+  {
+   "fieldname": "tension_setting",
+   "fieldtype": "Float",
+   "label": "Tension Setting"
+  },
+  {
+   "fieldname": "section_cutting",
+   "fieldtype": "Section Break",
+   "label": "Cutting Details",
+   "depends_on": "eval:doc.stage=='Cutting'"
+  },
+  {
+   "fieldname": "parent_roll_id_cut",
+   "fieldtype": "Data",
+   "label": "Parent Roll ID"
+  },
+  {
+   "fieldname": "cut_length",
+   "fieldtype": "Float",
+   "label": "Cut Length (mtr)"
+  },
+  {
+   "fieldname": "pieces_per_log",
+   "fieldtype": "Int",
+   "label": "Pieces per Log"
+  },
+  {
+   "fieldname": "total_pieces",
+   "fieldtype": "Int",
+   "label": "Total Pieces",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_packing",
+   "fieldtype": "Section Break",
+   "label": "Packing Details",
+   "depends_on": "eval:doc.stage=='Packing'"
+  },
+  {
+   "fieldname": "packing_type",
+   "fieldtype": "Select",
+   "label": "Packing Type",
+   "options": "\nShrink\nCarton\nPallet\nPouch"
+  },
+  {
+   "fieldname": "pieces_per_carton",
+   "fieldtype": "Int",
+   "label": "Pieces per Carton"
+  },
+  {
+   "fieldname": "cartons_packed",
+   "fieldtype": "Int",
+   "label": "Cartons Packed"
+  },
+  {
+   "fieldname": "col_break_packing",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "net_weight",
+   "fieldtype": "Float",
+   "label": "Net Weight (kg)"
+  },
+  {
+   "fieldname": "gross_weight",
+   "fieldtype": "Float",
+   "label": "Gross Weight (kg)"
+  },
+  {
+   "fieldname": "qc_status",
+   "fieldtype": "Select",
+   "label": "QC Status",
+   "options": "\nPass\nFail\nConditional"
+  },
+  {
+   "fieldname": "qc_video_url",
+   "fieldtype": "Data",
+   "label": "QC Video URL"
+  }
+ ],
+ "links": [],
+ "modified": "2026-06-06 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "IB Production Entry",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Factory Production",
+   "share": 0,
+   "write": 1,
+   "submit": 1,
+   "cancel": 0,
+   "amend": 0
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Factory Management",
+   "share": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  }
+ ],
+ "sort_field": "entry_date",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

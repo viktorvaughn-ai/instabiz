@@ -5,7 +5,7 @@ function _ib_cust_next_working_day(date_str) {
 }
 
 frappe.listview_settings["Customer"] = {
-	add_fields: ["custom_primary_contact_person", "custom_sales_person"],
+	add_fields: ["custom_primary_contact_person", "custom_sales_person", "gstin"],
 
 	formatters: {
 		mobile_no(value, df, doc) {
@@ -14,6 +14,10 @@ frappe.listview_settings["Customer"] = {
 	},
 
 	onload(listview) {
+		ib_setup_list_print(listview, "Customer");
+		ib_setup_party_ledger_print(listview, "Customer");
+		ib_setup_customer_handled_by_filter(listview);
+
 		// Remove native Frappe actions we don't use — deferred so Frappe adds them first
 		const _REMOVE = ["Assign To", "Clear Assignment", "Apply Assignment Rule"];
 		setTimeout(() => {
@@ -40,7 +44,7 @@ frappe.listview_settings["Customer"] = {
 					doctype: "User",
 					filters: [["Has Role", "role", "=", "Sales User"], ["enabled", "=", 1]],
 					fields: ["name", "full_name"],
-					limit: 200,
+					limit_page_length: 200,
 				},
 				callback(r) {
 					const users = r.message || [];
@@ -53,13 +57,6 @@ frappe.listview_settings["Customer"] = {
 								label: __("Sales User"),
 								options: users.map((u) => u.full_name || u.name).join("\n"),
 								reqd: 1,
-							},
-							{
-								fieldname: "date",
-								fieldtype: "Date",
-								label: __("Date"),
-								reqd: 1,
-								default: _ib_cust_next_working_day(frappe.datetime.get_today()),
 							},
 						],
 						primary_action_label: __("Assign"),
@@ -74,22 +71,14 @@ frappe.listview_settings["Customer"] = {
 								args: {
 									customers: JSON.stringify(customers),
 									assigned_to,
-									date: values.date,
 								},
 								callback(r) {
 									if (r.exc) return;
-									const { assigned, skipped_already_assigned, skipped_claimed, skipped_quota } = r.message;
-									const display = values.assigned_to;
-									let msg = __("{0} customer(s) assigned to {1}", [assigned, display]);
-									const parts = [];
-									if (skipped_already_assigned && skipped_already_assigned.length)
-										parts.push(__("{0} already assigned", [skipped_already_assigned.length]));
-									if (skipped_claimed && skipped_claimed.length)
-										parts.push(__("{0} claimed by another manager", [skipped_claimed.length]));
-									if (skipped_quota && skipped_quota.length)
-										parts.push(__("{0} over daily quota", [skipped_quota.length]));
-									if (parts.length) msg += " — " + parts.join(", ");
-									frappe.show_alert({ message: msg, indicator: assigned > 0 ? "green" : "orange" });
+									const { assigned } = r.message;
+									frappe.show_alert({
+										message: __("{0} customer(s) assigned to {1}", [assigned, values.assigned_to]),
+										indicator: assigned > 0 ? "green" : "orange",
+									});
 									d.hide();
 									listview.refresh();
 								},

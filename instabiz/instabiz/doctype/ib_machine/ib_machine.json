@@ -1,0 +1,150 @@
+{
+ "actions": [],
+ "autoname": "field:machine_code",
+ "creation": "2026-06-06 00:00:00",
+ "doctype": "DocType",
+ "description": "Production machine master",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "machine_code",
+  "machine_name",
+  "machine_type",
+  "location",
+  "col_break_1",
+  "capacity",
+  "capacity_uom",
+  "wastage_norm_pct",
+  "status",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "machine_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Machine Code",
+   "reqd": 1
+  },
+  {
+   "fieldname": "machine_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Machine Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "machine_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Machine Type",
+   "options": "Coating\nSlitting\nRewinding\nCutting\nPacking\nQuality Control\nDespatch",
+   "reqd": 1
+  },
+  {
+   "fieldname": "location",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Location",
+   "options": "\nmaharashtra\ngujarat\nchennai"
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "capacity",
+   "fieldtype": "Float",
+   "label": "Capacity"
+  },
+  {
+   "fieldname": "capacity_uom",
+   "fieldtype": "Select",
+   "label": "Capacity UOM",
+   "options": "\nsqm/hour\nrolls/hour\npcs/hour\nkg/hour\nctn/shift"
+  },
+  {
+   "fieldname": "wastage_norm_pct",
+   "fieldtype": "Float",
+   "label": "Wastage Norm %",
+   "default": "2.0",
+   "description": "Alert fires when entry wastage exceeds this threshold"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Active\nInactive\nUnder Maintenance",
+   "default": "Active"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "links": [],
+ "modified": "2026-06-06 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "IB Machine",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Factory Management",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 0,
+   "role": "Factory Production",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 0,
+   "role": "All",
+   "share": 0,
+   "write": 0
+  }
+ ],
+ "search_fields": "machine_name,machine_type",
+ "sort_field": "machine_code",
+ "sort_order": "ASC",
+ "states": [],
+ "title_field": "machine_name",
+ "track_changes": 1
+}

@@ -22,6 +22,7 @@ frappe.listview_settings["Purchase Invoice"] = {
 	},
 
 	onload(listview) {
+		ib_setup_list_print(listview, "Purchase Invoice");
 		ib_hide_sidebar();
 		ib_setup_status_multiselect(listview, "Purchase Invoice", [
 			"Draft", "Unpaid", "Overdue", "Paid", "Return Issued", "Debit Note Issued", "Cancelled",

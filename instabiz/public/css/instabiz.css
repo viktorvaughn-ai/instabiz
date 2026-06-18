@@ -2302,9 +2302,13 @@ mark.ib-search-hl {
 .ib-cb-pill--quote    { background: #fef3c7; color: #92400e; }
 .ib-cb-pill--log      { background: #e0e7ff; color: #3730a3; }
 .ib-cb-pill--wa       { background: #dcfce7; color: #15803d; }
-.ib-cb-pill--neutral  { background: var(--subtle-bg); color: var(--text-color); }
-.ib-cb-pill--add      { background: #ffe8df; color: #b94a20; }
-.ib-cb-pill--tomorrow { background: #dbeafe; color: #1e40af; }
+.ib-cb-pill--claim    { background: #fdf2f8; color: #9d174d; border-color: rgba(157,23,77,.2); }
+.ib-cb-pill--claim:hover { background: #fce7f3; }
+.ib-cb-pill--neutral    { background: var(--subtle-bg); color: var(--text-color); }
+.ib-cb-pill--add        { background: #ffe8df; color: #b94a20; }
+.ib-cb-pill--tomorrow   { background: #dbeafe; color: #1e40af; }
+.ib-cb-pill--in-today   { background: #dcfce7; color: #166534; cursor: default; pointer-events: none; }
+.ib-cb-pill--in-tomorrow { background: #dbeafe; color: #1e40af; cursor: default; pointer-events: none; opacity: 0.75; }
 
 .ib-cb-pool-badge {
     display: inline-block; margin-top: 4px;
@@ -2600,6 +2604,19 @@ mark.ib-search-hl {
     font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums;
     color: var(--text-muted); white-space: nowrap; min-width: 30px; text-align: right;
 }
+.ib-cb-target-source {
+    margin-top: 5px;
+    font-size: 10px; color: var(--text-muted);
+    letter-spacing: 0.2px;
+}
+.ib-cb-target-source .ib-cb-inv-link {
+    color: var(--ib-primary);
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+.ib-cb-target-source .ib-cb-inv-link:hover { color: var(--ib-primary-dark); }
 
 /* ── Assignment Admin: target column in roster ────────────────────────────── */
 .ib-aa-row-target-bar { min-width: 100px; }
@@ -2793,3 +2810,38 @@ mark.ib-search-hl {
     border-color: var(--ib-primary);
     background: rgba(217,119,87,.04);
 }
+
+/* ── IB Customer Board: Share pills ── */
+.ib-cb-pill--share { background: rgba(59,130,246,.1); color: #2563eb; border-color: rgba(59,130,246,.25); }
+.ib-cb-pill--share:hover { background: rgba(59,130,246,.18); }
+.ib-cb-pill--unshare { background: rgba(239,68,68,.08); color: #dc2626; border-color: rgba(239,68,68,.2); }
+.ib-cb-pill--unshare:hover { background: rgba(239,68,68,.14); }
+.ib-cb-pill--shared-badge { background: rgba(139,92,246,.1); color: #7c3aed; border-color: rgba(139,92,246,.2); cursor: default; font-size: 10px; padding: 1px 5px; }
+
+/* Share dialog internals */
+.ib-share-current { margin-bottom: 8px; }
+.ib-share-section-lbl { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+.ib-share-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--border-color); }
+.ib-share-user { flex: 1; font-size: 13px; }
+.ib-share-empty { font-size: 13px; color: var(--text-muted); padding: 4px 0; }
+.ib-share-table { width: 100%; font-size: 13px; }
+.ib-share-table th { font-size: 11px; color: var(--text-muted); font-weight: 600; padding: 4px 6px; }
+.ib-share-table td { padding: 4px 6px; border-bottom: 1px solid var(--border-color); }
+
+/* ── Customer Board: manager Today user filter ── */
+.ib-cb-today-user-filter-wrap {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 10px 3px;
+    border-bottom: 1px solid var(--border-color);
+}
+.ib-cb-today-filter-lbl {
+    font-size: 11px; font-weight: 600; color: var(--text-muted);
+    display: flex; align-items: center; gap: 3px; white-space: nowrap;
+}
+.ib-cb-today-user-select {
+    flex: 1; font-size: 12px; height: 26px; padding: 0 6px;
+    border: 1px solid var(--border-color); border-radius: 4px;
+    background: var(--card-bg); color: var(--text-color);
+    cursor: pointer;
+}
+.ib-cb-today-user-select:focus { outline: none; border-color: var(--ib-primary); }

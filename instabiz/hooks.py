@@ -39,6 +39,8 @@ scheduler_events = {
         "instabiz.overrides.pdc_alert.run_pdc_alert",
         # Send WA re-engagement to customers with no SO in 30+ days
         "instabiz.overrides.whatsapp.run_wa_dormant_blast",
+        # Daily production snapshot — reserved for future DPR caching
+        "instabiz.overrides.production.run_daily_production_snapshot",
     ],
 }
 
@@ -221,6 +223,7 @@ doc_events = {
 # Roles in _PRIVILEGED_ROLES (System Manager, Sales Manager) bypass the filter.
 permission_query_conditions = {
     "Lead":              "instabiz.overrides.lead.get_permission_query_conditions",
+    "Customer":          "instabiz.overrides.permissions.customer_query_conditions",
     "Quotation":         "instabiz.overrides.permissions.quotation_query_conditions",
     "Sales Order":       "instabiz.overrides.permissions.sales_order_query_conditions",
     "Delivery Note":     "instabiz.overrides.permissions.delivery_note_query_conditions",
@@ -230,6 +233,7 @@ permission_query_conditions = {
 
 has_permission = {
     "Lead":              "instabiz.overrides.lead.has_permission",
+    "Customer":          "instabiz.overrides.permissions.customer_has_permission",
     "Quotation":         "instabiz.overrides.permissions.quotation_has_permission",
     "Sales Order":       "instabiz.overrides.permissions.sales_order_has_permission",
     "Delivery Note":     "instabiz.overrides.permissions.delivery_note_has_permission",
@@ -273,6 +277,7 @@ app_include_js  = [
     "/assets/instabiz/js/list_utils.js",            # shared list view helpers (status multiselect, extract filter values)
     "/assets/instabiz/js/comment_popover.js",       # inline comment popover on list rows
     "/assets/instabiz/js/whatsapp_dialog.js",       # global WA send dialog (ib_show_wa_dialog)
+    "/assets/instabiz/js/ib_list_print.js",        # shared list view print utility
     # "/assets/instabiz/js/broadcast.js",            # global broadcast modal subscriber — DISABLED
     # ib_stock_dashboard.js is loaded by Frappe's page engine (not global)
     # "/assets/instabiz/js/quotation_list.js",        # Quotation list view
@@ -292,6 +297,7 @@ doctype_list_js = {
     "Purchase Invoice":  "public/js/purchase_invoice_list.js",
     "IB Item Price List": "public/js/ib_item_price_list_list.js",
     "Customer":          "public/js/customer_list.js",
+    "GL Entry":          "public/js/gl_entry_list.js",
 }
 
 doctype_js = {

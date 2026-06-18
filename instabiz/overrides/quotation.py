@@ -2,6 +2,7 @@
 import frappe
 from frappe import _
 from frappe.model.mapper import get_mapped_doc  # pyright: ignore[reportMissingImports]
+from frappe.utils import add_months, getdate
 from erpnext.selling.doctype.quotation.quotation import Quotation  # pyright: ignore[reportMissingImports]
 
 from instabiz.overrides.utils import (
@@ -44,6 +45,10 @@ def _set_company_gstin_from_warehouse(doc):
 _GST_INSTATE_TEMPLATE  = "Output GST In-state - IB"
 _GST_OUTSTATE_TEMPLATE = "Output GST Out-state - IB"
 
+# All templates that are valid for each direction — Transport variants are kept as-is
+_GST_INSTATE_TEMPLATES  = {_GST_INSTATE_TEMPLATE,  "Output GST In-state + Transport - IB"}
+_GST_OUTSTATE_TEMPLATES = {_GST_OUTSTATE_TEMPLATE, "Output GST Out-state + Transport - IB"}
+
 
 def _auto_correct_gst_template(doc):
 	"""Swap to correct in/out-state template based on GSTIN state codes."""
@@ -55,8 +60,10 @@ def _auto_correct_gst_template(doc):
 		customer_gstin = (frappe.db.get_value("Address", doc.customer_address, "gstin") or "")[:2]
 	if not company_gstin or not customer_gstin:
 		return
-	correct = _GST_INSTATE_TEMPLATE if company_gstin == customer_gstin else _GST_OUTSTATE_TEMPLATE
-	if doc.taxes_and_charges == correct:
+	is_instate = company_gstin == customer_gstin
+	correct_set = _GST_INSTATE_TEMPLATES if is_instate else _GST_OUTSTATE_TEMPLATES
+	correct = _GST_INSTATE_TEMPLATE if is_instate else _GST_OUTSTATE_TEMPLATE
+	if doc.taxes_and_charges in correct_set:
 		return
 	doc.taxes_and_charges = correct
 	template_doc = frappe.get_cached_doc("Sales Taxes and Charges Template", correct)
@@ -152,6 +159,11 @@ class CustomQuotation(IbStatusMixin, Quotation):
         _check_floor_price(self)
         _check_item_lifecycle(self)
         _check_customer_item_spec(self)
+        # Ensure valid_till is never before transaction_date.
+        # valid_till is hidden from users; on reopened/amended docs the old value
+        # can be stale, causing ERPNext's validate_valid_till() to throw.
+        if not self.valid_till or getdate(self.valid_till) < getdate(self.transaction_date):
+            self.valid_till = add_months(self.transaction_date, 1)
         super().validate()
 
 

@@ -28,9 +28,17 @@ frappe.ui.form.on("Customer", {
 			}
 			_ib_render_fix_location_button(frm);
 		}
+		// Share button — visible to the assigned sales user AND managers
+		if (!frm.is_new() && frm.doc.custom_sales_person_user) {
+			const is_assigned = frm.doc.custom_sales_person_user === frappe.session.user;
+			if (is_assigned || _ib_is_manager()) {
+				_ib_render_share_button(frm);
+			}
+		}
 		if (!frm.is_new()) {
 			_ib_load_outstanding(frm);
 			_ib_render_outstanding_btn(frm);
+			_ib_render_sales_orders_btn(frm);
 			frm.add_custom_button(__("Send WhatsApp"), () => {
 				ib_show_wa_dialog({
 					customer: frm.doc.name,
@@ -91,6 +99,15 @@ function _ib_render_outstanding_btn(frm) {
 			customer: frm.doc.name,
 			docstatus: 1,
 			outstanding_amount: [">", 0],
+		});
+	}, "View");
+}
+
+function _ib_render_sales_orders_btn(frm) {
+	frm.remove_custom_button("All Sales Orders", "View");
+	frm.add_custom_button("All Sales Orders", () => {
+		frappe.set_route("List", "Sales Order", {
+			customer: frm.doc.name,
 		});
 	}, "View");
 }
@@ -244,4 +261,111 @@ function _ib_render_fix_location_button(frm) {
 			}
 		);
 	}, "Location");
+}
+
+// ── Customer sharing ─────────────────────────────────────────────────────────
+
+function _ib_render_share_button(frm) {
+	frm.remove_custom_button("Manage Sharing", "Assign");
+	frm.add_custom_button("Manage Sharing", () => {
+		_ib_show_share_dialog(frm.doc.name, frm.doc.customer_name);
+	}, "Assign");
+}
+
+function _ib_show_share_dialog(customer, customer_name) {
+	frappe.call({
+		method: "instabiz.overrides.customer_assignment.get_customer_shares",
+		args: { customer },
+		callback(r) {
+			if (r.exc) return;
+			const current_shares = r.message || [];
+
+			frappe.call({
+				method: "frappe.client.get_list",
+				args: {
+					doctype: "User",
+					filters: [
+						["Has Role", "role", "=", "Sales User"],
+						["enabled", "=", 1],
+					],
+					fields: ["name", "full_name"],
+					limit: 200,
+				},
+				callback(r2) {
+					if (r2.exc) return;
+					const all_users = r2.message || [];
+					const shared_set = new Set(current_shares.map((s) => s.shared_with));
+					const owner_user = frappe.db.get_value("Customer", customer, "custom_sales_person_user");
+
+					const shares_html = current_shares.length
+						? `<table class="table table-condensed ib-share-table">
+							<thead><tr><th>Shared With</th><th>Shared By</th><th>Date</th><th></th></tr></thead>
+							<tbody>
+								${current_shares.map((s) => `
+									<tr data-user="${frappe.utils.escape_html(s.shared_with)}">
+										<td>${frappe.utils.escape_html(s.shared_with_name || s.shared_with)}</td>
+										<td>${frappe.utils.escape_html(s.shared_by_name || s.shared_by || "")}</td>
+										<td>${frappe.datetime.str_to_user(s.shared_at) || ""}</td>
+										<td><button class="btn btn-xs btn-danger ib-share-remove" data-user="${frappe.utils.escape_html(s.shared_with)}">Remove</button></td>
+									</tr>
+								`).join("")}
+							</tbody>
+						</table>`
+						: `<div class="text-muted" style="padding:4px 0">Not shared with anyone yet.</div>`;
+
+					const available = all_users.filter((u) => !shared_set.has(u.name));
+
+					const d = new frappe.ui.Dialog({
+						title: `Sharing — ${customer_name || customer}`,
+						fields: [
+							{ fieldname: "current_html", fieldtype: "HTML", options: shares_html },
+							{ fieldname: "add_sec", fieldtype: "Section Break", label: available.length ? "Share with another user" : "" },
+							...(available.length ? [{
+								fieldname: "share_with",
+								label: "Add User",
+								fieldtype: "Select",
+								options: [""].concat(available.map((u) => `${u.name}|${u.full_name || u.name}`)).join("\n"),
+							}] : [{
+								fieldname: "_no_more",
+								fieldtype: "HTML",
+								options: `<div class="text-muted">All active Sales Users already have access.</div>`,
+							}]),
+						],
+						primary_action_label: available.length ? "Share" : "Close",
+						primary_action(values) {
+							if (!available.length) { d.hide(); return; }
+							const target = (values.share_with || "").split("|")[0];
+							if (!target) { frappe.show_alert({ message: "Select a user first", indicator: "orange" }); return; }
+							frappe.call({
+								method: "instabiz.overrides.customer_assignment.share_customer",
+								args: { customer, share_with: target },
+								callback(res) {
+									if (!res.exc) {
+										frappe.show_alert({ message: "Customer shared", indicator: "green" });
+										d.hide();
+									}
+								},
+							});
+						},
+					});
+
+					d.show();
+
+					d.$wrapper.find(".ib-share-remove").on("click", function () {
+						const target = $(this).data("user");
+						frappe.call({
+							method: "instabiz.overrides.customer_assignment.unshare_customer",
+							args: { customer, share_with: target },
+							callback(res) {
+								if (!res.exc) {
+									$(`[data-user="${target}"]`).fadeOut(200, function () { $(this).remove(); });
+									frappe.show_alert({ message: "Access removed", indicator: "orange" });
+								}
+							},
+						});
+					});
+				},
+			});
+		},
+	});
 }

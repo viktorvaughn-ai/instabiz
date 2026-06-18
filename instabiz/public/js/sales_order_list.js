@@ -44,6 +44,7 @@ frappe.listview_settings["Sales Order"] = {
     },
 
     onload(listview) {
+        ib_setup_list_print(listview, "Sales Order");
         ib_hide_sidebar();
         ib_setup_status_multiselect(listview, "Sales Order", [
             "Draft", "Pending", "Dispatched", "Confirmed", "Cancelled",
