@@ -30,6 +30,13 @@ class CustomSalesInvoice(IbStatusMixin, SalesInvoice):
         if not (self.custom_cancel_reason or "").strip():
             frappe.throw(frappe._("Fill in Cancellation Reason before cancelling this Sales Invoice."))
 
+    def on_cancel(self):
+        super().on_cancel()
+        # Ensure outstanding_amount is zeroed — ERPNext should handle this but
+        # occasionally leaves a stale value when payment linkages are unusual.
+        if self.outstanding_amount != 0:
+            frappe.db.set_value("Sales Invoice", self.name, "outstanding_amount", 0, update_modified=False)
+
     def before_insert(self):
         set_sales_person(self)
 

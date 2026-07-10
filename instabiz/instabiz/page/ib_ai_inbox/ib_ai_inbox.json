@@ -1,0 +1,15 @@
+{
+ "content": null,
+ "creation": "2026-06-22 00:00:00",
+ "doctype": "Page",
+ "module": "instabiz",
+ "name": "ib-ai-inbox",
+ "page_name": "ib-ai-inbox",
+ "roles": [
+  {"role": "System Manager"},
+  {"role": "Sales Manager"},
+  {"role": "Accounts Manager"}
+ ],
+ "standard": "Yes",
+ "title": "AI Inbox"
+}

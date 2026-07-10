@@ -1,9 +1,8 @@
 """instabiz.overrides.reorder_alert
 
 Daily scheduler: alert purchase team when bin qty falls to or below
-reorder level. Uses Item Reorder (per-warehouse) level first, falls back
-to Item.reorder_level. Deduplicates via [ib-reorder] marker — one alert
-per item per warehouse per 7 days.
+reorder level. Uses tabItem Reorder child table (warehouse_reorder_level).
+Deduplicates via [ib-reorder] marker — one alert per item per warehouse per 7 days.
 """
 import frappe
 from frappe.utils import flt, add_days, nowdate
@@ -18,15 +17,15 @@ def run_reorder_alert():
 		SELECT
 			b.item_code, b.warehouse,
 			b.actual_qty, b.reserved_qty,
-			COALESCE(r.warehouse_reorder_level, i.reorder_level, 0) AS reorder_level,
-			COALESCE(r.warehouse_reorder_qty,   0)                   AS reorder_qty,
+			COALESCE(r.warehouse_reorder_level, 0) AS reorder_level,
+			COALESCE(r.warehouse_reorder_qty,   0) AS reorder_qty,
 			i.item_name, i.stock_uom
 		FROM `tabBin` b
 		INNER JOIN `tabItem` i ON i.name = b.item_code
-		LEFT JOIN `tabItem Reorder` r
+		INNER JOIN `tabItem Reorder` r
 			ON r.parent = b.item_code AND r.warehouse = b.warehouse
-		WHERE COALESCE(r.warehouse_reorder_level, i.reorder_level, 0) > 0
-		  AND b.actual_qty <= COALESCE(r.warehouse_reorder_level, i.reorder_level, 0)
+		WHERE r.warehouse_reorder_level > 0
+		  AND b.actual_qty <= r.warehouse_reorder_level
 		  AND i.disabled = 0
 		  AND i.is_stock_item = 1
 		""",

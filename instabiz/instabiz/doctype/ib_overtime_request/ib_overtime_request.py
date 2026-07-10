@@ -9,5 +9,5 @@ class IBOvertimeRequest(Document):
 			self.date = today()
 		if self.employee and not self.employee_name:
 			self.employee_name = frappe.db.get_value("Employee", self.employee, "employee_name")
-		if self.overtime_hours and self.overtime_hours <= 0:
+		if not self.overtime_hours or self.overtime_hours <= 0:
 			frappe.throw("Overtime hours must be greater than 0.")

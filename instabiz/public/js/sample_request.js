@@ -31,6 +31,20 @@ frappe.ui.form.on("IB Sample Request", {
 			});
 		}
 
+		const terminal = ["Converted", "Closed"];
+		if (!terminal.includes(status)) {
+			frm.add_custom_button(__("Close Request"), () => {
+				frappe.confirm(
+					__("Close this sample request?"),
+					() => frappe.call({
+						method: "instabiz.overrides.sample_request.close_request",
+						args: { name: frm.docname },
+						callback: () => frm.reload_doc(),
+					})
+				);
+			}, __("Actions"));
+		}
+
 		if (status === "Sent" || status === "Feedback Received") {
 			frm.add_custom_button(__("Record Feedback"), () => {
 				const d = new frappe.ui.Dialog({

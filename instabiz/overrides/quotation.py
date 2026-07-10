@@ -54,6 +54,8 @@ def _auto_correct_gst_template(doc):
 	"""Swap to correct in/out-state template based on GSTIN state codes."""
 	if doc.get("custom_sale_type") == "Export":
 		return
+	if doc.currency and doc.currency != "INR":
+		return
 	company_gstin  = (doc.company_gstin or "")[:2]
 	customer_gstin = (doc.billing_address_gstin or "")[:2]
 	if not customer_gstin and doc.get("customer_address"):
@@ -89,6 +91,8 @@ def recalculate_quotation(doc, method=None):
 def _set_default_taxes(doc):
     """Auto-apply the default Sales Taxes and Charges template on new documents only."""
     if not doc.is_new() or doc.get("taxes") or doc.get("custom_sale_type") == "Export":
+        return
+    if doc.currency and doc.currency != "INR":
         return
     tax_template = frappe.db.get_value(
         "Sales Taxes and Charges Template",
@@ -144,7 +148,7 @@ class CustomQuotation(IbStatusMixin, Quotation):
     def validate(self):
         if not self.custom_location or self.custom_location == "Select":
             frappe.throw(_("Please select a Location before saving."))
-        if self.get("custom_sale_type") == "Export":
+        if self.get("custom_sale_type") == "Export" or (self.currency and self.currency != "INR"):
             self.taxes_and_charges = None
             self.set("taxes", [])
         _set_company_gstin_from_warehouse(self)

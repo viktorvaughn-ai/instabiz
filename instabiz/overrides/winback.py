@@ -5,14 +5,15 @@ Daily scheduler: two win-back nudges for sales reps.
 1. Stale quotations — Open/Replied quotation with no update in QUOTE_STALE_DAYS.
 2. Cold leads — Lead in a non-progressing status with no activity in LEAD_STALE_DAYS.
 
-Deduplicates via [ib-winback] marker in Notification Log subject.
+Re-alerts every WINBACK_COOLDOWN_DAYS so reps keep getting nudged on chronically stale docs.
 """
 import frappe
 from frappe.utils import add_days, nowdate
 
-QUOTE_STALE_DAYS = 14
-LEAD_STALE_DAYS  = 30
-_MARKER          = "[ib-winback]"
+QUOTE_STALE_DAYS    = 14
+LEAD_STALE_DAYS     = 30
+WINBACK_COOLDOWN_DAYS = 14
+_MARKER             = "[ib-winback]"
 _LEAD_STALE_STATUSES = ("Cold Lead", "Contacted", "Warm Lead")
 
 
@@ -105,8 +106,10 @@ def _cold_leads():
 
 
 def _already_notified(doctype, docname):
+	cutoff = add_days(nowdate(), -WINBACK_COOLDOWN_DAYS)
 	return frappe.db.exists("Notification Log", {
 		"document_type": doctype,
 		"document_name": docname,
 		"subject":       ["like", f"%{_MARKER}%"],
+		"creation":      [">=", cutoff],
 	})

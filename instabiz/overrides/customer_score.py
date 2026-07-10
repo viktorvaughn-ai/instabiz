@@ -23,7 +23,7 @@ def run_customer_score():
 		try:
 			_compute_and_save(c)
 		except Exception:
-			frappe.log_error(frappe.get_traceback(), f"Customer score failed: {c.name}")
+			frappe.log_error(f"IB Customer score: {c.name}"[:140], frappe.get_traceback())
 	frappe.db.commit()
 
 

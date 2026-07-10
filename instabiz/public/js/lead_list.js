@@ -155,10 +155,9 @@ function ib_show_lead_status_picker($pill, lead, listview) {
 			const newStatus = $(this).data("status");
 			ib_cleanup();
 
-			$pill
-				.attr("class", `indicator-pill ${color} filterable no-indicator-dot ellipsis`)
-				.find(".ellipsis")
-				.text(__(label));
+			$pill.attr("class", `indicator-pill ${color} filterable no-indicator-dot ellipsis`);
+			const $inner = $pill.find(".ellipsis");
+			($inner.length ? $inner : $pill).text(__(label));
 
 			frappe.call({
 				method: "instabiz.overrides.lead.set_lead_status",

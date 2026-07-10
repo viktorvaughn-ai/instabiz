@@ -13,6 +13,7 @@ _MESSAGE = (
 
 @frappe.whitelist()
 def run_dormant_check():
+	frappe.only_for("System Manager")
 	threshold = add_days(nowdate(), -DORMANT_DAYS)
 
 	dormant = frappe.db.sql(
@@ -75,6 +76,7 @@ def run_dormant_check():
 			"subject":        f"Follow up: {row.customer} — no order in {DORMANT_DAYS}+ days",
 			"email_content":  desc,
 			"for_user":       sales_user,
+			"from_user":      "Administrator",
 			"type":           "Alert",
 			"document_type":  "Customer",
 			"document_name":  row.customer,

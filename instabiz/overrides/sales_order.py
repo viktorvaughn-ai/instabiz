@@ -190,7 +190,7 @@ def get_so_rounded_total(filters=None):
 			clean.append([f[1], f[2], f[3]])
 		elif isinstance(f, (list, tuple)) and len(f) == 3:
 			clean.append(list(f))
-	result = frappe.db.get_all(
+	result = frappe.get_all(
 		"Sales Order",
 		filters=clean,
 		fields=["sum(rounded_total) as total"],

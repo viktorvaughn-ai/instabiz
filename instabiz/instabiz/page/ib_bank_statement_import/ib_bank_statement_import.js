@@ -164,11 +164,13 @@ class IBBankStatementImport {
 		// Table rows
 		const $tbody = this.$main.find(".ib-bsi-table tbody").empty();
 		d.rows.forEach((r) => {
+			const desc = frappe.utils.escape_html(r.description || "");
+			const ref  = frappe.utils.escape_html(r.reference_number || "—");
 			$tbody.append(`
 				<tr>
 					<td style="white-space:nowrap;">${frappe.format(r.date, { fieldtype: "Date" })}</td>
-					<td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.description}">${r.description}</td>
-					<td>${r.reference_number || "—"}</td>
+					<td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${desc}">${desc}</td>
+					<td>${ref}</td>
 					<td style="text-align:right;color:#c0392b;">${r.withdrawal ? fmt(r.withdrawal) : "—"}</td>
 					<td style="text-align:right;color:#1a6b3c;">${r.deposit ? fmt(r.deposit) : "—"}</td>
 				</tr>

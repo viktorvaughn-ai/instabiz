@@ -1,0 +1,20 @@
+{
+ "creation": "2026-06-20 00:00:00.000000",
+ "doctype": "Page",
+ "modified": "2026-06-20 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "instabiz",
+ "name": "ib-customer-health",
+ "owner": "Administrator",
+ "page_name": "ib-customer-health",
+ "restrict_to_domain": null,
+ "roles": [
+  {"role": "System Manager"},
+  {"role": "Sales Manager"},
+  {"role": "Sales User"},
+  {"role": "Accounts Manager"}
+ ],
+ "standard": "Yes",
+ "system_page": 0,
+ "title": "Customer Health"
+}

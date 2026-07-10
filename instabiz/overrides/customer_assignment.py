@@ -3,7 +3,7 @@ import datetime
 import frappe
 from frappe import _
 from frappe.utils import today, now, add_days
-from instabiz.overrides.sales_target import get_target_map, _month_first
+from instabiz.overrides.sales_target import get_target_map, compute_incentive, _month_first
 
 
 # ── WA Templates ─────────────────────────────────────────────────────────────
@@ -98,9 +98,9 @@ def classify_customer(customer, threshold_days):
 
 
 def _next_working_day(date_str):
-	"""Return date_str + 1, bumping Sunday to Monday."""
+	"""Return date_str + 1, skipping Saturday and Sunday."""
 	nxt = add_days(date_str, 1)
-	if datetime.date.fromisoformat(str(nxt)).weekday() == 6:
+	while datetime.date.fromisoformat(str(nxt)).weekday() >= 5:
 		nxt = add_days(nxt, 1)
 	return nxt
 
@@ -651,8 +651,8 @@ def search_customer_pool(pool_type, search):
 		token_vals.extend([t, t, t, t])
 	search_sql = " AND ".join(token_clauses)
 
-	# Non-managers: "dormant" key = Currently Handling column — their assigned + shared customers
-	if not is_manager and pool_type == "dormant":
+	# "dormant" = My Accounts column — always search owned + shared customers regardless of role
+	if pool_type == "dormant":
 		sql = f"""
 			SELECT sub.customer, sub.customer_name, sub.territory,
 			       sub.mobile_no, sub.custom_contact_person_name, sub.custom_primary_contact_person,
@@ -757,16 +757,30 @@ def _get_claimed_pool(user):
 def claim_customer(customer):
 	"""Claim a customer for the current manager. Removes it from the general assignment pool."""
 	_require_manager()
-	existing = frappe.db.get_value("Customer", customer, "ib_claimed_by")
-	if existing and existing != frappe.session.user:
+	# Atomic conditional UPDATE — the previous read-then-write (get_value, then set_value)
+	# was a TOCTOU race: two managers claiming the same customer within the same instant
+	# could both pass the check and the second write would silently clobber the first,
+	# unlike every other multi-actor mutation in this module (which lock or use ON DUPLICATE).
+	if not _atomic_claim("Customer", customer, "ib_claimed_by", frappe.session.user):
+		existing = frappe.db.get_value("Customer", customer, "ib_claimed_by")
 		claimer_name = frappe.db.get_value("User", existing, "full_name") or existing
 		frappe.throw(_(f"Already claimed by {claimer_name}."))
-	frappe.db.set_value("Customer", customer, {
-		"ib_claimed_by": frappe.session.user,
-		"ib_claimed_on": now(),
-	})
 	frappe.db.commit()
 	return {"status": "ok", "claimed_by": frappe.session.user}
+
+
+def _atomic_claim(doctype, name, field, user):
+	"""Conditionally UPDATE `field` -> user only if currently unset or already owned by user.
+	Returns True if the row now belongs to `user`, False if someone else holds it."""
+	frappe.db.sql(
+		f"""
+		UPDATE `tab{doctype}`
+		SET `{field}` = %(user)s, ib_claimed_on = %(now)s, modified = %(now)s
+		WHERE name = %(name)s AND (`{field}` IS NULL OR `{field}` = '' OR `{field}` = %(user)s)
+		""",
+		{"user": user, "now": now(), "name": name},
+	)
+	return frappe.db.get_value(doctype, name, field) == user
 
 
 @frappe.whitelist()
@@ -780,15 +794,10 @@ def bulk_claim_customers(customers):
 	claimed = []
 	skipped = []
 	for customer in customers:
-		existing = frappe.db.get_value("Customer", customer, "ib_claimed_by")
-		if existing and existing != user:
+		if _atomic_claim("Customer", customer, "ib_claimed_by", user):
+			claimed.append(customer)
+		else:
 			skipped.append(customer)
-			continue
-		frappe.db.set_value("Customer", customer, {
-			"ib_claimed_by": user,
-			"ib_claimed_on": now(),
-		})
-		claimed.append(customer)
 	if claimed:
 		frappe.db.commit()
 	return {"status": "ok", "claimed": len(claimed), "skipped": skipped}
@@ -862,18 +871,25 @@ def unskip_assignment(assignment_id):
 
 @frappe.whitelist()
 def self_assign_customer(customer):
-	"""Sales user claims ownership of an unowned (or self-owned) customer.
+	"""Managers claim ownership of an unowned (or self-owned) customer.
 	Fails if the customer already belongs to a DIFFERENT user."""
+	_require_manager()
 	user = frappe.session.user
-	existing = frappe.db.get_value("Customer", customer, "custom_sales_person_user")
-	if existing and existing != user:
+	full_name = frappe.db.get_value("User", user, "full_name") or user
+	# Atomic conditional UPDATE — see claim_customer() for why read-then-write is unsafe here.
+	frappe.db.sql(
+		"""
+		UPDATE `tabCustomer`
+		SET custom_sales_person_user = %(user)s, custom_sales_person = %(full_name)s, modified = %(now)s
+		WHERE name = %(customer)s
+		  AND (custom_sales_person_user IS NULL OR custom_sales_person_user = '' OR custom_sales_person_user = %(user)s)
+		""",
+		{"user": user, "full_name": full_name, "now": now(), "customer": customer},
+	)
+	if frappe.db.get_value("Customer", customer, "custom_sales_person_user") != user:
+		existing = frappe.db.get_value("Customer", customer, "custom_sales_person_user")
 		claimer_name = frappe.db.get_value("User", existing, "full_name") or existing
 		frappe.throw(_(f"Customer is already assigned to {claimer_name}. Ask a manager to reassign."))
-	full_name = frappe.db.get_value("User", user, "full_name") or user
-	frappe.db.set_value("Customer", customer, {
-		"custom_sales_person_user": user,
-		"custom_sales_person": full_name,
-	})
 	frappe.db.commit()
 	# Notify all board viewers that this customer is now owned (leaves Territory column)
 	frappe.publish_realtime(
@@ -956,6 +972,7 @@ def move_assignment(assignment_id, new_date):
 		"IB Customer Assignment",
 		{
 			"customer": doc.customer,
+			"assigned_to": doc.assigned_to,
 			"assigned_date": new_date,
 			"status": ["in", ["Pending", "Contacted"]],
 			"name": ["!=", assignment_id],
@@ -1132,6 +1149,9 @@ def get_admin_overview(date=None, territory=None, view_as_user=None):
 			{"assigned_to": user, "assigned_date": _next_working_day(date), "status": "Pending"},
 		)
 		t = target_map.get(user, {})
+		target_amt = t.get("target", 0)
+		actual_amt = t.get("actual", 0)
+		incentive_earned, commission_pct = compute_incentive(actual_amt, target_amt)
 		user_team = user_team_map.get(user)
 		roster.append({
 			"user": user,
@@ -1143,9 +1163,11 @@ def get_admin_overview(date=None, territory=None, view_as_user=None):
 			"pending": status_map.get("Pending", 0),
 			"completion_pct": round(done / total * 100) if total else 0,
 			"tomorrow_count": tomorrow_count,
-			"target": t.get("target", 0),
-			"actual": t.get("actual", 0),
+			"target": target_amt,
+			"actual": actual_amt,
 			"target_pct": t.get("pct", 0),
+			"incentive_earned": incentive_earned,
+			"commission_pct": commission_pct,
 		})
 
 	return {
@@ -1535,7 +1557,8 @@ def remove_team_territory(team_name, territory):
 
 @frappe.whitelist()
 def assign_customer_to_user(customer, sales_user):
-	"""Assign customer to a sales user's today board and set custom_sales_person_user on Customer.
+	"""Set Handled By (custom_sales_person_user) on Customer master only.
+	Does NOT create a Today board assignment — rep can manually add via their board.
 	Clears any existing shares so the new owner starts fresh.
 	"""
 	_require_manager()
@@ -1547,12 +1570,12 @@ def assign_customer_to_user(customer, sales_user):
 	# Clear any existing shares — new owner should manage sharing themselves
 	frappe.db.delete("IB Customer Share", {"customer": customer})
 
+	now_ts        = now()
 	date          = today()
 	tomorrow_date = _next_working_day(date)
-	now_ts        = now()
 
-	# Roll over any Pending Today/Tomorrow assignments owned by OTHER users first,
-	# so the old assignee's Today board stops showing this customer.
+	# Roll over any Pending Today/Tomorrow assignments owned by OTHER users
+	# so the old assignee's board stops showing this customer.
 	frappe.db.sql(
 		"""
 		UPDATE `tabIB Customer Assignment`
@@ -1566,22 +1589,12 @@ def assign_customer_to_user(customer, sales_user):
 		 "today": date, "tomorrow": tomorrow_date},
 	)
 
-	# Create today's assignment for the new owner
-	existing = frappe.db.get_value(
-		"IB Customer Assignment",
-		{"customer": customer, "assigned_to": sales_user, "assigned_date": date, "status": ["in", ["Pending", "Contacted"]]},
-		"name",
-	)
-	if not existing:
-		territory = frappe.db.get_value("Customer", customer, "territory")
-		config = get_assignment_config()
-		source_pool = classify_customer(customer, config["dormant_threshold_days"])
-		_create_assignment(customer, territory, sales_user, date, source_pool)
-
-	# Set custom_sales_person_user + custom_sales_person on Customer
+	# Set Handled By on Customer master only — no Today board entry created
 	full_name = frappe.db.get_value("User", sales_user, "full_name") or sales_user
-	frappe.db.set_value("Customer", customer, "custom_sales_person_user", sales_user)
-	frappe.db.set_value("Customer", customer, "custom_sales_person", full_name)
+	frappe.db.set_value("Customer", customer, {
+		"custom_sales_person_user": sales_user,
+		"custom_sales_person": full_name,
+	})
 	frappe.db.commit()
 	return {"status": "ok"}
 

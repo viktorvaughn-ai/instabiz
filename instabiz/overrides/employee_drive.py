@@ -45,7 +45,7 @@ def _do_sync(employee):
 		from drive.utils import create_drive_file, get_home_folder
 		from drive.utils.files import FileManager
 	except ImportError:
-		frappe.log_error("Frappe Drive not installed — skipping employee doc sync", "Employee Drive Sync")
+		frappe.log_error("Employee Drive Sync: Frappe Drive not installed", frappe.get_traceback())
 		return
 
 	doc = frappe.get_doc("Employee", employee)
@@ -183,7 +183,7 @@ def _file_to_drive(url, folder_name, team_name, doc_label, manager, home):
 		return None  # external URL — skip
 
 	if not src_path.exists():
-		frappe.log_error(f"Employee doc file not found on disk: {url}", "Employee Drive Sync")
+		frappe.log_error(f"Employee Drive Sync: file not found on disk: {url}", frappe.get_traceback())
 		return None
 
 	title = f"{doc_label} - {src_path.name}"

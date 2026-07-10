@@ -57,17 +57,21 @@ def run_vendor_payment_alert():
 			if existing:
 				continue
 
+			base = (
+				f"Payment due in {days_left}d: {row.po_name} "
+				f"{row.supplier} {row.currency} {row.outstanding:,.0f} "
+				f"due {row.due_date}"
+			)
+			subject = f"{base[:140 - len(marker) - 1]} {marker}"
 			frappe.get_doc({
-				"doctype":    "Notification Log",
-				"for_user":   user,
-				"type":       "Alert",
+				"doctype":       "Notification Log",
+				"for_user":      user,
+				"from_user":     "Administrator",
+				"type":          "Alert",
 				"document_type": "Purchase Order",
 				"document_name": row.po_name,
-				"subject":    (
-					f"Payment due in {days_left} day(s) — {row.po_name} | "
-					f"Supplier: {row.supplier} | "
-					f"Amount: {row.currency} {row.outstanding:,.2f} | "
-					f"Due: {row.due_date} {marker}"
-				),
+				"subject":       subject,
 				"email_content": "",
 			}).insert(ignore_permissions=True)
+
+	frappe.db.commit()

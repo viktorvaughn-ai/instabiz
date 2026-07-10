@@ -27,16 +27,21 @@ from frappe.utils import today, add_days
 
 def run_exit_handover_daily():
     """
-    Daily job — runs on the employee's relieving_date.
+    Daily job — runs on/after the employee's relieving_date.
     Creates the handover doc and notifies HR Managers.
-    Idempotent: skips employees who already have a handover doc for today.
+    Idempotent: skips employees who already have a handover doc for their relieving_date.
+
+    Uses relieving_date <= today (not an exact match) and does NOT filter on
+    Employee.status. HR commonly sets status="Left" at the same time they enter
+    relieving_date — often for a date already in the past — so an exact-date +
+    status="Active" filter would silently never catch that employee. Mirrors the
+    retry-safe pattern already used by run_user_disable_daily.
     """
     employees = frappe.get_all(
         "Employee",
         filters=[
             ["relieving_date", "is", "set"],
-            ["relieving_date", "=", today()],
-            ["status", "=", "Active"],
+            ["relieving_date", "<=", today()],
             ["user_id", "is", "set"],
         ],
         fields=["name", "employee_name", "user_id", "relieving_date"],
@@ -231,6 +236,7 @@ def _notify_hr_managers(doc, item_count, subject=None):
         frappe.get_doc({
             "doctype":       "Notification Log",
             "for_user":      user,
+            "from_user":     "Administrator",
             "type":          "Alert",
             "document_type": "Employee Exit Handover",
             "document_name": doc.name,

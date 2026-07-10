@@ -1,0 +1,181 @@
+{
+ "actions": [],
+ "autoname": "IB-RC-.####",
+ "creation": "2026-06-26 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "product_type",
+  "item_code",
+  "product_name",
+  "col1",
+  "color",
+  "liner",
+  "thickness",
+  "col2",
+  "width_mm",
+  "length_m",
+  "unit",
+  "effective_date",
+  "sec_pricing",
+  "face_price",
+  "last_price",
+  "slab1",
+  "slab2",
+  "slab3",
+  "slab4",
+  "slab5",
+  "packing_standard"
+ ],
+ "fields": [
+  {
+   "fieldname": "product_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Product Type",
+   "options": "Jumbo Roll\nCut Pack",
+   "reqd": 1
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Item Code",
+   "reqd": 1
+  },
+  {
+   "fieldname": "product_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Product Name"
+  },
+  {
+   "fieldname": "col1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "color",
+   "fieldtype": "Data",
+   "label": "Color"
+  },
+  {
+   "fieldname": "liner",
+   "fieldtype": "Data",
+   "label": "Liner / Weight"
+  },
+  {
+   "fieldname": "thickness",
+   "fieldtype": "Data",
+   "label": "Thickness"
+  },
+  {
+   "fieldname": "col2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "width_mm",
+   "fieldtype": "Int",
+   "label": "Width (mm)"
+  },
+  {
+   "fieldname": "length_m",
+   "fieldtype": "Float",
+   "label": "Length (m)"
+  },
+  {
+   "fieldname": "unit",
+   "fieldtype": "Data",
+   "label": "Unit"
+  },
+  {
+   "fieldname": "effective_date",
+   "fieldtype": "Date",
+   "label": "Effective Date"
+  },
+  {
+   "fieldname": "sec_pricing",
+   "fieldtype": "Section Break",
+   "label": "Pricing"
+  },
+  {
+   "fieldname": "face_price",
+   "fieldtype": "Currency",
+   "label": "Face Price / Slab 1"
+  },
+  {
+   "fieldname": "last_price",
+   "fieldtype": "Currency",
+   "label": "Last Price / Slab 5"
+  },
+  {
+   "fieldname": "slab1",
+   "fieldtype": "Currency",
+   "label": "Slab 1"
+  },
+  {
+   "fieldname": "slab2",
+   "fieldtype": "Currency",
+   "label": "Slab 2"
+  },
+  {
+   "fieldname": "slab3",
+   "fieldtype": "Currency",
+   "label": "Slab 3"
+  },
+  {
+   "fieldname": "slab4",
+   "fieldtype": "Currency",
+   "label": "Slab 4"
+  },
+  {
+   "fieldname": "slab5",
+   "fieldtype": "Currency",
+   "label": "Slab 5"
+  },
+  {
+   "fieldname": "packing_standard",
+   "fieldtype": "Data",
+   "label": "Packing Standard"
+  }
+ ],
+ "links": [],
+ "modified": "2026-06-26 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "IB Rate Card Entry",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "All"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

@@ -1,0 +1,100 @@
+{
+ "actions": [],
+ "autoname": "IB-ISLAB-.#####",
+ "creation": "2026-06-22 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "designation",
+  "slab_label",
+  "from_pct",
+  "to_pct",
+  "commission_pct",
+  "is_active"
+ ],
+ "fields": [
+  {
+   "fieldname": "designation",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Designation",
+   "options": "Sales User\nSales Manager",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "slab_label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Slab"
+  },
+  {
+   "fieldname": "from_pct",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "From % of Target",
+   "reqd": 1
+  },
+  {
+   "fieldname": "to_pct",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "To % of Target (0 = No Cap)"
+  },
+  {
+   "fieldname": "commission_pct",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Commission %",
+   "reqd": 1
+  },
+  {
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "default": "1",
+   "in_list_view": 1,
+   "label": "Active"
+  }
+ ],
+ "links": [],
+ "modified": "2026-06-22 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "IB Incentive Slab",
+ "naming_rule": "Expression (make_autoname)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Sales User"
+  }
+ ],
+ "sort_field": "designation",
+ "sort_order": "ASC",
+ "track_changes": 0
+}

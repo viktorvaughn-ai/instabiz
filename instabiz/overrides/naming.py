@@ -43,7 +43,9 @@ def get_next_dn_si_number():
     Uses an advisory lock to prevent duplicate numbers under concurrent requests.
     """
     lock_key = "ib_dnsi_counter"
-    frappe.db.sql("SELECT GET_LOCK(%s, 10)", lock_key)
+    acquired = frappe.db.sql("SELECT GET_LOCK(%s, 10)", lock_key)[0][0]
+    if not acquired:
+        frappe.throw(frappe._("Could not acquire naming lock — please retry."))
     try:
         row = frappe.db.sql("SELECT current FROM `tabSeries` WHERE name = %s", (_GLOBAL_DNSI_SERIES,))
         current = row[0][0] if row else None
@@ -79,7 +81,7 @@ def autoname_delivery_note(doc, method=None):
     wh = get_warehouse_code(doc)
     while True:
         num = get_next_dn_si_number()
-        candidate = f"IB-{wh}-DN-{num:05d}"
+        candidate = f"IB-{wh}-DC-{num:05d}"
         if not frappe.db.exists("Delivery Note", candidate):
             doc.name = candidate
             return
@@ -98,8 +100,11 @@ def autoname_purchase_receipt(doc, method=None):
 
 
 def autoname_purchase_invoice(doc, method=None):
-    wh       = get_warehouse_code(doc)
-    prefix   = f"IB-{wh}-PINV-"
+    wh = get_warehouse_code(doc)
+    if doc.get("is_return"):
+        prefix = f"IB-{wh}-DN-"
+    else:
+        prefix = f"IB-{wh}-PINV-"
     doc.name = frappe.model.naming.make_autoname(f"{prefix}.#####")
 
 
@@ -116,11 +121,12 @@ def autoname_sales_invoice(doc, method=None):
     if not dn_name:
         for item in (doc.get("items") or []):
             dn_name = item.get("delivery_note") or ""
-            if "-DN-" in dn_name:
+            if "-DC-" in dn_name or "-DN-" in dn_name:
                 break
-    if dn_name and "-DN-" in dn_name:
-        # Strip any Frappe dedup suffix (e.g. "IB-BWD-DN-00006-1" → "00006")
-        num_str = dn_name.split("-DN-")[-1].split("-")[0]
+    sep = "-DC-" if "-DC-" in dn_name else "-DN-" if "-DN-" in dn_name else ""
+    if dn_name and sep:
+        # Strip any Frappe dedup suffix (e.g. "IB-BWD-DC-00078-1" → "00078")
+        num_str = dn_name.split(sep)[-1].split("-")[0]
         candidate = f"IB-{wh}-INV-{num_str}"
         # Only reuse if not already taken by a cancelled (or any) existing doc.
         if not frappe.db.exists("Sales Invoice", candidate):

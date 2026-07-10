@@ -124,7 +124,7 @@ def _leads_today(date, territory):
 
 
 def _quotations_today(date, territory):
-	cond = "WHERE creation BETWEEN %(date)s AND DATE_ADD(%(date)s, INTERVAL 1 DAY) AND docstatus = 1 AND custom_sales_person_user != ''"
+	cond = "WHERE transaction_date = %(date)s AND docstatus = 1 AND custom_sales_person_user != ''"
 	if territory:
 		cond += " AND territory = %(territory)s"
 	rows = frappe.db.sql(
@@ -225,7 +225,7 @@ def _summary(data, date, month_start):
 
 	# Outstanding backlog — submitted SOs not fully delivered
 	backlog = flt(frappe.db.sql(
-		"""SELECT COALESCE(SUM(rounded_total - per_delivered * rounded_total / 100), 0)
+		"""SELECT COALESCE(SUM(rounded_total - COALESCE(per_delivered, 0) * rounded_total / 100), 0)
 		   FROM `tabSales Order`
 		   WHERE docstatus = 1 AND status NOT IN ('Completed','Cancelled','Closed')""",
 	)[0][0])

@@ -8,7 +8,7 @@ frappe.listview_settings["Delivery Note"] = {
 		action(doc) {
 			window.open(
 				"/printview?doctype=Delivery%20Note&name=" + encodeURIComponent(doc.name) +
-				"&no_letterhead=1&letterhead=No%20Letterhead&settings=%7B%7D",
+				"&format=IB%20Packing%20List&no_letterhead=1&letterhead=No%20Letterhead&settings=%7B%7D",
 				"_blank"
 			);
 		},

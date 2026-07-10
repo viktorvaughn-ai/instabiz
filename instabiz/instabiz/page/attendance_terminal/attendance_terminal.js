@@ -9,7 +9,6 @@ const API = {
 const STATUS = {
 	IN:   { label: "In",  color: "green" },
 	OUT:  { label: "Out", color: "blue"  },
-	DONE: { label: "Out", color: "blue"  },
 };
 
 const TZ = "Asia/Kolkata";
@@ -101,10 +100,14 @@ frappe.pages["attendance-terminal"].on_page_load = function (wrapper) {
 	});
 
 	frappe.realtime.doctype_subscribe("Employee Checkin");
-	frappe.realtime.off("list_update");
-	frappe.realtime.on("list_update", (data) => {
+	const _checkin_handler = (data) => {
 		if (data.doctype === "Employee Checkin") load(state, $wrap, page);
-	});
+	};
+	frappe.realtime.on("list_update", _checkin_handler);
+
+	frappe.pages["attendance-terminal"].on_page_hide = function () {
+		frappe.realtime.off("list_update", _checkin_handler);
+	};
 };
 
 // ── Markup (built once) ────────────────────────────────────────────────────────

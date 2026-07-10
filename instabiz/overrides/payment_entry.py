@@ -104,13 +104,14 @@ def _notify_accounts(doc):
 	)
 
 	for user in users:
-		if frappe.db.exists("Notification Log", {"subject": subject, "for_user": user}):
+		if frappe.db.exists("Notification Log", {"subject": subject[:140], "for_user": user}):
 			continue
 		frappe.get_doc({
 			"doctype":       "Notification Log",
-			"subject":       subject,
+			"subject":       subject[:140],
 			"email_content": content,
 			"for_user":      user,
+			"from_user":     "Administrator",
 			"type":          "Alert",
 			"document_type": "Payment Entry",
 			"document_name": doc.name,
@@ -126,7 +127,6 @@ def _update_customer_outstanding(doc):
 	from instabiz.overrides.customer import refresh_customer_outstanding
 	refresh_customer_outstanding(doc.party)
 	_maybe_clear_overdue_block(doc.party)
-
 
 def _maybe_clear_overdue_block(customer):
 	"""Lift custom_overdue_block when no more overdue invoices exist for customer."""

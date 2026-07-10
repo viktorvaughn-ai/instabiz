@@ -28,7 +28,7 @@ class IBAssignmentAdmin {
 
 	_next_working_day(dateStr) {
 		const d = new Date(dateStr + "T00:00:00");
-		do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0);
+		do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6);
 		return d.toISOString().split("T")[0];
 	}
 
@@ -87,7 +87,9 @@ class IBAssignmentAdmin {
 		if (_is_full_manager) {
 			this.page.add_inner_button("+ Create New Team", () => self._show_create_team_modal());
 			this.page.add_inner_button("Config", () => self._show_config_modal());
+			this.page.add_inner_button("Incentive Slabs", () => self._show_slab_dialog());
 			this.page.add_inner_button("Fix Excess Assignments", () => self._run_cleanup());
+			this.page.add_inner_button("View Incentives ↗", () => frappe.set_route("ib-sales-incentives"));
 		}
 		this.page.add_inner_button("Refresh", () => self.refresh());
 	}
@@ -337,12 +339,17 @@ class IBAssignmentAdmin {
 				const tpct = u.target_pct || 0;
 				const tpct_cls = tpct >= 80 ? "good" : tpct >= 40 ? "mid" : "low";
 				const tbar_color = tpct >= 80 ? "#22c55e" : tpct >= 40 ? "var(--ib-primary)" : "#cbd5e1";
+				const incentive_html = u.incentive_earned
+					? `<span class="ib-aa-incentive-chip" title="Commission ${u.commission_pct || 0}%">
+						<iconify-icon icon="lucide:trophy" width="11" height="11" style="vertical-align:middle;margin-right:3px"></iconify-icon>${fmt_short(u.incentive_earned)}
+					</span>` : "";
 				const target_html = u.target ? `<div class="ib-aa-row-target-wrap">
 					<div class="ib-aa-row-target-text">
 						<span class="ib-aa-target-actual ib-aa-pct--${tpct_cls}">${fmt_short(u.actual || 0)}</span>
 						<span class="ib-aa-target-sep">/</span>
 						<span class="ib-aa-target-goal">${fmt_short(u.target || 0)}</span>
 						<span class="ib-aa-target-pct ib-aa-pct--${tpct_cls}">${tpct}%</span>
+						${incentive_html}
 					</div>
 					<div class="ib-aa-target-bar-track">
 						<div class="ib-aa-target-bar-fill" style="width:${Math.min(tpct,100)}%;background:${tbar_color}"></div>
@@ -356,7 +363,7 @@ class IBAssignmentAdmin {
 							<div class="ib-aa-row-name-wrap">
 								<span class="ib-aa-row-name">${frappe.utils.escape_html(u.full_name || u.user)}</span>
 								${u.is_leader ? `<svg class="ib-aa-tl-badge" viewBox="0 0 24 24" width="26" height="26" title="Team Leader" xmlns="http://www.w3.org/2000/svg"><polygon points="12,1 13.6,6.2 17.5,2.5 16.2,7.8 21.5,6.5 17.8,10.5 23,12 17.8,13.6 21.5,17.5 16.2,16.2 17.5,21.5 13.6,17.8 12,23 10.4,17.8 6.5,21.5 7.8,16.2 2.5,17.5 6.2,13.6 1,12 6.2,10.4 2.5,6.5 7.8,7.8 6.5,2.5 10.4,6.2" fill="#f59e0b"/><text x="12" y="14.5" text-anchor="middle" font-size="6.5" font-weight="900" fill="white" font-family="Inter,sans-serif">TL</text></svg>` : ""}
-								${no_tmrw ? `<span class="ib-aa-no-tmrw-dot" title="No assignments queued for tomorrow">⚠</span>` : ""}
+								${no_tmrw ? `<iconify-icon icon="lucide:alert-triangle" width="12" height="12" class="ib-aa-no-tmrw-dot" title="No assignments queued for tomorrow" style="color:#f59e0b;vertical-align:middle"></iconify-icon>` : ""}
 							</div>
 						</div>
 						<div class="ib-aa-row-stat ib-aa-row-stat--done">${u.done}</div>
@@ -510,6 +517,164 @@ class IBAssignmentAdmin {
 			},
 		});
 		d.show();
+	}
+
+	// ── Incentive Slab Management ─────────────────────────────────────────────
+
+	_show_slab_dialog() {
+		const self = this;
+
+		const render_slabs_html = (slabs) => {
+			if (!slabs.length) return `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px">
+				No slabs configured. Add tiers below.
+			</div>`;
+			return `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px">
+				<thead>
+					<tr style="background:var(--bg-color)">
+						<th style="padding:7px 10px;text-align:left;border-bottom:1px solid var(--border-color);font-size:11px;color:var(--text-muted)">Label</th>
+						<th style="padding:7px 10px;text-align:right;border-bottom:1px solid var(--border-color);font-size:11px;color:var(--text-muted)">From %</th>
+						<th style="padding:7px 10px;text-align:right;border-bottom:1px solid var(--border-color);font-size:11px;color:var(--text-muted)">To % (0=no cap)</th>
+						<th style="padding:7px 10px;text-align:right;border-bottom:1px solid var(--border-color);font-size:11px;color:var(--text-muted)">Commission %</th>
+						<th style="padding:7px 10px;text-align:center;border-bottom:1px solid var(--border-color);font-size:11px;color:var(--text-muted)">Active</th>
+						<th style="padding:7px 10px;border-bottom:1px solid var(--border-color)"></th>
+					</tr>
+				</thead>
+				<tbody>
+					${slabs.map(s => `
+						<tr data-slab="${frappe.utils.escape_html(s.name)}">
+							<td style="padding:7px 10px;border-bottom:1px solid var(--border-color)">${frappe.utils.escape_html(s.slab_label || "")}</td>
+							<td style="padding:7px 10px;border-bottom:1px solid var(--border-color);text-align:right">${s.from_pct}%</td>
+							<td style="padding:7px 10px;border-bottom:1px solid var(--border-color);text-align:right">${s.to_pct || "∞"}%</td>
+							<td style="padding:7px 10px;border-bottom:1px solid var(--border-color);text-align:right;font-weight:600;color:var(--ib-primary)">${s.commission_pct}%</td>
+							<td style="padding:7px 10px;border-bottom:1px solid var(--border-color);text-align:center">
+								${s.is_active ? `<span style="color:#16a34a">✓</span>` : `<span style="color:var(--text-muted)">—</span>`}
+							</td>
+							<td style="padding:7px 10px;border-bottom:1px solid var(--border-color);text-align:center">
+								<button class="ib-slab-edit-btn btn btn-xs btn-default" data-slab="${frappe.utils.escape_html(s.name)}">Edit</button>
+								<button class="ib-slab-del-btn btn btn-xs btn-danger" data-slab="${frappe.utils.escape_html(s.name)}" style="margin-left:4px">✕</button>
+							</td>
+						</tr>
+					`).join("")}
+				</tbody>
+			</table>`;
+		};
+
+		const d = new frappe.ui.Dialog({
+			title: "Incentive Slabs",
+			size: "large",
+			fields: [
+				{
+					fieldtype: "HTML",
+					fieldname: "slab_list_html",
+					options: `<div id="ib-slab-list"><div style="padding:20px;text-align:center">Loading…</div></div>`,
+				},
+				{ fieldtype: "Section Break", label: "Add / Edit Slab" },
+				{
+					fieldname: "slab_name_hidden",
+					fieldtype: "Data",
+					hidden: 1,
+				},
+				{
+					fieldname: "slab_label",
+					fieldtype: "Data",
+					label: "Tier Label",
+					placeholder: "e.g. Bronze, Silver, Gold, Platinum",
+				},
+				{ fieldtype: "Column Break" },
+				{
+					fieldname: "from_pct",
+					fieldtype: "Float",
+					label: "From % of Target",
+					default: 0,
+				},
+				{ fieldtype: "Column Break" },
+				{
+					fieldname: "to_pct",
+					fieldtype: "Float",
+					label: "To % (0 = No Cap)",
+					default: 100,
+				},
+				{ fieldtype: "Column Break" },
+				{
+					fieldname: "commission_pct",
+					fieldtype: "Float",
+					label: "Commission %",
+					default: 5,
+				},
+				{ fieldtype: "Column Break" },
+				{
+					fieldname: "is_active",
+					fieldtype: "Check",
+					label: "Active",
+					default: 1,
+				},
+			],
+			primary_action_label: "Save Slab",
+			primary_action(values) {
+				frappe.call({
+					method: "instabiz.overrides.sales_target.save_incentive_slab",
+					args: {
+						name: values.slab_name_hidden || null,
+						slab_label: values.slab_label,
+						from_pct: values.from_pct || 0,
+						to_pct: values.to_pct || 0,
+						commission_pct: values.commission_pct || 0,
+						is_active: values.is_active ? 1 : 0,
+					},
+					callback(r) {
+						if (r.message && r.message.status === "ok") {
+							frappe.show_alert({ message: "Slab saved", indicator: "green" });
+							d.set_value("slab_name_hidden", "");
+							d.set_value("slab_label", "");
+							d.set_value("from_pct", 0);
+							d.set_value("to_pct", 100);
+							d.set_value("commission_pct", 5);
+							d.set_value("is_active", 1);
+							reload_list();
+						}
+					},
+				});
+			},
+		});
+
+		const reload_list = () => {
+			frappe.call({
+				method: "instabiz.overrides.sales_target.get_incentive_slabs",
+				callback(r) {
+					const slabs = r.message || [];
+					d.$wrapper.find("#ib-slab-list").html(render_slabs_html(slabs));
+					// Edit button
+					d.$wrapper.on("click", ".ib-slab-edit-btn", function() {
+						const slab_name = $(this).data("slab");
+						const slab = slabs.find(s => s.name === slab_name);
+						if (!slab) return;
+						d.set_value("slab_name_hidden", slab.name);
+						d.set_value("slab_label", slab.slab_label);
+						d.set_value("from_pct", slab.from_pct);
+						d.set_value("to_pct", slab.to_pct);
+						d.set_value("commission_pct", slab.commission_pct);
+						d.set_value("is_active", slab.is_active);
+					});
+					// Delete button
+					d.$wrapper.on("click", ".ib-slab-del-btn", function() {
+						const slab_name = $(this).data("slab");
+						frappe.confirm(
+							`Delete slab "${slab_name}"?`,
+							() => {
+								frappe.call({
+									method: "instabiz.overrides.sales_target.delete_incentive_slab",
+									args: { name: slab_name },
+									callback() { reload_list(); },
+								});
+							}
+						);
+					});
+				},
+			});
+		};
+
+		d.show();
+		reload_list();
 	}
 
 	_show_team_manage_modal(team_name) {
@@ -1428,6 +1593,13 @@ class IBAssignmentAdmin {
 			.ib-aa-target-sep { color: var(--text-muted); font-size: 11px; }
 			.ib-aa-target-goal { color: var(--text-muted); }
 			.ib-aa-target-pct { font-size: 10px; font-weight: 700; margin-left: auto; }
+			.ib-aa-incentive-chip {
+				display: inline-flex; align-items: center; gap: 3px;
+				background: #fef3c7; color: #92400e;
+				border: 1px solid #fde68a; border-radius: 10px;
+				font-size: 10px; font-weight: 700;
+				padding: 1px 6px; margin-left: 6px;
+			}
 			.ib-aa-target-bar-track {
 				height: 4px; background: var(--border-color);
 				border-radius: 3px; overflow: hidden;

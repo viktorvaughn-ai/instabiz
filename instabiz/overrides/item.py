@@ -11,9 +11,7 @@ _FG_BATCH_GROUPS = {"BOPP", "FOAM", "SPECIALTY"}
 
 
 def set_batch_no_for_fg(doc, method=None):
-	"""Auto-enable has_batch_no for items in FG item groups."""
-	if doc.item_group in _FG_BATCH_GROUPS:
-		doc.has_batch_no = 1
+	pass  # batch tracking disabled
 
 
 @frappe.whitelist()

@@ -16,6 +16,13 @@ frappe.pages["ib-customer-board"].on_page_hide = function (wrapper) {
 	if (wrapper.page_obj) wrapper.page_obj._stop_live();
 };
 
+const IB_CB_COLOR_SUCCESS = "#22c55e"; // green — positive/new highlight
+const IB_CB_COLOR_SUCCESS_RGB = "34,197,94";
+const IB_CB_COLOR_DANGER  = "#ef4444"; // red — skipped/urgent highlight
+const IB_CB_COLOR_DANGER_RGB  = "239,68,68";
+const IB_CB_COLOR_WA      = "#25d366"; // WhatsApp brand green
+const IB_CB_COLOR_WARNING = "#f59e0b"; // amber — mid-progress bar
+
 class IBCustomerBoard {
 	constructor(page, wrapper) {
 		this.page = page;
@@ -27,7 +34,7 @@ class IBCustomerBoard {
 		this._wa_templates = [];
 		this._sortables = [];
 		this._highlight_customer = null;
-		this._highlight_color = "#22c55e";
+		this._highlight_color = IB_CB_COLOR_SUCCESS;
 		this._pending_on_timeout = null;
 		this._is_manager = frappe.user.has_role("Sales Manager") || frappe.user.has_role("System Manager");
 		this._last_data = null;
@@ -66,33 +73,7 @@ class IBCustomerBoard {
 	}
 
 	_start_live() {
-		const self = this;
-		this._live_handler = function (data) {
-			const customer = data && data.customer;
-			const taken_by = data && data.taken_by;
-			if (!customer) return;
-			// Remove the card from Territory column immediately (no full reload)
-			const $card = $(`#ib-cb-regular-cards .ib-cb-card[data-customer="${CSS.escape(customer)}"]`);
-			if ($card.length) {
-				$card.fadeOut(200, function () {
-					$(this).remove();
-					// Decrement badge
-					const $badge = $("#ib-cb-regular-count");
-					const parts = $badge.text().split("/");
-					const shown = Math.max(0, parseInt(parts[0], 10) - 1);
-					const total = parts.length > 1 ? Math.max(0, parseInt(parts[1], 10) - 1) : shown;
-					$badge.text(shown < total ? `${shown} / ${total}` : shown);
-					if (!$("#ib-cb-regular-cards .ib-cb-card").length) {
-						$("#ib-cb-regular-cards").html(`<div class="ib-cb-empty">No unassigned customers in your territory</div>`);
-					}
-				});
-				if (taken_by && taken_by !== frappe.session.user) {
-					const taker = frappe.boot.user_info?.[taken_by]?.fullname || taken_by;
-					frappe.show_alert({ message: `${customer} was taken by ${taker}`, indicator: "orange" }, 4);
-				}
-			}
-		};
-		frappe.realtime.on("ib_territory_taken", this._live_handler);
+		// Territory column removed — no live handler needed
 	}
 
 	_stop_live() {
@@ -163,16 +144,6 @@ class IBCustomerBoard {
 						</div>
 						<div class="ib-cb-cards" id="ib-cb-dormant-cards"></div>
 					</div>
-					<div class="ib-cb-col" id="ib-cb-regular">
-						<div class="ib-cb-col-header">
-							${IB_ICONS.svg("map_pin", 13)}<span class="ib-cb-col-title">Territory</span>
-							<span class="ib-cb-col-badge" id="ib-cb-regular-count">0</span>
-						</div>
-						<div class="ib-cb-col-search">
-							<input class="ib-cb-pool-search" id="ib-cb-regular-search" placeholder="Search…" autocomplete="off">
-						</div>
-						<div class="ib-cb-cards" id="ib-cb-regular-cards"></div>
-					</div>
 					<div class="ib-cb-col ib-cb-col--today" id="ib-cb-today">
 						<div class="ib-cb-col-header">
 							${IB_ICONS.svg("calendar", 13)}<span class="ib-cb-col-title">Today</span>
@@ -239,7 +210,7 @@ class IBCustomerBoard {
 		if (!t.has_target) { $("#ib-cb-target-card").hide(); return; }
 		const fmt = (v) => "₹" + Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 		const pct = t.pct || 0;
-		const bar_color = pct >= 100 ? "#22c55e" : pct >= 60 ? "var(--ib-primary)" : "#f59e0b";
+		const bar_color = pct >= 100 ? IB_CB_COLOR_SUCCESS : pct >= 60 ? "var(--ib-primary)" : IB_CB_COLOR_WARNING;
 		const d = frappe.datetime.str_to_user(t.month);
 		const month_label = d ? d.slice(3) : t.month;  // "May 2026" from "01-05-2026"
 		$("#ib-cb-target-month").text(month_label);
@@ -282,14 +253,13 @@ class IBCustomerBoard {
 		$("#ib-cb-today-date").text(frappe.datetime.str_to_user(data.date));
 		$("#ib-cb-tomorrow-date").text(frappe.datetime.str_to_user(data.tomorrow_date));
 		this._render_pool("dormant", data.dormant, data.dormant_total);
-		this._render_pool("regular", data.regular, data.regular_total);
 		this._render_today(data.today);
 		this._render_tomorrow(data.tomorrow);
 		this._init_sortable();
 		if (this._highlight_customer) {
 			this._flash_new_card(this._highlight_customer, this._highlight_color);
 			this._highlight_customer = null;
-			this._highlight_color = "#22c55e";
+			this._highlight_color = IB_CB_COLOR_SUCCESS;
 		}
 	}
 
@@ -349,7 +319,6 @@ class IBCustomerBoard {
 		const data = this._last_data;
 		if (!data) return;
 		if (col === "dormant") this._render_pool("dormant", data.dormant, data.dormant_total);
-		else if (col === "regular") this._render_pool("regular", data.regular, data.regular_total);
 		else if (col === "today") this._render_today(data.today);
 		else if (col === "tomorrow") this._render_tomorrow(data.tomorrow);
 	}
@@ -535,7 +504,7 @@ class IBCustomerBoard {
 			// (source_pool indicates this came from territory, not from My Accounts)
 			const is_unowned = !r.custom_sales_person_user || r.custom_sales_person_user !== frappe.session.user;
 			const from_territory = r.source_pool === "Dormant" || r.source_pool === "Regular";
-			const claim_btn = (!is_done && is_unowned && from_territory)
+			const claim_btn = (!is_done && is_unowned && from_territory && this._is_manager)
 				? `<button class="ib-cb-pill ib-cb-pill--claim ib-cb-btn-claim" data-customer="${frappe.utils.escape_html(r.customer)}" title="Add to My Accounts">
 						${IB_ICONS.svg("user", 10)} Claim Account
 					</button>`
@@ -681,10 +650,8 @@ class IBCustomerBoard {
 				forceFallback: false,
 			};
 
-			["dormant", "regular"].forEach((col) => {
-				const el = document.getElementById(`ib-cb-${col}-cards`);
-				if (el) self._sortables.push(new Sortable(el, pool_opts));
-			});
+			const dormantEl = document.getElementById("ib-cb-dormant-cards");
+			if (dormantEl) self._sortables.push(new Sortable(dormantEl, pool_opts));
 
 			const make_board_opts = (date, col_id, accept_group) => ({
 				group: { name: col_id, pull: true, put: ["ib-pool", accept_group] },
@@ -723,8 +690,8 @@ class IBCustomerBoard {
 				if (r.message && r.message.status === "ok") {
 					self._gsap_ready.then(() => {
 						gsap.fromTo(`#${col_id}`,
-							{ boxShadow: "inset 0 0 0 2px #22c55e" },
-							{ boxShadow: "inset 0 0 0 0px #22c55e", duration: 0.7, ease: "power2.out", clearProps: "boxShadow" }
+							{ boxShadow: `inset 0 0 0 2px ${IB_CB_COLOR_SUCCESS}` },
+							{ boxShadow: `inset 0 0 0 0px ${IB_CB_COLOR_SUCCESS}`, duration: 0.7, ease: "power2.out", clearProps: "boxShadow" }
 						);
 					});
 					if (is_today) {
@@ -754,8 +721,8 @@ class IBCustomerBoard {
 					self._flush_pending();
 					self._gsap_ready.then(() => {
 						gsap.fromTo(`#${col_id}`,
-							{ boxShadow: "inset 0 0 0 2px #22c55e" },
-							{ boxShadow: "inset 0 0 0 0px #22c55e", duration: 0.7, ease: "power2.out", clearProps: "boxShadow" }
+							{ boxShadow: `inset 0 0 0 2px ${IB_CB_COLOR_SUCCESS}` },
+							{ boxShadow: `inset 0 0 0 0px ${IB_CB_COLOR_SUCCESS}`, duration: 0.7, ease: "power2.out", clearProps: "boxShadow" }
 						);
 					});
 					self._highlight_customer = customer;
@@ -992,7 +959,7 @@ class IBCustomerBoard {
 										frappe.show_alert({ message: "Activity logged", indicator: "green" });
 										self._flush_pending();
 										self._highlight_customer = customer;
-										self._highlight_color = "#25d366";
+										self._highlight_color = IB_CB_COLOR_WA;
 										self.refresh();
 									}
 								},
@@ -1031,7 +998,7 @@ class IBCustomerBoard {
 						callback(r) {
 							if (r.message && r.message.status === "ok") {
 								self._highlight_customer = customer_id;
-								self._highlight_color = "#ef4444";
+								self._highlight_color = IB_CB_COLOR_DANGER;
 								self.refresh();
 							} else {
 								frappe.show_alert({ message: "Skip failed", indicator: "red" });
@@ -1048,13 +1015,13 @@ class IBCustomerBoard {
 		});
 	}
 
-	_flash_new_card(customer, color = "#22c55e") {
+	_flash_new_card(customer, color = IB_CB_COLOR_SUCCESS) {
 		const self = this;
 		const esc = customer.replace(/["\\]/g, "\\$&");
 		const $card = $(`.ib-cb-card[data-customer="${esc}"]`).first();
 		if (!$card.length) return;
 		$card[0].scrollIntoView({ behavior: "smooth", block: "nearest" });
-		const rgb = color === "#ef4444" ? "239,68,68" : "34,197,94";
+		const rgb = color === IB_CB_COLOR_DANGER ? IB_CB_COLOR_DANGER_RGB : IB_CB_COLOR_SUCCESS_RGB;
 		self._gsap_ready.then(() => {
 			gsap.fromTo($card[0],
 				{ boxShadow: `0 0 0 2px ${color}, 0 0 18px rgba(${rgb},0.45)` },

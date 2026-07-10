@@ -56,16 +56,18 @@ class CustomDeliveryNote(IbStatusMixin, DeliveryNote):
         apply_location_cost_center(self)
         super().validate()
 
+    def on_update_after_submit(self):
+        recalculate_items(self)
+        try:
+            super().on_update_after_submit()
+        except AttributeError:
+            pass
+
     def before_cancel(self):
         if not (self.custom_cancel_reason or "").strip():
             frappe.throw(frappe._("Fill in Cancellation Reason before cancelling this Delivery Note."))
 
     def before_submit(self):
-        if not (self.get("custom_transport") or self.get("transporter")):
-            frappe.throw(
-                frappe._("Cannot submit — fill in Transporter / Transport Company before dispatch."),
-                title=frappe._("Missing Dispatch Info"),
-            )
         _auto_create_sr_if_needed(self)
 
 
@@ -131,13 +133,12 @@ def _auto_create_sr_if_needed(dn):
                 "warehouse": row["warehouse"],
                 # Set qty to exactly what this DN needs
                 "qty": row["needed"],
-                "valuation_rate": frappe.db.get_value("Item", row["item_code"], "valuation_rate") or 100.0,
+                "valuation_rate": frappe.db.get_value("Item", row["item_code"], "valuation_rate") or 1.0,
             }
             for row in shortfall
         ],
     })
     sr.insert(ignore_permissions=True)
-    frappe.db.commit()
 
     lines = "".join(
         f"<li>{r['item_code']} — need {r['needed']}, have {r['have']} in {r['warehouse']}</li>"

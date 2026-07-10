@@ -34,7 +34,7 @@ def _columns():
 
 def _data(filters):
 	rows = []
-	source_filter = filters.get("source", "Both")
+	source_filter = filters.get("source") or "Both"
 
 	if source_filter in ("Lead", "Both"):
 		rows += _lost_leads(filters)

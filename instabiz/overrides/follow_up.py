@@ -26,13 +26,23 @@ def run_follow_up_reminders():
 
 
 def _notify(user: str, lead: dict) -> None:
-	note = f" — {lead.custom_follow_up_note}" if lead.custom_follow_up_note else ""
+	marker = f"[ib-followup-{lead.name}-{lead.custom_next_follow_up_date}]"
+	if frappe.db.exists("Notification Log", {"for_user": user, "subject": ["like", f"%{marker}%"]}):
+		return
+	body = f"Follow-up overdue: {lead.lead_name or lead.name} (due {lead.custom_next_follow_up_date})"
+	if lead.custom_follow_up_note:
+		note_part = f" — {lead.custom_follow_up_note}"
+		max_body = 140 - len(marker) - 1
+		if len(body) + len(note_part) <= max_body:
+			body += note_part
+	max_body = 140 - len(marker) - 1
+	subject = f"{marker} {body[:max_body]}"
 	frappe.get_doc(
 		{
 			"doctype": "Notification Log",
 			"for_user": user,
 			"from_user": "Administrator",
-			"subject": f"Follow-up overdue: {lead.lead_name or lead.name} (due {lead.custom_next_follow_up_date}){note}",
+			"subject": subject,
 			"type": "Alert",
 			"document_type": "Lead",
 			"document_name": lead.name,

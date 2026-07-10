@@ -44,14 +44,16 @@ def run_expiry_alert():
 
 
 def _get_warehouse_managers():
-	return frappe.get_all(
-		"Has Role",
-		filters={
-			"role": ["in", ["Stock Manager", "Purchase Manager", "System Manager"]],
-			"parenttype": "User",
-		},
-		pluck="parent",
-	)
+	rows = frappe.db.sql("""
+		SELECT DISTINCT hr.parent
+		FROM `tabHas Role` hr
+		JOIN `tabUser` u ON u.name = hr.parent
+		WHERE hr.role IN ('Warehouse Manager', 'Stock User', 'Purchase Manager', 'System Manager')
+		  AND hr.parenttype = 'User'
+		  AND u.enabled = 1
+		  AND hr.parent NOT IN ('Administrator', 'Guest')
+	""", as_dict=True)
+	return [r.parent for r in rows]
 
 
 def _already_notified(user: str, batch: str) -> bool:

@@ -25,7 +25,7 @@ def _columns():
 
 
 def _data(filters):
-	conds = ["si.docstatus = 1", "si.custom_sales_person_user IS NOT NULL"]
+	conds = ["si.docstatus = 1", "si.is_return = 0", "si.custom_sales_person_user IS NOT NULL"]
 	params = {}
 
 	if filters.get("from_date"):

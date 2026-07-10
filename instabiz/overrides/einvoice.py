@@ -1,7 +1,8 @@
 """instabiz.overrides.einvoice
 
 Auto-generate E-Invoice (IRN) on Sales Invoice submission via india_compliance.
-Same non-blocking pattern as ewaybill.py.
+When submitted from UI: india_compliance client JS handles it (on_submit event in e_invoice_actions.js).
+When submitted via API/script: we enqueue generation after commit.
 """
 import frappe
 from frappe import _
@@ -28,13 +29,7 @@ def _had_cancelled_irn(docname):
 
 
 def _dn_ewaybill_exists(doc):
-	"""True if any linked Delivery Note already has an e-waybill number.
-
-	When e-waybill is generated on DN submit, the SI has no ewaybill field set.
-	india_compliance then tries to generate a second e-waybill during IRN creation
-	(generate_e_waybill_with_e_invoice=1). We suppress that by temporarily patching
-	the cached GST Settings when we know the DN already owns the waybill.
-	"""
+	"""True if any linked Delivery Note already has an e-waybill number."""
 	dn_names = list({
 		row.delivery_note
 		for row in doc.items
@@ -48,68 +43,64 @@ def _dn_ewaybill_exists(doc):
 	))
 
 
+def _generate_einvoice_background(docname):
+	"""Background job: generate e-invoice with e-waybill suppression if DN already has one."""
+	try:
+		doc = frappe.get_doc("Sales Invoice", docname)
+
+		from india_compliance.gst_india.utils.e_invoice import (  # pyright: ignore[reportMissingImports]
+			generate_e_invoice,
+		)
+
+		# Suppress duplicate e-waybill if DN already owns one
+		settings = frappe.get_cached_doc("GST Settings")
+		_saved_flag = settings.generate_e_waybill_with_e_invoice
+		if _dn_ewaybill_exists(doc):
+			settings.generate_e_waybill_with_e_invoice = 0
+
+		try:
+			generate_e_invoice(docname, throw=False)
+		finally:
+			settings.generate_e_waybill_with_e_invoice = _saved_flag
+
+	except Exception:
+		frappe.log_error(
+			title=f"E-Invoice background generation failed: {docname}",
+			message=frappe.get_traceback(),
+			reference_doctype="Sales Invoice",
+			reference_name=docname,
+		)
+
+
 def run_einvoice_on_submit(doc, method=None):
-	"""Called on Sales Invoice on_submit. Non-blocking — warns on failure."""
-	# Skip returns, debit notes, inter-company
+	"""Called on Sales Invoice on_submit.
+
+	UI submits: india_compliance client JS (e_invoice_actions.js on_submit) handles generation.
+	API/script submits (_submitted_from_ui not set): we enqueue after commit.
+	"""
+	# Skip returns, debit notes
 	if doc.get("is_return") or doc.get("is_debit_note"):
-		return
-	# B2C invoices don't need IRN
-	# india_compliance uses billing_address_gstin (not customer_gstin) in this version
-	if not (doc.get("billing_address_gstin") or doc.get("customer_gstin")):
 		return
 	# Already has IRN
 	if doc.get("irn"):
 		return
-	# NIC rule: cancelled IRN cannot be regenerated for the same document number
+
+	# UI submits: client JS handles generation automatically when auto_generate_e_invoice=1
+	# Avoid double-generation which causes errors and confuses users
+	if getattr(doc, "_submitted_from_ui", None):
+		return
+
+	# Non-UI submit path (API, scripts, bulk tools)
 	if _had_cancelled_irn(doc.name):
-		frappe.msgprint(
-			_("IRN was previously generated and cancelled for {0}. "
-			  "NIC does not allow re-generation for the same invoice number. "
-			  "Cancel this invoice and raise a new one with a fresh number.").format(frappe.bold(doc.name)),
-			title=_("E-Invoice Skipped — Cancelled IRN"),
-			indicator="orange",
-		)
 		return
 
 	if not _is_einvoice_configured():
-		frappe.msgprint(
-			_("E-Invoice API not configured in GST Settings. "
-			  "Enable API credentials and 'Enable E-Invoice' to auto-generate IRN."),
-			title=_("E-Invoice Not Generated"),
-			indicator="orange",
-			alert=True,
-		)
 		return
 
-	# If the linked DN already has an e-waybill, suppress the duplicate attempt
-	# that india_compliance would make via generate_e_waybill_with_e_invoice=1.
-	# We patch the per-request cached doc (frappe.local.document_cache) — safe within one request.
-	dn_has_ewb = _dn_ewaybill_exists(doc)
-	settings = frappe.get_cached_doc("GST Settings") if dn_has_ewb else None
-	_saved_flag = None
-	if settings:
-		_saved_flag = settings.generate_e_waybill_with_e_invoice
-		settings.generate_e_waybill_with_e_invoice = 0
-
-	try:
-		from india_compliance.gst_india.utils.e_invoice import (  # pyright: ignore[reportMissingImports]
-			generate_e_invoice,
-		)
-		generate_e_invoice(doc.name, throw=False)
-	except Exception:
-		frappe.log_error(
-			title=f"E-Invoice auto-generation failed: {doc.name}",
-			message=frappe.get_traceback(),
-			reference_doctype="Sales Invoice",
-			reference_name=doc.name,
-		)
-		frappe.msgprint(
-			_("E-Invoice (IRN) auto-generation failed for {0}. "
-			  "Check error log or generate manually from the invoice.").format(frappe.bold(doc.name)),
-			title=_("E-Invoice Error"),
-			indicator="orange",
-			alert=True,
-		)
-	finally:
-		if settings and _saved_flag is not None:
-			settings.generate_e_waybill_with_e_invoice = _saved_flag
+	# Enqueue after commit to avoid in-transaction DB state issues
+	frappe.enqueue(
+		"instabiz.overrides.einvoice._generate_einvoice_background",
+		enqueue_after_commit=True,
+		queue="short",
+		docname=doc.name,
+	)

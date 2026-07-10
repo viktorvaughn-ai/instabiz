@@ -67,15 +67,8 @@ def _notify_7(inv, age, outstanding, rep, name):
 	marker = _MARKER_7.format(name=name)
 	if frappe.db.exists("Notification Log", {"for_user": rep, "subject": ["like", f"%{marker}%"]}):
 		return
-	_send(
-		user=rep,
-		doctype="Sales Invoice",
-		docname=name,
-		subject=(
-			f"⚠️ Overdue {age} days — {name} | Customer: {inv.customer} | "
-			f"Outstanding: {inv.currency} {outstanding:,.2f} | Due: {inv.due_date} {marker}"
-		),
-	)
+	base = f"Overdue {age}d: {name} {inv.customer} {inv.currency} {outstanding:,.0f} due {inv.due_date}"
+	_send(rep, "Sales Invoice", name, f"{base[:140 - len(marker) - 1]} {marker}")
 
 
 def _notify_15(inv, age, outstanding, managers, name):
@@ -83,18 +76,12 @@ def _notify_15(inv, age, outstanding, managers, name):
 	users  = managers
 	if inv.custom_sales_person_user:
 		users = list({inv.custom_sales_person_user} | set(managers))
+	base = f"OVERDUE {age}d: {name} {inv.customer} {inv.currency} {outstanding:,.0f} due {inv.due_date}"
+	subject = f"{base[:140 - len(marker) - 1]} {marker}"
 	for user in users:
 		if frappe.db.exists("Notification Log", {"for_user": user, "subject": ["like", f"%{marker}%"]}):
 			continue
-		_send(
-			user=user,
-			doctype="Sales Invoice",
-			docname=name,
-			subject=(
-				f"🔴 OVERDUE {age} days — {name} | Customer: {inv.customer} | "
-				f"Outstanding: {inv.currency} {outstanding:,.2f} | Due: {inv.due_date} {marker}"
-			),
-		)
+		_send(user, "Sales Invoice", name, subject)
 
 
 def _notify_30(inv, age, outstanding, managers, name):
@@ -102,18 +89,12 @@ def _notify_30(inv, age, outstanding, managers, name):
 	users  = managers
 	if inv.custom_sales_person_user:
 		users = list({inv.custom_sales_person_user} | set(managers))
+	base = f"CRITICAL OVERDUE {age}d: {name} {inv.customer} {inv.currency} {outstanding:,.0f} ORDERS BLOCKED"
+	subject = f"{base[:140 - len(marker) - 1]} {marker}"
 	for user in users:
 		if frappe.db.exists("Notification Log", {"for_user": user, "subject": ["like", f"%{marker}%"]}):
 			continue
-		_send(
-			user=user,
-			doctype="Sales Invoice",
-			docname=name,
-			subject=(
-				f"🚨 CRITICAL OVERDUE {age} days — {name} | Customer: {inv.customer} | "
-				f"Outstanding: {inv.currency} {outstanding:,.2f} | NEW ORDERS BLOCKED {marker}"
-			),
-		)
+		_send(user, "Sales Invoice", name, subject)
 
 	# Set block flag on Customer so SO before_submit can enforce it
 	if not frappe.db.get_value("Customer", inv.customer, _BLOCK_FIELD):
@@ -124,6 +105,7 @@ def _send(user, doctype, docname, subject):
 	frappe.get_doc({
 		"doctype":       "Notification Log",
 		"for_user":      user,
+		"from_user":     "Administrator",
 		"type":          "Alert",
 		"document_type": doctype,
 		"document_name": docname,

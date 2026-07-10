@@ -1,0 +1,161 @@
+{
+ "actions": [],
+ "creation": "2026-06-26 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "item_code",
+  "item_name",
+  "uom",
+  "color",
+  "width_mm",
+  "length_mtr",
+  "qty_pkg",
+  "total_pkg",
+  "qty",
+  "rate",
+  "amount",
+  "column_break_item",
+  "warehouse",
+  "expense_account",
+  "against_pi_item",
+  "serial_and_batch_bundle"
+ ],
+ "fields": [
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Item Code",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "item_code.item_name",
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Item Name",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "item_code.stock_uom",
+   "fetch_if_empty": 1,
+   "fieldname": "uom",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "UOM",
+   "options": "UOM"
+  },
+  {
+   "fetch_from": "item_code.color",
+   "fetch_if_empty": 1,
+   "fieldname": "color",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Color",
+   "options": "Item Color"
+  },
+  {
+   "fetch_from": "item_code.width_mm",
+   "fetch_if_empty": 1,
+   "fieldname": "width_mm",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Width (MM)",
+   "precision": "3"
+  },
+  {
+   "fetch_from": "item_code.length_mtr",
+   "fetch_if_empty": 1,
+   "fieldname": "length_mtr",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Length (MTR)",
+   "precision": "3"
+  },
+  {
+   "fetch_from": "item_code.qty_pkg",
+   "fetch_if_empty": 1,
+   "fieldname": "qty_pkg",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "QTY/PKG",
+   "precision": "2"
+  },
+  {
+   "fieldname": "total_pkg",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Total PKG",
+   "precision": "2"
+  },
+  {
+   "default": "1",
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Qty",
+   "reqd": 1
+  },
+  {
+   "fieldname": "rate",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Rate",
+   "options": "Company:company:default_currency"
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Amount",
+   "options": "Company:company:default_currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_item",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "expense_account",
+   "fieldtype": "Link",
+   "label": "Expense Account",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "against_pi_item",
+   "fieldtype": "Data",
+   "label": "Against PI Item (Row Name)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "serial_and_batch_bundle",
+   "fieldtype": "Link",
+   "label": "Serial and Batch Bundle",
+   "no_copy": 1,
+   "options": "Serial and Batch Bundle",
+   "print_hide": 1,
+   "search_index": 1
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-26 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "IB Debit Note Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

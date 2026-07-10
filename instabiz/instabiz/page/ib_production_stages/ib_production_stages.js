@@ -14,17 +14,25 @@ frappe.pages["ib-production-stages"].on_page_show = function (wrapper) {
 	}
 };
 
+frappe.pages["ib-production-stages"].on_page_hide = function (wrapper) {
+	const inst = wrapper._page_instance;
+	if (inst) {
+		if (inst._key_handler) document.removeEventListener("keydown", inst._key_handler);
+		if (inst._sortables) inst._sortables.forEach(s => s.destroy && s.destroy());
+	}
+};
+
 // ---------------------------------------------------------------------------
 // Stage definitions
 // ---------------------------------------------------------------------------
 const IB_STAGES = [
-	{ key: "coating", label: "Coating", color: "#7c3aed" },
-	{ key: "slitting", label: "Slitting", color: "#2563eb" },
-	{ key: "rewinding", label: "Rewinding", color: "#0891b2" },
-	{ key: "cutting", label: "Cutting", color: "#059669" },
-	{ key: "packing", label: "Packing", color: "#d97706" },
-	{ key: "ready_to_deliver", label: "Ready to Deliver", color: "#ea580c" },
-	{ key: "delivered", label: "Delivered", color: "#10b981" },
+	{ key: "coating",          label: "Coating",          icon: "layers",       color: "#7c3aed" },
+	{ key: "slitting",         label: "Slitting",         icon: "scissors",     color: "#2563eb" },
+	{ key: "rewinding",        label: "Rewinding",        icon: "refresh-cw",   color: "#0891b2" },
+	{ key: "cutting",          label: "Cutting",          icon: "crop",         color: "#059669" },
+	{ key: "packing",          label: "Packing",          icon: "package",     color: "#d97706" },
+	{ key: "ready_to_deliver", label: "Ready to Deliver", icon: "truck",        color: "#ea580c" },
+	{ key: "delivered",        label: "Delivered",        icon: "check-circle", color: "#10b981" },
 ];
 
 const IB_PRIORITY_META = {
@@ -109,6 +117,11 @@ class IBProductionStages {
 		this.machines_cache = null;
 		this.item_wise_search = "";
 
+		// Data stores — avoids JSON.stringify in data attributes
+		this._wo_data = new Map();
+		this._machine_data = new Map();
+		this._sortables = [];
+
 		this._inject_styles();
 		this._build_shell();
 		this.refresh();
@@ -121,12 +134,28 @@ class IBProductionStages {
 		// Toolbar tabs
 		const tabs_html = `
 			<div class="ib-ps-tabs">
-				<button class="ib-ps-tab active" data-tab="pipeline">Pipeline</button>
-				<button class="ib-ps-tab" data-tab="item_wise">Item-wise</button>
-				<button class="ib-ps-tab" data-tab="order_wise">Order-wise</button>
-				<button class="ib-ps-tab" data-tab="machine_wise">Machine-wise</button>
+				<button class="ib-ps-tab active" data-tab="pipeline">
+					<iconify-icon icon="lucide:kanban" width="12" height="12" style="vertical-align:middle;margin-right:4px"></iconify-icon>
+					Pipeline
+				</button>
+				<button class="ib-ps-tab" data-tab="item_wise">
+					<iconify-icon icon="lucide:box" width="12" height="12" style="vertical-align:middle;margin-right:4px"></iconify-icon>
+					Item-wise
+				</button>
+				<button class="ib-ps-tab" data-tab="order_wise">
+					<iconify-icon icon="lucide:clipboard-list" width="12" height="12" style="vertical-align:middle;margin-right:4px"></iconify-icon>
+					Order-wise
+				</button>
+				<button class="ib-ps-tab" data-tab="machine_wise">
+					<iconify-icon icon="lucide:settings-2" width="12" height="12" style="vertical-align:middle;margin-right:4px"></iconify-icon>
+					Machine-wise
+				</button>
+				<button class="ib-ps-tab" data-tab="job_bundles">
+					<iconify-icon icon="lucide:layers" width="12" height="12" style="vertical-align:middle;margin-right:4px"></iconify-icon>
+					Job Bundles
+				</button>
 				<button class="ib-ps-refresh-btn" id="ib-ps-refresh">
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4"/></svg>
+					<iconify-icon icon="lucide:refresh-cw" width="13" height="13" style="vertical-align:middle;margin-right:4px"></iconify-icon>
 					Refresh
 				</button>
 			</div>`;
@@ -148,6 +177,16 @@ class IBProductionStages {
 
 		// Side panel close via backdrop
 		this.$body.on("click", "#ib-ps-backdrop", () => this._close_side_panel());
+
+		// Keyboard shortcuts: Esc = close panel, R = refresh
+		this._key_handler = (e) => {
+			if (e.key === "Escape") { this._close_side_panel(); return; }
+			const tag = (e.target || {}).tagName || "";
+			if (e.key === "r" && !e.ctrlKey && !e.metaKey && !["INPUT","TEXTAREA","SELECT"].includes(tag)) {
+				this.refresh();
+			}
+		};
+		document.addEventListener("keydown", this._key_handler);
 	}
 
 	_switch_tab(tab) {
@@ -172,6 +211,8 @@ class IBProductionStages {
 			}
 		} else if (this.active_tab === "machine_wise") {
 			this._load_machine_wise();
+		} else if (this.active_tab === "job_bundles") {
+			this._load_job_bundles();
 		}
 	}
 
@@ -184,7 +225,17 @@ class IBProductionStages {
 	// -----------------------------------------------------------------------
 	_load_pipeline() {
 		const $c = this._content();
-		$c.html('<div class="ib-ps-loading">Loading pipeline…</div>');
+		// Skeleton columns during load
+		$c.html(`<div class="ib-ps-pipeline">${IB_STAGES.map(s => `
+			<div class="ib-ps-col">
+				<div class="ib-ps-col-header" style="border-top:3px solid ${s.color}">
+					<span class="ib-ps-col-title">${s.label}</span>
+					<div class="ib-skel" style="width:24px;height:20px;border-radius:10px;display:inline-block"></div>
+				</div>
+				<div class="ib-ps-col-body">
+					${[1,2,3].map(() => `<div class="ib-skel ib-skel-wo-card"></div>`).join("")}
+				</div>
+			</div>`).join("")}</div>`);
 		frappe.call({
 			method: "instabiz.overrides.production.get_stage_pipeline",
 			callback: (r) => {
@@ -199,54 +250,291 @@ class IBProductionStages {
 
 	_render_pipeline(data) {
 		const $c = this._content();
+		this._wo_data = new Map();
 
 		const cols = IB_STAGES.map((s) => {
 			const wos = (data[s.key] || []);
+			wos.forEach(wo => this._wo_data.set(wo.name, wo));
 			const count = wos.length;
 			const cards = wos.length
 				? wos.map((wo) => this._wo_card_html(wo, s)).join("")
 				: `<div class="ib-ps-col-empty">No WOs</div>`;
 
+			const icon_html = s.icon ? `<span class="ib-ps-col-icon" style="color:${s.color}"><iconify-icon icon="lucide:${s.icon}" width="14" height="14"></iconify-icon></span>` : "";
 			return `
 				<div class="ib-ps-col">
 					<div class="ib-ps-col-header" style="border-top:3px solid ${s.color}">
-						<span class="ib-ps-col-title">${s.label}</span>
+						<span class="ib-ps-col-title">${icon_html}${s.label}</span>
 						<span class="ib-ps-count-badge" style="background:${s.color}">${count}</span>
 					</div>
-					<div class="ib-ps-col-body">${cards}</div>
+					<div class="ib-ps-col-body" data-stage="${s.key}">${cards}</div>
 				</div>`;
 		}).join("");
 
 		$c.html(`<div class="ib-ps-pipeline">${cols}</div>`);
+		$c.off("click");
 
-		// WO card click → side panel
+		// WO card click → side panel (skip if action button was clicked or card is being dragged)
 		$c.on("click", ".ib-ps-wo-card", (e) => {
-			const wo = $(e.currentTarget).data("wo");
+			if ($(e.target).closest(".ib-ps-card-actions").length) return;
+			if ($(e.currentTarget).hasClass("ib-ps-wo-dragging")) return;
+			const woid = $(e.currentTarget).data("woid");
 			const stage = $(e.currentTarget).data("stage");
-			this._open_wo_panel(wo, stage);
+			const wo = this._wo_data.get(woid);
+			if (wo) this._open_wo_panel(wo, stage);
+		});
+
+		// Inline: Start / Resume
+		$c.on("click", ".ib-ps-action-start", (e) => {
+			e.stopPropagation();
+			const $card = $(e.currentTarget).closest(".ib-ps-wo-card");
+			this._do_inline_start($card.data("woid"), $card.data("stage"), $card);
+		});
+
+		// Inline: Next Stage (calls advance_to_next_stage, moves card)
+		$c.on("click", ".ib-ps-action-advance", (e) => {
+			e.stopPropagation();
+			const $card = $(e.currentTarget).closest(".ib-ps-wo-card");
+			this._do_inline_advance($card.data("woid"), $card.data("stage"), $card);
+		});
+
+		// Inline: Hold
+		$c.on("click", ".ib-ps-action-hold-btn", (e) => {
+			e.stopPropagation();
+			const $card = $(e.currentTarget).closest(".ib-ps-wo-card");
+			this._do_inline_hold($card.data("woid"), $card.data("stage"), $card);
+		});
+
+		// Init SortableJS drag-and-drop
+		this._init_pipeline_sortable();
+	}
+
+	_init_pipeline_sortable() {
+		// Destroy previous sortable instances
+		this._sortables.forEach(s => s.destroy && s.destroy());
+		this._sortables = [];
+
+		frappe.require("https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js", () => {
+			this.$body.find(".ib-ps-col-body").each((_, col_body) => {
+				const s = new Sortable(col_body, {
+					group: "ib-pipeline",
+					animation: 150,
+					ghostClass: "ib-ps-wo-ghost",
+					dragClass: "ib-ps-wo-drag",
+					draggable: ".ib-ps-wo-card",
+					filter: ".ib-ps-card-actions, .ib-ps-action-btn",
+					preventOnFilter: false,
+					delay: 200,
+					delayOnTouchOnly: true,
+					onStart: (evt) => { $(evt.item).addClass("ib-ps-wo-dragging"); },
+					onEnd: (evt) => {
+						$(evt.item).removeClass("ib-ps-wo-dragging");
+						const $to_col = $(evt.to).closest(".ib-ps-col");
+						$to_col.find(".ib-ps-col-body").removeClass("ib-ps-col-body--drag-over");
+						const woid = evt.item.dataset.woid;
+						const new_stage_key = evt.to.dataset.stage;
+						const old_stage_key = evt.from.dataset.stage;
+						if (!woid || !new_stage_key || new_stage_key === old_stage_key) return;
+						const new_stage_label = IB_STAGES.find(s => s.key === new_stage_key)?.label;
+						if (!new_stage_label) return;
+						this._move_wo_stage(woid, new_stage_label, evt.item, evt.from, evt.to, evt.oldIndex);
+					},
+					onOver: (evt) => { $(evt.to).addClass("ib-ps-col-body--drag-over"); },
+					onLeave: (evt) => { $(evt.to).removeClass("ib-ps-col-body--drag-over"); },
+				});
+				this._sortables.push(s);
+			});
+		});
+	}
+
+	_move_wo_stage(woid, new_stage_label, card_el, from_col, to_col, old_index) {
+		frappe.call({
+			method: "instabiz.overrides.production.move_work_order_stage",
+			args: { work_order: woid, new_stage: new_stage_label },
+			callback: (r) => {
+				if (r.exc || !r.message?.ok) {
+					// Revert: move card back to original column at original position
+					const children = from_col.children;
+					if (old_index < children.length) {
+						from_col.insertBefore(card_el, children[old_index]);
+					} else {
+						from_col.appendChild(card_el);
+					}
+					frappe.show_alert({ message: "Failed to move Work Order.", indicator: "red" });
+					return;
+				}
+				// Update the WO data in local map
+				const wo = this._wo_data.get(woid);
+				if (wo) { wo.stage = new_stage_label; $(card_el).attr("data-stage", IB_STAGES.find(s => s.label === new_stage_label)?.key || ""); }
+				// Update column count badges
+				const old_stage_key = from_col.dataset.stage;
+				const new_stage_key = to_col.dataset.stage;
+				this._update_col_count(old_stage_key);
+				this._update_col_count(new_stage_key);
+				frappe.show_alert({ message: `Moved to ${new_stage_label}`, indicator: "green" }, 2);
+			},
+		});
+	}
+
+	_update_col_count(stage_key) {
+		const $col = this.$body.find(`.ib-ps-col-body[data-stage="${stage_key}"]`).closest(".ib-ps-col");
+		const count = $col.find(".ib-ps-wo-card").length;
+		$col.find(".ib-ps-count-badge").text(count);
+	}
+
+	// ------------------------------------------------------------------
+	// Inline card actions (no side panel required)
+	// ------------------------------------------------------------------
+
+	_do_inline_start(woid, stage_key, $card) {
+		$card.addClass("ib-ps-wo-card--loading");
+		frappe.call({
+			method: "instabiz.overrides.production.start_work_order",
+			args: { work_order: woid },
+			callback: (r) => {
+				$card.removeClass("ib-ps-wo-card--loading");
+				if (r.exc || r.message?.status !== "ok") {
+					frappe.show_alert({ message: "Failed to start.", indicator: "red" });
+					return;
+				}
+				const wo = this._wo_data.get(woid);
+				if (wo) wo.status = "In Progress";
+				const stage = IB_STAGES.find(s => s.key === stage_key);
+				if (wo && stage) $card.replaceWith(this._wo_card_html(wo, stage));
+				frappe.show_alert({ message: "Started", indicator: "green" }, 2);
+			},
+		});
+	}
+
+	_do_inline_advance(woid, stage_key, $card) {
+		$card.addClass("ib-ps-wo-card--loading");
+		frappe.call({
+			method: "instabiz.overrides.production.advance_to_next_stage",
+			args: { work_order: woid },
+			callback: (r) => {
+				$card.removeClass("ib-ps-wo-card--loading");
+				if (r.exc) {
+					// If already completed (stale card), remove it silently
+					if ((Array.isArray(r.exc) ? r.exc : [r.exc]).some(s => typeof s === "string" && s.includes("Current status: Completed"))) {
+						$card.remove();
+						this._update_col_count(stage_key);
+					} else {
+						frappe.show_alert({ message: "Advance failed.", indicator: "red" });
+					}
+					return;
+				}
+				const res = r.message;
+				if (!res || res.status !== "ok") {
+					frappe.show_alert({ message: res?.message || "Error", indicator: "red" });
+					return;
+				}
+
+				// Remove card from current column, update badge
+				$card.remove();
+				this._update_col_count(stage_key);
+
+				if (res.next_stage && res.new_work_order) {
+					const next_key = res.next_stage.toLowerCase().replace(/ /g, "_");
+					const next_stage = IB_STAGES.find(s => s.key === next_key);
+					if (next_stage) {
+						// Fetch the new WO to get its machine assignment etc.
+						frappe.call({
+							method: "frappe.client.get",
+							args: { doctype: "IB Work Order", name: res.new_work_order },
+							callback: (gr) => {
+								if (!gr.doc) return;
+								const prev_wo = this._wo_data.get(woid) || {};
+								const new_wo = {
+									name: gr.doc.name,
+									item_code: gr.doc.item_code,
+									item_name: gr.doc.item_name,
+									machine: gr.doc.machine,
+									priority: gr.doc.priority,
+									status: gr.doc.status,
+									target_qty: gr.doc.target_qty,
+									target_uom: gr.doc.target_uom,
+									completed_qty: gr.doc.completed_qty || 0,
+									wastage_pct: gr.doc.wastage_pct || 0,
+									order_sheet: gr.doc.order_sheet,
+									order_sheet_item: gr.doc.order_sheet_item,
+									customer_name: prev_wo.customer_name || "",
+								};
+								this._wo_data.set(new_wo.name, new_wo);
+								const $col_body = this.$body.find(`.ib-ps-col-body[data-stage="${next_key}"]`);
+								const $empty = $col_body.find(".ib-ps-col-empty");
+								if ($empty.length) $empty.remove();
+								$col_body.prepend(this._wo_card_html(new_wo, next_stage));
+								this._update_col_count(next_key);
+							},
+						});
+					}
+					frappe.show_alert({ message: `→ ${res.next_stage}`, indicator: "green" }, 2);
+				} else {
+					frappe.show_alert({ message: "✓ Production complete", indicator: "green" }, 3);
+				}
+			},
+		});
+	}
+
+	_do_inline_hold(woid, stage_key, $card) {
+		$card.addClass("ib-ps-wo-card--loading");
+		frappe.call({
+			method: "instabiz.overrides.production.put_on_hold",
+			args: { work_order: woid },
+			callback: (r) => {
+				$card.removeClass("ib-ps-wo-card--loading");
+				if (r.exc) {
+					frappe.show_alert({ message: "Failed to hold.", indicator: "red" });
+					return;
+				}
+				const wo = this._wo_data.get(woid);
+				if (wo) wo.status = "On Hold";
+				const stage = IB_STAGES.find(s => s.key === stage_key);
+				if (wo && stage) $card.replaceWith(this._wo_card_html(wo, stage));
+				frappe.show_alert({ message: "On Hold", indicator: "orange" }, 2);
+			},
 		});
 	}
 
 	_wo_card_html(wo, stage) {
 		const pct = wo.target_qty > 0 ? Math.min(100, Math.round((wo.completed_qty / wo.target_qty) * 100)) : 0;
 		const pm = IB_PRIORITY_META[wo.priority] || IB_PRIORITY_META["Normal"];
-		const machine_chip = wo.machine ? `<span class="ib-ps-machine-chip">${frappe.utils.escape_html(wo.machine)}</span>` : "";
-		const status_chip = `<span class="ib-ps-status-chip ib-ps-status--${(wo.status || "pending").toLowerCase().replace(/ /g, "_")}">${frappe.utils.escape_html(wo.status || "Pending")}</span>`;
+		const machine_chip = wo.machine
+			? `<span class="ib-ps-machine-chip">${frappe.utils.escape_html(wo.machine)}</span>`
+			: `<span class="ib-ps-machine-chip ib-ps-machine-chip--unset">No machine</span>`;
+		const qty_chip = wo.target_qty
+			? `<span class="ib-ps-qty-chip">${wo.target_qty}${wo.target_uom ? " " + frappe.utils.escape_html(wo.target_uom) : ""}</span>`
+			: "";
+		const customer_html = wo.customer_name
+			? `<div class="ib-ps-card-customer" title="${frappe.utils.escape_html(wo.customer_name)}">${frappe.utils.escape_html(wo.customer_name)}</div>`
+			: "";
+
+		const ic = (name) => `<iconify-icon icon="lucide:${name}" width="11" height="11" style="vertical-align:middle"></iconify-icon>`;
+		let action_html = "";
+		if (wo.status === "Pending") {
+			action_html = `<button class="ib-ps-action-btn ib-ps-action-start">${ic("play")} Start</button>`;
+		} else if (wo.status === "In Progress") {
+			action_html = `
+				<button class="ib-ps-action-btn ib-ps-action-advance">${ic("arrow-right")} Next Stage</button>
+				<button class="ib-ps-action-btn ib-ps-action-hold-btn" title="Put on Hold">${ic("pause")}</button>`;
+		} else if (wo.status === "On Hold") {
+			action_html = `<button class="ib-ps-action-btn ib-ps-action-start">${ic("play")} Resume</button>`;
+		}
 
 		return `
-			<div class="ib-ps-wo-card" data-wo='${JSON.stringify(wo)}' data-stage="${stage.key}">
+			<div class="ib-ps-wo-card" data-woid="${frappe.utils.escape_html(wo.name)}" data-stage="${stage.key}">
 				<div class="ib-ps-card-top">
 					<span class="ib-ps-item-code">${frappe.utils.escape_html(wo.item_code || "")}</span>
 					<span class="ib-ps-priority-badge ${pm.cls}">${pm.label}</span>
 				</div>
-				<div class="ib-ps-card-meta">
-					${machine_chip}
-					${status_chip}
+				${customer_html}
+				<div class="ib-ps-card-chips">
+					${machine_chip}${qty_chip}
 				</div>
 				<div class="ib-ps-progress-wrap">
 					<div class="ib-ps-progress-bar" style="width:${pct}%;background:${stage.color}"></div>
 				</div>
-				<div class="ib-ps-progress-label">${wo.completed_qty || 0} / ${wo.target_qty || 0}</div>
+				<div class="ib-ps-card-actions">${action_html}</div>
 			</div>`;
 	}
 
@@ -268,34 +556,53 @@ class IBProductionStages {
 		});
 	}
 
-	_render_item_wise(items) {
+	_render_item_wise(items, page) {
 		const $c = this._content();
+		this._item_wise_all = items = items || this._item_wise_all || [];
 		if (!items.length) {
 			$c.html('<div class="ib-ps-empty">No active production items found.</div>');
 			return;
 		}
 
+		const q = (this.item_wise_search || "").toLowerCase();
+		const filtered = q ? items.filter((i) => (i.item_code || "").toLowerCase().includes(q)) : items;
+
+		const PAGE_SIZE = 24;
+		const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+		this._item_wise_page = page || this._item_wise_page || 1;
+		if (this._item_wise_page > totalPages) this._item_wise_page = totalPages;
+		const start = (this._item_wise_page - 1) * PAGE_SIZE;
+		const pageItems = filtered.slice(start, start + PAGE_SIZE);
+
 		const toolbar = `
 			<div class="ib-ps-os-toolbar" style="margin-bottom:12px">
 				<input class="ib-ps-search-input" id="ib-iw-search" placeholder="Search item code…" value="${frappe.utils.escape_html(this.item_wise_search || "")}">
-				<span class="ib-ps-stat-pill">${items.length} items</span>
+				<span class="ib-ps-stat-pill">${filtered.length} items</span>
 			</div>`;
 
-		const cards = items.map((item) => this._item_wise_card(item)).join("");
-		$c.html(toolbar + `<div class="ib-iw-grid" id="ib-iw-grid">${cards}</div>`);
+		const cards = pageItems.map((item) => this._item_wise_card(item)).join("");
+		const pager = totalPages > 1 ? `
+			<div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:16px">
+				<button class="btn btn-default btn-xs ib-iw-prev" ${this._item_wise_page <= 1 ? "disabled" : ""}>Prev</button>
+				<span style="font-size:12px;color:var(--text-muted)">Page ${this._item_wise_page} of ${totalPages}</span>
+				<button class="btn btn-default btn-xs ib-iw-next" ${this._item_wise_page >= totalPages ? "disabled" : ""}>Next</button>
+			</div>` : "";
+		$c.html(toolbar + `<div class="ib-iw-grid" id="ib-iw-grid">${cards}</div>${pager}`);
+		$c.off();
 
 		$c.on("input", "#ib-iw-search", (e) => {
-			const q = $(e.target).val().toLowerCase();
-			this.item_wise_search = q;
-			$c.find(".ib-iw-card").each(function () {
-				const ic = ($(this).data("item") || "").toLowerCase();
-				$(this).toggle(!q || ic.includes(q));
-			});
+			this.item_wise_search = $(e.target).val();
+			const cursorPos = e.target.selectionStart;
+			this._render_item_wise(this._item_wise_all, 1);
+			const $input = $c.find("#ib-iw-search").get(0);
+			if ($input) {
+				$input.focus();
+				$input.setSelectionRange(cursorPos, cursorPos);
+			}
 		});
 
-		if (this.item_wise_search) {
-			$c.find("#ib-iw-search").trigger("input");
-		}
+		$c.on("click", ".ib-iw-prev", () => this._render_item_wise(this._item_wise_all, this._item_wise_page - 1));
+		$c.on("click", ".ib-iw-next", () => this._render_item_wise(this._item_wise_all, this._item_wise_page + 1));
 
 		$c.on("click", ".ib-iw-card", (e) => {
 			const ic = $(e.currentTarget).data("item");
@@ -499,8 +806,16 @@ class IBProductionStages {
 		});
 	}
 
-	_render_os_list(rows) {
+	_render_os_list(rows, page) {
 		const $c = this._content();
+		this._os_list_all = rows = rows || this._os_list_all || [];
+
+		const PAGE_SIZE = 20;
+		const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+		this._os_list_page = page || this._os_list_page || 1;
+		if (this._os_list_page > totalPages) this._os_list_page = totalPages;
+		const start = (this._os_list_page - 1) * PAGE_SIZE;
+		const pageRows = rows.slice(start, start + PAGE_SIZE);
 
 		const toolbar = `
 			<div class="ib-ps-os-toolbar">
@@ -520,17 +835,22 @@ class IBProductionStages {
 			</div>`;
 
 		let table_html = "";
+		let pager_html = "";
 		if (!rows.length) {
 			table_html = '<div class="ib-ps-empty">No order sheets found.</div>';
 		} else {
-			const rows_html = rows.map((os) => {
+			const rows_html = pageRows.map((os) => {
 				const pm = IB_PRIORITY_META[os.priority] || IB_PRIORITY_META["Normal"];
 				const pct = os.progress_pct || 0;
+				const so_cell = os.sales_order
+					? `<a class="ib-ps-os-link" data-so="${frappe.utils.escape_html(os.sales_order)}">${frappe.utils.escape_html(os.sales_order)}</a>`
+					: `<span style="color:var(--text-muted)">—</span>`;
 				return `
 					<tr class="ib-ps-os-row" data-os="${frappe.utils.escape_html(os.name)}">
 						<td><a class="ib-ps-os-link" data-os="${frappe.utils.escape_html(os.name)}">${frappe.utils.escape_html(os.name)}</a></td>
-						<td>${frappe.utils.escape_html(os.customer || "")}</td>
-						<td>${frappe.utils.escape_html(os.items_summary || "")}</td>
+						<td>${so_cell}</td>
+						<td>${frappe.utils.escape_html(os.customer_name || os.customer || "")}</td>
+						<td style="text-align:center">${os.item_count || 0}</td>
 						<td>
 							<div class="ib-ps-progress-wrap" style="min-width:80px">
 								<div class="ib-ps-progress-bar" style="width:${pct}%;background:var(--ib-primary)"></div>
@@ -550,30 +870,51 @@ class IBProductionStages {
 					<table class="ib-ps-table">
 						<thead>
 							<tr>
-								<th>OS#</th><th>Customer</th><th>Items</th><th>Progress</th><th>Priority</th><th>Status</th><th>Actions</th>
+								<th>OS#</th><th>Sales Order</th><th>Customer</th><th style="text-align:center">Items</th><th>Progress</th><th>Priority</th><th>Status</th><th>Actions</th>
 							</tr>
 						</thead>
 						<tbody>${rows_html}</tbody>
 					</table>
 				</div>`;
+
+			pager_html = totalPages > 1 ? `
+				<div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:12px">
+					<button class="btn btn-default btn-xs ib-os-prev" ${this._os_list_page <= 1 ? "disabled" : ""}>Prev</button>
+					<span style="font-size:12px;color:var(--text-muted)">Page ${this._os_list_page} of ${totalPages} (${rows.length} order sheets)</span>
+					<button class="btn btn-default btn-xs ib-os-next" ${this._os_list_page >= totalPages ? "disabled" : ""}>Next</button>
+				</div>` : "";
 		}
 
-		$c.html(toolbar + table_html);
+		$c.html(toolbar + table_html + pager_html);
+		$c.off();
+
+		$c.on("click", ".ib-os-prev", () => this._render_os_list(this._os_list_all, this._os_list_page - 1));
+		$c.on("click", ".ib-os-next", () => this._render_os_list(this._os_list_all, this._os_list_page + 1));
 
 		// Filter changes
 		$c.on("change", "#ib-os-status-filter", (e) => {
 			this.os_status_filter = $(e.target).val();
+			this._os_list_page = 1;
 			this._load_order_sheets();
 		});
 		$c.on("change", "#ib-os-priority-filter", (e) => {
 			this.os_priority_filter = $(e.target).val();
+			this._os_list_page = 1;
 			this._load_order_sheets();
+		});
+
+		// Sales Order link → open SO form
+		$c.on("click", "[data-so]", (e) => {
+			e.stopPropagation();
+			const so = $(e.currentTarget).data("so");
+			if (so) frappe.set_route("Form", "Sales Order", so);
 		});
 
 		// View / row click
 		$c.on("click", ".ib-ps-os-view-btn, .ib-ps-os-link", (e) => {
 			e.stopPropagation();
 			const os_name = $(e.currentTarget).data("os");
+			if (!os_name) return;
 			this.current_os = os_name;
 			this._load_os_detail(os_name);
 		});
@@ -611,12 +952,19 @@ class IBProductionStages {
 		const os = detail.order_sheet || {};
 		const pm = IB_PRIORITY_META[os.priority] || IB_PRIORITY_META["Normal"];
 
+		const so_link = os.sales_order
+			? `<a class="ib-ps-os-link" style="font-size:12px;cursor:pointer" data-so-nav="${frappe.utils.escape_html(os.sales_order)}">${frappe.utils.escape_html(os.sales_order)}</a>`
+			: `<span style="color:var(--text-muted);font-size:12px">No SO</span>`;
+		const date_fmt = (d) => d ? frappe.datetime.str_to_user(d) : "—";
 		const header = `
 			<div class="ib-ps-detail-header">
 				<button class="ib-ps-back-btn" id="ib-os-back">← Back</button>
 				<div class="ib-ps-detail-meta">
 					<span class="ib-ps-detail-name">${frappe.utils.escape_html(os.name || "")}</span>
+					<span style="font-size:12px;color:var(--text-muted)">SO:</span>${so_link}
 					<span class="ib-ps-detail-customer">${frappe.utils.escape_html(os.customer || "")}</span>
+					<span style="font-size:11px;color:var(--text-muted)">Order: ${date_fmt(os.order_date)}</span>
+					${os.delivery_date ? `<span style="font-size:11px;color:#dc2626">Deliver: ${date_fmt(os.delivery_date)}</span>` : ""}
 					<span class="ib-ps-priority-badge ${pm.cls}">${pm.label}</span>
 					<span class="ib-ps-status-chip">${frappe.utils.escape_html(os.status || "")}</span>
 				</div>
@@ -641,6 +989,13 @@ class IBProductionStages {
 			$c.find(".ib-ps-subtab").removeClass("active");
 			$(e.currentTarget).addClass("active");
 			this._render_os_subtab(detail);
+		});
+
+		// Sales Order nav link in detail header
+		$c.on("click", "[data-so-nav]", (e) => {
+			e.stopPropagation();
+			const so = $(e.currentTarget).data("so-nav");
+			if (so) frappe.set_route("Form", "Sales Order", so);
 		});
 
 		// Back button
@@ -897,11 +1252,23 @@ class IBProductionStages {
 
 	_render_machine_wise(machines) {
 		const $c = this._content();
+		this._machine_data = new Map();
+		machines.forEach(m => this._machine_data.set(m.name || m.machine_code, m));
+
+		const TYPE_COLOR = {
+			Coating: "#7c3aed", Slitting: "#2563eb", Rewinding: "#0891b2",
+			Cutting: "#059669", Packing: "#d97706",
+		};
 
 		const toolbar = `
-			<div class="ib-ps-os-toolbar" style="margin-bottom:12px">
-				<span class="ib-ps-stat-pill">${machines.length} active machines</span>
-				<button class="ib-ps-btn-primary" id="ib-new-machine-btn" style="margin-left:auto">+ New Machine</button>
+			<div class="ib-ps-os-toolbar" style="margin-bottom:16px">
+				<div style="display:flex;align-items:center;gap:8px">
+					<iconify-icon icon="lucide:settings-2" width="14" height="14"></iconify-icon>
+					<span class="ib-ps-stat-pill">${machines.length} active machine${machines.length !== 1 ? "s" : ""}</span>
+				</div>
+				<button class="ib-ps-btn-primary" id="ib-new-machine-btn" style="margin-left:auto;display:flex;align-items:center;gap:5px">
+					<iconify-icon icon="lucide:plus" width="11" height="11"></iconify-icon> New Machine
+				</button>
 			</div>`;
 
 		if (!machines.length) {
@@ -911,59 +1278,89 @@ class IBProductionStages {
 		}
 
 		const cards = machines.map((m) => {
-			const load_color = m.load_pct > 90 ? "#dc2626" : m.load_pct > 60 ? "#d97706" : "#16a34a";
-			const wo_rows = (m.current_wos || []).map((wo) => {
+			const type_color = TYPE_COLOR[m.machine_type] || "#888";
+			const load_pct = m.load_pct || 0;
+			const load_color = load_pct > 90 ? "#dc2626" : load_pct > 60 ? "#d97706" : "#16a34a";
+			const waste_norm = m.wastage_norm_pct || 3;
+			const waste_color = m.today_avg_wastage > waste_norm ? "#dc2626" : "#16a34a";
+
+			// Load bar
+			const load_bar_html = `
+				<div class="ib-mw-load-section">
+					<div class="ib-mw-load-header">
+						<span style="font-size:11px;color:var(--text-muted)">Machine Load</span>
+						<span style="font-size:12px;font-weight:700;color:${load_color}">${load_pct}%</span>
+					</div>
+					<div class="ib-mw-load-bar-wrap">
+						<div class="ib-mw-load-bar" style="width:${Math.min(100, load_pct)}%;background:${load_color}"></div>
+					</div>
+					<div style="font-size:10px;color:var(--text-muted);margin-top:2px">
+						${m.active_load || 0} active · ${(m.current_wos || []).length} queued
+					</div>
+				</div>`;
+
+			// Today stats row
+			const stats_html = `
+				<div class="ib-mw-stats-row">
+					<div class="ib-mw-stat">
+						<div class="ib-mw-stat-val">${m.today_output || 0}</div>
+						<div class="ib-mw-stat-label">Output</div>
+					</div>
+					<div class="ib-mw-stat">
+						<div class="ib-mw-stat-val" style="color:${waste_color}">${m.today_avg_wastage || 0}%</div>
+						<div class="ib-mw-stat-label">Wastage</div>
+					</div>
+					<div class="ib-mw-stat">
+						<div class="ib-mw-stat-val">${m.today_entry_count || 0}</div>
+						<div class="ib-mw-stat-label">Entries</div>
+					</div>
+					<div class="ib-mw-stat">
+						<div class="ib-mw-stat-val">${m.capacity || "—"}</div>
+						<div class="ib-mw-stat-label">${m.capacity_uom || "cap"}</div>
+					</div>
+				</div>`;
+
+			// WO list
+			const wo_rows = (m.current_wos || []).slice(0, 4).map((wo) => {
 				const stg = IB_STAGES.find((x) => x.label === wo.stage);
 				const color = stg ? stg.color : "#888";
 				const pct = wo.target_qty > 0 ? Math.min(100, Math.round((wo.completed_qty / wo.target_qty) * 100)) : 0;
+				const status_cls = wo.status === "In Progress" ? "ib-ps-status--in_progress" : "ib-ps-status--pending";
 				return `<div class="ib-mw-wo-row">
-					<span class="ib-ps-stage-chip" style="background:${color}">${frappe.utils.escape_html(wo.stage || "")}</span>
-					<span style="font-size:11px;flex:1">${frappe.utils.escape_html(wo.item_code || "")}</span>
-					<span class="ib-ps-status-chip ib-ps-status--${(wo.status || "").toLowerCase().replace(/ /g, "_")}" style="font-size:10px">${frappe.utils.escape_html(wo.status || "")}</span>
-					<div class="ib-ps-progress-wrap" style="min-width:40px;height:4px"><div class="ib-ps-progress-bar" style="width:${pct}%;background:${color}"></div></div>
+					<span class="ib-mw-stage-dot" style="background:${color}" title="${frappe.utils.escape_html(wo.stage || "")}"></span>
+					<span class="ib-mw-wo-item" title="${frappe.utils.escape_html(wo.item_code || "")}">${frappe.utils.escape_html((wo.item_code || "").substring(0, 22))}</span>
+					<div class="ib-mw-wo-right">
+						<span class="ib-ps-status-chip ${status_cls}">${frappe.utils.escape_html(wo.status || "")}</span>
+						<div class="ib-mw-wo-bar-wrap">
+							<div class="ib-mw-wo-bar" style="width:${pct}%;background:${color}"></div>
+						</div>
+					</div>
 				</div>`;
-			}).join("") || '<div style="font-size:11px;color:var(--text-muted);padding:4px 0">No active WOs</div>';
+			}).join("") || `<div class="ib-mw-no-wos"><iconify-icon icon="lucide:inbox" width="11" height="11"></iconify-icon> No active WOs</div>`;
 
-			const today_wastage_color = m.today_avg_wastage > (m.wastage_norm_pct || 3) ? "#dc2626" : "#16a34a";
+			const overflow = (m.current_wos || []).length > 4
+				? `<div style="font-size:10px;color:var(--text-muted);text-align:center;padding:3px 0">+${(m.current_wos || []).length - 4} more</div>` : "";
 
 			return `
-				<div class="ib-mw-card">
+				<div class="ib-mw-card" style="border-top:3px solid ${type_color}">
 					<div class="ib-mw-card-header">
-						<div>
-							<code class="ib-ps-machine-code">${frappe.utils.escape_html(m.machine_code || "")}</code>
-							<span class="ib-ps-type-chip" style="margin-left:4px">${frappe.utils.escape_html(m.machine_type || "")}</span>
+						<div class="ib-mw-code-row">
+							<code class="ib-ps-machine-code" style="color:${type_color}">${frappe.utils.escape_html(m.machine_code || "")}</code>
+							<span class="ib-ps-type-chip" style="background:${type_color}18;color:${type_color};border:1px solid ${type_color}30">${frappe.utils.escape_html(m.machine_type || "")}</span>
+							<span class="ib-ps-status-dot ib-ps-status-dot--active" style="margin-left:auto" title="Active"></span>
 						</div>
-						<strong class="ib-ps-machine-name">${frappe.utils.escape_html(m.machine_name || "")}</strong>
-						<span class="ib-ps-location-badge">${frappe.utils.escape_html(m.location || "")}</span>
-					</div>
-
-					<div class="ib-mw-stats-row">
-						<div class="ib-mw-stat">
-							<div class="ib-mw-stat-val">${m.today_output || 0}</div>
-							<div class="ib-mw-stat-label">Output today</div>
-						</div>
-						<div class="ib-mw-stat">
-							<div class="ib-mw-stat-val" style="color:${today_wastage_color}">${m.today_avg_wastage || 0}%</div>
-							<div class="ib-mw-stat-label">Avg wastage</div>
-						</div>
-						<div class="ib-mw-stat">
-							<div class="ib-mw-stat-val">${m.today_entry_count || 0}</div>
-							<div class="ib-mw-stat-label">Entries</div>
-						</div>
-						<div class="ib-mw-stat">
-							<div class="ib-mw-stat-val" style="color:${load_color}">${m.load_pct || 0}%</div>
-							<div class="ib-mw-stat-label">Load</div>
+						<div class="ib-mw-name-row">
+							<span class="ib-ps-machine-name">${frappe.utils.escape_html(m.machine_name || "")}</span>
+							<span class="ib-ps-location-badge">${frappe.utils.escape_html((m.location || "").charAt(0).toUpperCase() + (m.location || "").slice(1))}</span>
 						</div>
 					</div>
-
-					<div class="ib-mw-wo-list">${wo_rows}</div>
-
+					${load_bar_html}
+					${stats_html}
+					<div class="ib-mw-wo-list">${wo_rows}${overflow}</div>
 					<div class="ib-mw-card-footer">
-						<button class="ib-ps-btn-sm ib-ps-machine-edit-btn" data-machine='${JSON.stringify({
-							name: m.name, machine_code: m.machine_code, machine_name: m.machine_name,
-							machine_type: m.machine_type, location: m.location, capacity: m.capacity,
-							capacity_uom: m.capacity_uom, wastage_norm_pct: m.wastage_norm_pct, status: m.status
-						})}'>Edit Machine</button>
+						<button class="ib-mw-edit-btn ib-ps-machine-edit-btn" data-machineid="${frappe.utils.escape_html(m.name || m.machine_code)}" title="Edit Machine">
+							<iconify-icon icon="lucide:settings" width="11" height="11"></iconify-icon> Edit
+						</button>
 					</div>
 				</div>`;
 		}).join("");
@@ -972,8 +1369,9 @@ class IBProductionStages {
 
 		$c.on("click", "#ib-new-machine-btn", () => this._show_machine_dialog(null));
 		$c.on("click", ".ib-ps-machine-edit-btn", (e) => {
-			const machine = $(e.currentTarget).data("machine");
-			this._show_machine_dialog(machine);
+			const mid = $(e.currentTarget).data("machineid");
+			const machine = this._machine_data.get(mid);
+			this._show_machine_dialog(machine || null);
 		});
 	}
 
@@ -1376,6 +1774,216 @@ class IBProductionStages {
 	}
 
 	// -----------------------------------------------------------------------
+	// TAB 5 — Job Bundles
+	// -----------------------------------------------------------------------
+	_load_job_bundles() {
+		const $c = this._content();
+		$c.html(`<div style="padding:24px;text-align:center;color:var(--text-muted)">
+			<iconify-icon icon="lucide:loader" width="16" height="16"
+				style="vertical-align:middle;margin-right:6px"></iconify-icon>
+			Loading job bundles...
+		</div>`);
+		frappe.call({
+			method: "instabiz.overrides.production.get_job_bundles",
+			callback: (r) => { this._render_job_bundles(r.message || []); },
+			error: () => { $c.html('<div style="padding:24px;color:var(--text-muted)">Failed to load bundles.</div>'); },
+		});
+	}
+
+	_render_job_bundles(bundles, page) {
+		const $c = this._content();
+		this._job_bundles_all = bundles = bundles || this._job_bundles_all || [];
+		if (!bundles.length) {
+			$c.html(`<div style="padding:40px;text-align:center;color:var(--text-muted);font-size:13px">
+				<iconify-icon icon="lucide:layers" width="24" height="24"
+					style="display:block;margin:0 auto 10px;opacity:.4"></iconify-icon>
+				No bundleable jobs found. Bundles form when 2+ Pending Work Orders
+				share the same item and stage.
+			</div>`);
+			return;
+		}
+
+		const PAGE_SIZE = 15;
+		this._job_bundle_page = page || this._job_bundle_page || 1;
+		const totalPages = Math.max(1, Math.ceil(bundles.length / PAGE_SIZE));
+		if (this._job_bundle_page > totalPages) this._job_bundle_page = totalPages;
+		const start = (this._job_bundle_page - 1) * PAGE_SIZE;
+		const pageBundles = bundles.slice(start, start + PAGE_SIZE);
+
+		const stageColorMap = {};
+		IB_STAGES.forEach(s => { stageColorMap[s.label] = s.color; stageColorMap[s.key] = s.color; });
+
+		const PRIORITY_COLOR = { Urgent:"#dc2626", High:"#ea580c", Normal:"#2563eb", Low:"#6b7280" };
+
+		const cards = pageBundles.map(bundle => {
+			const stageColor = stageColorMap[bundle.stage] || "#7c3aed";
+			const woRows = (bundle.wos || []).map(wo => `
+				<tr>
+					<td style="padding:4px 8px;font-size:11px;font-family:monospace">${frappe.utils.escape_html(wo.name)}</td>
+					<td style="padding:4px 8px;font-size:11px">${frappe.utils.escape_html(wo.sales_order || "")}</td>
+					<td style="padding:4px 8px;font-size:11px">${frappe.utils.escape_html(wo.customer_name || "")}</td>
+					<td style="padding:4px 8px;font-size:11px;text-align:right">${(wo.target_qty||0).toLocaleString()}</td>
+					<td style="padding:4px 8px;font-size:11px">
+						<span style="background:${PRIORITY_COLOR[wo.priority]||"#6b7280"}18;
+							color:${PRIORITY_COLOR[wo.priority]||"#6b7280"};
+							border-radius:8px;padding:1px 6px;font-size:10px;font-weight:700">
+							${frappe.utils.escape_html(wo.priority||"Normal")}
+						</span>
+					</td>
+					<td style="padding:4px 8px;font-size:11px">
+						${wo.batch_group
+							? `<span style="background:#d1fae5;color:#065f46;border-radius:6px;
+									padding:1px 6px;font-size:10px">${frappe.utils.escape_html(wo.batch_group)}</span>`
+							: '<span style="color:var(--text-muted);font-size:10px">none</span>'}
+					</td>
+				</tr>`).join("");
+
+			const suggested = bundle.suggested_machine || "";
+			const bundleKey = `${bundle.item_code}___${bundle.stage}`;
+
+			return `
+			<div class="ib-ps-bundle-card" style="
+				background:var(--card-bg);border:1px solid var(--border-color);
+				border-radius:8px;margin-bottom:14px;overflow:hidden;
+				border-left:4px solid ${stageColor}">
+				<div style="padding:10px 14px;background:var(--subtle-fg,#f8fafc);
+					border-bottom:1px solid var(--border-color);
+					display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+					<iconify-icon icon="lucide:layers" width="14" height="14"
+						style="color:${stageColor};flex-shrink:0"></iconify-icon>
+					<strong style="font-size:13px;color:${stageColor}">
+						${frappe.utils.escape_html(bundle.item_code)}
+					</strong>
+					<span style="font-size:12px;color:var(--text-muted)">
+						${frappe.utils.escape_html(bundle.stage)}
+					</span>
+					<span style="background:${stageColor}18;color:${stageColor};
+						border-radius:10px;padding:1px 8px;font-size:11px;font-weight:700">
+						${bundle.wos.length} WOs
+					</span>
+					<span style="font-size:11px;color:var(--text-muted)">
+						${bundle.total_qty.toLocaleString()} ${bundle.uom || "units"} total
+					</span>
+					<div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+						${suggested ? `<span style="font-size:11px;color:var(--text-muted)">
+							<iconify-icon icon="lucide:settings-2" width="11" height="11"
+								style="vertical-align:middle;margin-right:3px"></iconify-icon>
+							Suggested: <strong>${frappe.utils.escape_html(suggested)}</strong>
+						</span>` : ""}
+						<button class="ib-ps-bundle-assign-btn"
+							data-bundle="${frappe.utils.escape_html(bundleKey)}"
+							data-wos='${JSON.stringify((bundle.wos||[]).map(w=>w.name))}'
+							data-machine="${frappe.utils.escape_html(suggested)}"
+							style="background:${stageColor};color:#fff;border:none;
+							border-radius:5px;padding:4px 12px;font-size:11px;
+							font-weight:600;cursor:pointer">
+							<iconify-icon icon="lucide:zap" width="11" height="11"
+								style="vertical-align:middle;margin-right:3px"></iconify-icon>
+							Batch Assign
+						</button>
+					</div>
+				</div>
+				<div style="overflow-x:auto">
+					<table style="width:100%;border-collapse:collapse">
+						<thead><tr style="border-bottom:1px solid var(--border-color)">
+							<th style="padding:5px 8px;text-align:left;font-size:10px;font-weight:700;
+								text-transform:uppercase;color:var(--text-muted)">Work Order</th>
+							<th style="padding:5px 8px;text-align:left;font-size:10px;font-weight:700;
+								text-transform:uppercase;color:var(--text-muted)">Sales Order</th>
+							<th style="padding:5px 8px;text-align:left;font-size:10px;font-weight:700;
+								text-transform:uppercase;color:var(--text-muted)">Customer</th>
+							<th style="padding:5px 8px;text-align:right;font-size:10px;font-weight:700;
+								text-transform:uppercase;color:var(--text-muted)">Qty</th>
+							<th style="padding:5px 8px;text-align:left;font-size:10px;font-weight:700;
+								text-transform:uppercase;color:var(--text-muted)">Priority</th>
+							<th style="padding:5px 8px;text-align:left;font-size:10px;font-weight:700;
+								text-transform:uppercase;color:var(--text-muted)">Batch</th>
+						</tr></thead>
+						<tbody>${woRows}</tbody>
+					</table>
+				</div>
+			</div>`;
+		}).join("");
+
+		const pager = totalPages > 1 ? `
+			<div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:16px">
+				<button class="btn btn-default btn-xs ib-ps-bundle-prev" ${this._job_bundle_page <= 1 ? "disabled" : ""}>Prev</button>
+				<span style="font-size:12px;color:var(--text-muted)">Page ${this._job_bundle_page} of ${totalPages}</span>
+				<button class="btn btn-default btn-xs ib-ps-bundle-next" ${this._job_bundle_page >= totalPages ? "disabled" : ""}>Next</button>
+			</div>` : "";
+
+		$c.html(`
+			<div style="padding:16px">
+				<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">
+					${bundles.length} bundle${bundles.length!==1?"s":""} found
+					(showing ${start + 1}-${start + pageBundles.length}).
+					Select "Batch Assign" to assign all WOs in a bundle to the same machine in one click.
+				</div>
+				${cards}
+				${pager}
+			</div>`);
+		$c.off("click", ".ib-ps-bundle-assign-btn");
+
+		$c.on("click", ".ib-ps-bundle-assign-btn", (e) => {
+			const $btn   = $(e.currentTarget);
+			// jQuery auto-parses data-* that look like JSON, so handle both array and string
+			const raw    = $btn.data("wos");
+			const woList = Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []);
+			const sugg   = $btn.data("machine") || "";
+			this._show_batch_assign_dialog(woList, sugg, $btn);
+		});
+
+		$c.off("click", ".ib-ps-bundle-prev").on("click", ".ib-ps-bundle-prev", () => {
+			this._render_job_bundles(null, this._job_bundle_page - 1);
+		});
+		$c.off("click", ".ib-ps-bundle-next").on("click", ".ib-ps-bundle-next", () => {
+			this._render_job_bundles(null, this._job_bundle_page + 1);
+		});
+	}
+
+	_show_batch_assign_dialog(woList, suggestedMachine, $btn) {
+		const d = new frappe.ui.Dialog({
+			title: `Batch Assign ${woList.length} Work Orders`,
+			fields: [
+				{
+					fieldname: "machine",
+					label: "Machine",
+					fieldtype: "Link",
+					options: "IB Machine",
+					default: suggestedMachine,
+					reqd: 1,
+				},
+				{
+					fieldname: "batch_group",
+					label: "Batch Group (auto-generated if blank)",
+					fieldtype: "Data",
+				},
+			],
+			primary_action_label: `Assign ${woList.length} WOs`,
+			primary_action: (values) => {
+				frappe.call({
+					method: "instabiz.overrides.production.batch_assign_machine",
+					args: {
+						work_orders: woList,
+						machine: values.machine,
+						batch_group: values.batch_group || "",
+					},
+					callback: (r) => {
+						const updated = r.message?.updated?.length || 0;
+						frappe.show_alert({
+							message: `${updated} Work Orders assigned to ${values.machine}`,
+							indicator: "green",
+						});
+						d.hide();
+						this._load_job_bundles();
+					},
+				});
+			},
+		});
+		d.show();
+	}
+
+	// -----------------------------------------------------------------------
 	// Helpers
 	// -----------------------------------------------------------------------
 	_stage_color(stage_key) {
@@ -1460,8 +2068,8 @@ class IBProductionStages {
 	padding-bottom: 12px;
 }
 .ib-ps-col {
-	min-width: 220px;
-	flex: 0 0 220px;
+	min-width: 250px;
+	flex: 0 0 250px;
 	background: var(--fg-color, #f9fafb);
 	border-radius: 8px;
 	border: 1px solid var(--border-color);
@@ -1476,7 +2084,8 @@ class IBProductionStages {
 	padding: 10px 12px 8px;
 	flex-shrink: 0;
 }
-.ib-ps-col-title { font-size: 12px; font-weight: 600; color: var(--text-color); }
+.ib-ps-col-title { font-size: 12px; font-weight: 600; color: var(--text-color); display: flex; align-items: center; gap: 5px; }
+.ib-ps-col-icon { display: flex; align-items: center; flex-shrink: 0; }
 .ib-ps-count-badge {
 	font-size: 11px; font-weight: 700;
 	color: #fff; padding: 1px 7px;
@@ -1497,24 +2106,63 @@ class IBProductionStages {
 .ib-ps-wo-card {
 	background: var(--card-bg);
 	border: 1px solid var(--border-color);
-	border-radius: 6px;
-	padding: 10px;
+	border-radius: 8px;
+	padding: 10px 10px 8px;
 	cursor: pointer;
-	transition: transform 0.1s, box-shadow 0.1s;
+	transition: transform 0.1s, box-shadow 0.15s, border-color 0.15s;
 }
 .ib-ps-wo-card:hover {
 	transform: translateY(-2px);
-	box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+	box-shadow: 0 4px 14px rgba(0,0,0,0.10);
+	border-color: var(--ib-primary);
+}
+.ib-ps-wo-card--loading {
+	opacity: 0.5;
+	pointer-events: none;
 }
 .ib-ps-card-top {
 	display: flex;
 	justify-content: space-between;
 	align-items: flex-start;
 	gap: 6px;
-	margin-bottom: 6px;
+	margin-bottom: 3px;
 }
-.ib-ps-item-code { font-size: 12px; font-weight: 700; color: var(--text-color); word-break: break-all; }
+.ib-ps-item-code { font-size: 11px; font-weight: 700; color: var(--text-color); word-break: break-all; line-height: 1.3; }
+.ib-ps-card-customer {
+	font-size: 11px; color: var(--text-muted);
+	margin-bottom: 5px;
+	white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ib-ps-card-chips { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
 .ib-ps-card-meta { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
+.ib-ps-qty-chip {
+	font-size: 10px; font-weight: 600;
+	background: var(--fg-color, #f3f4f6); color: var(--text-color);
+	border-radius: 4px; padding: 1px 6px;
+}
+.ib-ps-machine-chip--unset { background: #fef9c3; color: #78350f; }
+
+/* Card action buttons */
+.ib-ps-card-actions {
+	display: flex; gap: 4px;
+	margin-top: 7px; padding-top: 7px;
+	border-top: 1px solid var(--border-color);
+}
+.ib-ps-action-btn {
+	flex: 1; padding: 4px 6px;
+	border-radius: 5px; border: 1px solid transparent;
+	font-size: 11px; font-family: inherit; font-weight: 600;
+	cursor: pointer; white-space: nowrap;
+	transition: opacity 0.12s, transform 0.1s;
+}
+.ib-ps-action-btn:hover  { opacity: 0.82; transform: translateY(-1px); }
+.ib-ps-action-btn:active { transform: translateY(0); opacity: 1; }
+.ib-ps-action-start   { background: #dcfce7; color: #15803d; border-color: #bbf7d0; }
+.ib-ps-action-start:hover { background: #bbf7d0; }
+.ib-ps-action-advance { background: #dbeafe; color: #1d4ed8; border-color: #bfdbfe; }
+.ib-ps-action-advance:hover { background: #bfdbfe; }
+.ib-ps-action-hold-btn { flex: 0 0 auto; background: #fffbeb; color: #92400e; border-color: #fde68a; padding: 4px 8px; }
+.ib-ps-action-hold-btn:hover { background: #fde68a; }
 
 /* Priority badges */
 .ib-ps-priority-badge {
@@ -1588,15 +2236,15 @@ class IBProductionStages {
 .ib-ps-table {
 	width: 100%;
 	border-collapse: collapse;
-	font-size: 13px;
+	font-size: 12px;
 }
 .ib-ps-table thead th {
 	background: var(--fg-color, #f9fafb);
-	padding: 8px 12px;
+	padding: 6px 10px;
 	text-align: left;
 	border-bottom: 1px solid var(--border-color);
 	font-weight: 600;
-	font-size: 12px;
+	font-size: 11px;
 	color: var(--text-muted);
 }
 .ib-ps-table tbody tr {
@@ -1605,7 +2253,7 @@ class IBProductionStages {
 	transition: background 0.1s;
 }
 .ib-ps-table tbody tr:hover { background: var(--fg-color, #f9fafb); }
-.ib-ps-table td { padding: 8px 12px; vertical-align: middle; }
+.ib-ps-table td { padding: 6px 10px; vertical-align: middle; }
 .ib-ps-os-link { color: var(--ib-primary); text-decoration: none; font-weight: 600; }
 .ib-ps-os-link:hover { text-decoration: underline; }
 
@@ -1928,34 +2576,60 @@ class IBProductionStages {
 .ib-mw-grid {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-	gap: 12px;
+	gap: 14px;
 }
 .ib-mw-card {
 	background: var(--card-bg);
 	border: 1px solid var(--border-color);
-	border-radius: 8px;
+	border-radius: 10px;
 	padding: 14px;
-	display: flex; flex-direction: column; gap: 10px;
+	display: flex; flex-direction: column; gap: 11px;
+	transition: box-shadow .15s, transform .12s;
 }
-.ib-mw-card-header { display: flex; flex-direction: column; gap: 4px; }
+.ib-mw-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.09); transform: translateY(-1px); }
+.ib-mw-card-header { display: flex; flex-direction: column; gap: 5px; }
+.ib-mw-code-row { display: flex; align-items: center; gap: 6px; }
+.ib-mw-name-row { display: flex; align-items: center; gap: 6px; margin-top: 1px; }
+
+/* Load bar */
+.ib-mw-load-section { background: var(--fg-color, #f9fafb); border-radius: 7px; padding: 8px 10px; border: 1px solid var(--border-color); }
+.ib-mw-load-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+.ib-mw-load-bar-wrap { height: 6px; background: var(--border-color); border-radius: 3px; overflow: hidden; }
+.ib-mw-load-bar { height: 100%; border-radius: 3px; transition: width .4s; }
+
+/* Stats */
 .ib-mw-stats-row {
 	display: grid; grid-template-columns: repeat(4, 1fr);
-	gap: 6px;
+	gap: 4px;
 	background: var(--fg-color, #f9fafb);
-	border-radius: 6px; padding: 8px;
+	border-radius: 7px; padding: 8px 6px;
 	border: 1px solid var(--border-color);
 }
 .ib-mw-stat { text-align: center; }
-.ib-mw-stat-val { font-size: 16px; font-weight: 700; color: var(--text-color); }
-.ib-mw-stat-label { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
-.ib-mw-wo-list { display: flex; flex-direction: column; gap: 5px; min-height: 40px; }
-.ib-mw-wo-row {
-	display: flex; align-items: center; gap: 6px;
-	font-size: 12px; padding: 4px 6px;
-	background: var(--fg-color, #f9fafb);
-	border-radius: 4px;
+.ib-mw-stat-val { font-size: 15px; font-weight: 700; color: var(--text-color); line-height: 1.2; }
+.ib-mw-stat-label { font-size: 9px; color: var(--text-muted); margin-top: 2px; text-transform: uppercase; letter-spacing: .04em; }
+
+/* WO list */
+.ib-mw-wo-list { display: flex; flex-direction: column; gap: 4px; }
+.ib-mw-wo-row { display: flex; align-items: center; gap: 7px; padding: 5px 7px; background: var(--fg-color,#f9fafb); border-radius: 5px; border: 1px solid var(--border-color); }
+.ib-mw-stage-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.ib-mw-wo-item { font-size: 11px; flex: 1; font-family: monospace; color: var(--text-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ib-mw-wo-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex-shrink: 0; }
+.ib-mw-wo-bar-wrap { width: 48px; height: 3px; background: var(--border-color); border-radius: 2px; overflow: hidden; }
+.ib-mw-wo-bar { height: 100%; border-radius: 2px; }
+.ib-mw-no-wos { font-size: 11px; color: var(--text-muted); padding: 6px 0; display: flex; align-items: center; gap: 5px; }
+
+/* Footer */
+.ib-mw-card-footer { margin-top: auto; padding-top: 2px; }
+.ib-mw-edit-btn {
+	display: inline-flex; align-items: center; gap: 4px;
+	padding: 4px 10px; border-radius: 5px;
+	border: 1px solid var(--border-color);
+	background: var(--card-bg); color: var(--text-muted);
+	font-size: 11px; font-family: inherit; cursor: pointer;
+	transition: border-color .12s, color .12s;
 }
-.ib-mw-card-footer { margin-top: auto; padding-top: 4px; }
+.ib-mw-edit-btn:hover { border-color: var(--ib-primary); color: var(--ib-primary); }
 `;
 		const $style = $(`<style id="ib-ps-styles">${css}</style>`);
 		$("head").append($style);

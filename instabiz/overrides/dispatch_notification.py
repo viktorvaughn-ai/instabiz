@@ -20,11 +20,12 @@ def run_dispatch_notification(doc, method=None):
 	message = " | ".join(parts)
 
 	frappe.get_doc({
-		"doctype": "Notification Log",
-		"subject": _("Order Dispatched: {0}").format(doc.name),
+		"doctype":       "Notification Log",
+		"subject":       _("Order Dispatched: {0}").format(doc.name),
 		"email_content": message,
-		"for_user": sales_user,
-		"type": "Alert",
+		"for_user":      sales_user,
+		"from_user":     "Administrator",
+		"type":          "Alert",
 		"document_type": "Delivery Note",
 		"document_name": doc.name,
 	}).insert(ignore_permissions=True)

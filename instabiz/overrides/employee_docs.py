@@ -22,6 +22,7 @@ def _hr_users():
 @frappe.whitelist()
 def run_employee_doc_expiry():
 	"""Daily scheduler: alert HR when employee documents expire within 30 or 7 days."""
+	frappe.only_for(["System Manager", "HR Manager"])
 	hr_users = _hr_users()
 	if not hr_users:
 		return
@@ -60,17 +61,21 @@ def run_employee_doc_expiry():
 				continue
 
 			doc_num = f" ({row.document_number})" if row.document_number else ""
+			base = (
+				f"{row.employee_name} — {row.document_type}{doc_num} "
+				f"expires in {days_left} day{'s' if days_left != 1 else ''} "
+				f"({row.expiry_date})"
+			)
+			max_base = 140 - len(marker) - 1
+			subject = f"{marker} {base[:max_base]}"
 			frappe.get_doc({
 				"doctype":    "Notification Log",
 				"for_user":   user,
+				"from_user":  "Administrator",
 				"type":       "Alert",
 				"document_type": "Employee",
 				"document_name": row.employee,
-				"subject":    (
-					f"{row.employee_name} — {row.document_type}{doc_num} "
-					f"expires in {days_left} day{'s' if days_left != 1 else ''} "
-					f"({row.expiry_date}) {marker}"
-				),
+				"subject":    subject,
 			}).insert(ignore_permissions=True)
 
 	frappe.db.commit()

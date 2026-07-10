@@ -1,0 +1,1310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Instabiz ERP — Knowledge Base</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10pt; color: #222; line-height: 1.5; background: #fff; }
+  h1 { font-size: 22pt; color: #d97757; margin-bottom: 6px; }
+  h2 { font-size: 14pt; color: #d97757; border-bottom: 2px solid #d97757; padding-bottom: 4px; margin: 24px 0 10px 0; page-break-before: always; }
+  h2:first-of-type { page-break-before: avoid; }
+  h3 { font-size: 11pt; color: #333; margin: 14px 0 6px 0; font-weight: bold; }
+  h4 { font-size: 10pt; color: #555; margin: 10px 0 4px 0; font-weight: bold; }
+  p { margin-bottom: 8px; }
+  ul, ol { margin: 6px 0 10px 20px; }
+  li { margin-bottom: 3px; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 16px 0; font-size: 9pt; }
+  th { background: #d97757; color: #fff; padding: 6px 8px; text-align: left; font-weight: bold; }
+  td { padding: 5px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
+  tr:nth-child(even) td { background: #fdf9f7; }
+  .cover { text-align: center; padding: 80px 40px; border-bottom: 3px solid #d97757; }
+  .cover .subtitle { font-size: 13pt; color: #666; margin-top: 8px; }
+  .cover .meta { font-size: 10pt; color: #999; margin-top: 40px; }
+  .badge { display: inline-block; background: #d97757; color: #fff; padding: 1px 7px; border-radius: 10px; font-size: 8pt; margin-left: 6px; font-weight: bold; }
+  .badge.green { background: #1a7f37; }
+  .badge.blue { background: #2e74b5; }
+  .badge.purple { background: #7c3aed; }
+  .badge.orange { background: #ea580c; }
+  .note { background: #fdf9f7; border-left: 3px solid #d97757; padding: 8px 12px; margin: 8px 0 12px 0; font-size: 9.5pt; }
+  .tip { background: #f0f9f0; border-left: 3px solid #1a7f37; padding: 8px 12px; margin: 8px 0 12px 0; font-size: 9.5pt; }
+  .warn { background: #fffbeb; border-left: 3px solid #f59e0b; padding: 8px 12px; margin: 8px 0 12px 0; font-size: 9.5pt; }
+  code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; font-family: Courier New, monospace; font-size: 8.5pt; color: #b34b00; }
+  .steps { counter-reset: step; list-style: none; margin-left: 0; }
+  .steps li { counter-increment: step; padding: 4px 0 4px 30px; position: relative; }
+  .steps li::before { content: counter(step); position: absolute; left: 0; top: 3px; background: #d97757; color: #fff; width: 20px; height: 20px; border-radius: 50%; text-align: center; font-size: 8pt; line-height: 20px; font-weight: bold; }
+  .toc { margin: 20px 0; }
+  .toc a { color: #d97757; text-decoration: none; }
+  .toc li { margin-bottom: 2px; }
+  .flow { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin: 8px 0 12px 0; }
+  .flow-step { background: #f0f0f0; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 9pt; }
+  .flow-arrow { color: #d97757; font-size: 12pt; font-weight: bold; }
+  @media print { h2 { page-break-before: always; } h2:first-of-type { page-break-before: avoid; } }
+</style>
+</head>
+<body>
+
+<!-- ===== COVER PAGE ===== -->
+<div class="cover">
+  <h1 style="font-size:28pt;">Instabiz ERP</h1>
+  <p class="subtitle">Complete Knowledge Base & User Guide</p>
+  <p style="font-size:12pt; color:#d97757; margin-top:20px;">Frappe v15 + ERPNext v15 + HRMS</p>
+  <p class="meta">
+    Document Version: July 2026 &nbsp;|&nbsp; Instabiz Solutions India Pvt Ltd<br>
+    Locations: Maharashtra (Mumbai) &nbsp;|&nbsp; Gujarat &nbsp;|&nbsp; Chennai
+  </p>
+</div>
+
+<!-- ===== TABLE OF CONTENTS ===== -->
+<h2 style="page-break-before:avoid;">Table of Contents</h2>
+<div class="toc">
+<ol>
+  <li><a href="#section1">System Overview &amp; Architecture</a></li>
+  <li><a href="#section2">Sales Workflow: Quotation → Sales Order → Delivery Note → Sales Invoice</a></li>
+  <li><a href="#section3">Payments, Advances &amp; Credit Limits</a></li>
+  <li><a href="#section4">Credit Notes, Debit Notes &amp; Returns</a></li>
+  <li><a href="#section5">Lead Management &amp; CRM</a></li>
+  <li><a href="#section6">Customer Board &amp; Assignments</a></li>
+  <li><a href="#section7">Stock &amp; Inventory</a></li>
+  <li><a href="#section8">Purchase Module</a></li>
+  <li><a href="#section9">GST, E-Invoice &amp; E-Way Bill (Compliance)</a></li>
+  <li><a href="#section10">Reports &amp; Analytics</a></li>
+  <li><a href="#section11">Dashboards</a></li>
+  <li><a href="#section12">HR, Attendance &amp; Payroll</a></li>
+  <li><a href="#section13">Production Module</a></li>
+  <li><a href="#section14">Finance &amp; Banking</a></li>
+  <li><a href="#section15">WhatsApp Integration</a></li>
+  <li><a href="#section16">AI Agents &amp; Automation</a></li>
+  <li><a href="#section17">Custom Masters &amp; DocTypes</a></li>
+  <li><a href="#section18">Automated Schedulers &amp; Alerts</a></li>
+  <li><a href="#section19">Broadcast &amp; Notifications</a></li>
+  <li><a href="#section20">Roles &amp; Permissions</a></li>
+  <li><a href="#section21">System Administration</a></li>
+</ol>
+</div>
+
+
+<!-- ===== SECTION 1 ===== -->
+<h2 id="section1">1. System Overview &amp; Architecture</h2>
+
+<h3>1.1 Technology Stack</h3>
+<table>
+  <tr><th>Component</th><th>Details</th></tr>
+  <tr><td>Framework</td><td>Frappe v15</td></tr>
+  <tr><td>ERP Core</td><td>ERPNext v15</td></tr>
+  <tr><td>HR Module</td><td>HRMS (Frappe)</td></tr>
+  <tr><td>GST Compliance</td><td>india_compliance (Resilient Tech / Adaequare GSP)</td></tr>
+  <tr><td>Database</td><td>MariaDB (MySQL compatible)</td></tr>
+  <tr><td>WhatsApp</td><td>OpenWA (local gateway, port 2785)</td></tr>
+  <tr><td>AI Agents</td><td>Claude claude-haiku-4-5-20251001 via Anthropic API</td></tr>
+  <tr><td>Workflow Automation</td><td>n8n v2.26.9 (port 5678, PM2-managed)</td></tr>
+  <tr><td>Internal Chat</td><td>Raven v2.8.11</td></tr>
+  <tr><td>Site Name</td><td>frontend</td></tr>
+</table>
+
+<h3>1.2 Company &amp; Locations</h3>
+<table>
+  <tr><th>Location</th><th>Code</th><th>GSTIN</th><th>Warehouse</th><th>Cost Centre</th></tr>
+  <tr><td>Maharashtra (Mumbai)</td><td>BWD</td><td>27AAECI3431Q1Z8</td><td>MAHARASHTRA - IB</td><td>Maharashtra - IB</td></tr>
+  <tr><td>Gujarat</td><td>SGM</td><td>24AAECI3431Q1ZE</td><td>GUJARAT - IB</td><td>Gujarat - IB</td></tr>
+  <tr><td>Chennai</td><td>CN</td><td>33AAECI3431Q1ZF</td><td>CHENNAI - IB</td><td>Chennai - IB</td></tr>
+</table>
+
+<h3>1.3 Document Naming Convention</h3>
+<table>
+  <tr><th>DocType</th><th>Pattern</th><th>Example</th></tr>
+  <tr><td>Quotation</td><td>IB-{LOC}-Q-#####</td><td>IB-BWD-Q-00001</td></tr>
+  <tr><td>Sales Order</td><td>IB-{LOC}-SO-#####</td><td>IB-BWD-SO-00001</td></tr>
+  <tr><td>Delivery Note</td><td>IB-{LOC}-DC-#####</td><td>IB-BWD-DC-00001</td></tr>
+  <tr><td>Sales Invoice</td><td>IB-{LOC}-INV-#####</td><td>IB-BWD-INV-00001</td></tr>
+  <tr><td>Credit Note (SI Return)</td><td>IB-{LOC}-CN-#####</td><td>IB-BWD-CN-00001</td></tr>
+  <tr><td>Purchase Order</td><td>IB-{LOC}-PO-#####</td><td>IB-BWD-PO-00001</td></tr>
+  <tr><td>Purchase Receipt (GRN)</td><td>IB-{LOC}-GRN-#####</td><td>IB-BWD-GRN-00001</td></tr>
+  <tr><td>Purchase Invoice (Debit Note)</td><td>IB-{LOC}-DN-#####</td><td>IB-BWD-DN-00001</td></tr>
+</table>
+<div class="note">DN (Delivery Note) and SI (Sales Invoice) share a global sequential counter via MySQL advisory lock, so their numbers never overlap across locations.</div>
+
+
+<!-- ===== SECTION 2 ===== -->
+<h2 id="section2">2. Sales Workflow: Q → SO → DN → SI</h2>
+
+<h3>2.1 Overview</h3>
+<div class="flow">
+  <div class="flow-step">Lead / Customer</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Quotation (Q)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Sales Order (SO)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Delivery Note (DN)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Sales Invoice (SI)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Payment Entry (PE)</div>
+</div>
+
+<h3>2.2 Creating a Quotation</h3>
+<ol class="steps">
+  <li>Go to <b>Workspace → Sales &amp; CRM → Quotation</b> or press Alt+Q.</li>
+  <li>Select <b>Quotation To</b>: choose <i>Customer</i> (existing) or <i>Lead</i> (prospect).</li>
+  <li>Set <b>Location</b>: Maharashtra / Gujarat / Chennai. This auto-sets the company address, GSTIN, and document naming prefix.</li>
+  <li>Add items. For each item row:
+    <ul>
+      <li>Enter <b>Item Code</b> (multi-token search available).</li>
+      <li>Enter dimensions: <b>Width (mm)</b>, <b>Length (mtr)</b>, <b>Qty/Pkg</b>, <b>Total Pkg</b>.</li>
+      <li>Qty is <b>auto-calculated</b>: for SQMT items: <code>(width_mm / 1000) × length_mtr × qty_pkg × total_pkg</code>; for others: <code>qty_pkg × total_pkg</code>.</li>
+      <li>Enter <b>Rate</b>. Amount is auto-calculated.</li>
+    </ul>
+  </li>
+  <li>The system automatically selects the GST template (In-state / Out-state) based on customer GSTIN vs company GSTIN.</li>
+  <li>Floor Price check: if rate is below cost + minimum margin, Sales User is blocked; Sales Manager sees a warning.</li>
+  <li>Save (Draft) then Submit.</li>
+</ol>
+<div class="tip">Quotations have a <b>valid_till</b> date (auto-set to 1 month). A daily scheduler sends expiry warnings at 15, 7, and 1 day before expiry. Expired quotations are auto-closed.</div>
+
+<h3>2.3 Converting Quotation to Sales Order</h3>
+<ol class="steps">
+  <li>Open a submitted Quotation.</li>
+  <li>Click <b>Make → Sales Order</b> (the custom mapper fires, carrying all dimensions, transport, address fields).</li>
+  <li>Review the SO. Optionally add a <b>Cancellation Reason</b> field (required to cancel later).</li>
+  <li>Submit the SO. Stock is reserved at this point.</li>
+</ol>
+<div class="warn">SO submit is blocked if: (a) customer outstanding &gt; credit limit AND oldest unpaid invoice is older than allowed days; OR (b) customer has 30+ day overdue invoices (custom_overdue_block flag set).</div>
+
+<h3>2.4 Creating a Delivery Note</h3>
+<ol class="steps">
+  <li>Open the submitted Sales Order.</li>
+  <li>Click <b>Make → Delivery Note</b>.</li>
+  <li>The DN inherits warehouse from location, transporter details, and all item dimensions.</li>
+  <li>Set <b>LR Number</b> (<code>custom_lr_number</code>) and <b>Transporter</b>.</li>
+  <li>Before submit, the system checks actual stock. If any item is short, a <b>draft Stock Reconciliation</b> is automatically created — submit it first, then re-submit the DN.</li>
+  <li>On submit: E-Way Bill is auto-generated (if GST API is enabled), sales person gets a bell notification, and the stock update is broadcast to Live Stock Dashboard.</li>
+</ol>
+
+<h3>2.5 Creating a Sales Invoice</h3>
+<ol class="steps">
+  <li>Open the submitted Delivery Note.</li>
+  <li>Click <b>Make → Sales Invoice</b>.</li>
+  <li>The SI inherits the same DN number (e.g., DN IB-BWD-DC-00005 → SI IB-BWD-INV-00005).</li>
+  <li>Optional: Enter <b>Transport Charges</b> (<code>custom_transport_charges</code>) — the system automatically adds proportional GST on transport to each GST row.</li>
+  <li>On submit: E-Invoice (IRN) is auto-generated; Payment Entry can auto-reconcile.</li>
+</ol>
+<div class="note">If SI is created standalone (not from DN), it gets its own number from the global counter.</div>
+
+<h3>2.6 Custom Fields on Sales Documents</h3>
+<table>
+  <tr><th>Field</th><th>Purpose</th><th>Where</th></tr>
+  <tr><td><code>custom_sales_person_user</code></td><td>Email of assigned rep — drives permissions</td><td>Q, SO, DN, SI</td></tr>
+  <tr><td><code>custom_sales_person</code></td><td>Display name of sales person</td><td>Q, SO, DN, SI</td></tr>
+  <tr><td><code>custom_location</code></td><td>Maharashtra / Gujarat / Chennai — drives naming &amp; GSTIN</td><td>Q, SO, DN, SI</td></tr>
+  <tr><td><code>custom_cancel_reason</code></td><td>Required before cancellation</td><td>SO, DN, SI</td></tr>
+  <tr><td><code>custom_reference_po</code></td><td>Customer's PO number</td><td>Q, SO</td></tr>
+  <tr><td><code>custom_transport_charges</code></td><td>Freight charges (GST calculated automatically)</td><td>SI</td></tr>
+  <tr><td><code>custom_return_reason</code></td><td>Reason for return on Credit Note</td><td>SI (returns)</td></tr>
+</table>
+
+<h3>2.7 Item Row Dimension Fields</h3>
+<table>
+  <tr><th>Field</th><th>Description</th></tr>
+  <tr><td>color</td><td>Product colour</td></tr>
+  <tr><td>width_mm</td><td>Width in millimetres</td></tr>
+  <tr><td>length_mtr</td><td>Length in metres</td></tr>
+  <tr><td>qty_pkg</td><td>Quantity per package</td></tr>
+  <tr><td>total_pkg</td><td>Total number of packages</td></tr>
+  <tr><td>custom_thickness</td><td>Thickness specification</td></tr>
+  <tr><td>custom_branding</td><td>Branding/print details</td></tr>
+  <tr><td>custom_marking</td><td>Carton marking</td></tr>
+</table>
+
+<h3>2.8 Reopening a Cancelled Document</h3>
+<p>Cancelled Quotations and Sales Orders can be reopened (not available for DN and SI once submitted):</p>
+<ol class="steps">
+  <li>Open the cancelled document.</li>
+  <li>Click <b>Reopen</b> button (visible on cancelled docs).</li>
+  <li>The system resets docstatus to 0 (Draft) and adds an audit comment.</li>
+  <li>For SO reopen: blocked if any submitted DN or SI is still linked.</li>
+</ol>
+
+<h3>2.9 Floor Price Enforcement</h3>
+<p>Each item can have a <b>Minimum Margin %</b> (<code>custom_min_margin_pct</code>) configured on the Item master. The floor price = <code>valuation_rate × (1 + min_margin/100)</code>.</p>
+<ul>
+  <li><b>Sales User</b>: Save is blocked if any row is below floor price.</li>
+  <li><b>Sales Manager / System Manager</b>: Warning shown but save is allowed.</li>
+</ul>
+
+<h3>2.10 Margin % on Quotation Items</h3>
+<p>Each Quotation Item shows <b>Margin %</b> (<code>custom_margin_pct</code>), auto-calculated as:<br>
+<code>margin % = (rate - valuation_rate) / rate × 100</code><br>
+This field is read-only and updates automatically when rate changes.</p>
+
+
+<!-- ===== SECTION 3 ===== -->
+<h2 id="section3">3. Payments, Advances &amp; Credit Limits</h2>
+
+<h3>3.1 Recording a Payment Against a Sales Invoice</h3>
+<ol class="steps">
+  <li>Open the submitted Sales Invoice.</li>
+  <li>Click <b>Make → Payment Entry</b>.</li>
+  <li>Set <b>Amount Received</b>, <b>Payment Mode</b> (Bank / Cash), and <b>Reference No</b> (cheque/NEFT number).</li>
+  <li>Save and Submit.</li>
+</ol>
+<div class="tip">Payment Entry on submit automatically sends a bell notification to all Accounts User, Accounts Manager, and System Manager roles.</div>
+
+<h3>3.2 Auto-Reconciliation of Payments</h3>
+<p>When a Payment Entry (Receive type) is submitted with <b>no reference rows</b>, the system automatically links it to the oldest outstanding Sales Invoices for that customer (FIFO order) until the payment amount is exhausted.</p>
+<div class="note">If the payment amount exceeds all outstanding invoices, the excess stays unallocated with an orange warning. Reconcile manually in Accounts → Bank Reconciliation.</div>
+
+<h3>3.3 Recording an Advance Payment Against a Sales Order</h3>
+<p>To record an advance (before invoice is raised):</p>
+<ol class="steps">
+  <li>Go to <b>Accounts → Payment Entry → New</b>.</li>
+  <li>Set <b>Payment Type</b> = Receive, <b>Party Type</b> = Customer.</li>
+  <li>In the <b>Payment References</b> table, add a row:
+    <ul>
+      <li><b>Reference DocType</b>: Sales Order</li>
+      <li><b>Reference Name</b>: the SO number (e.g., IB-BWD-SO-00012)</li>
+      <li><b>Allocated Amount</b>: the advance amount</li>
+    </ul>
+  </li>
+  <li>Save and Submit.</li>
+  <li>The SO will now show <b>Advance Received</b> (<code>custom_advance_paid</code>) field updated automatically.</li>
+</ol>
+
+<h3>3.4 Attaching Advance Payment Screenshot / Document to Sales Order</h3>
+<p>To attach proof of advance payment (bank screenshot, WhatsApp screenshot, etc.):</p>
+<ol class="steps">
+  <li>Open the Sales Order.</li>
+  <li>Click the <b>Attachment</b> icon (paperclip icon at top-right of the form, or the Attachments section at the bottom).</li>
+  <li>Click <b>Add Attachment</b> → <b>Upload File</b>.</li>
+  <li>Select the image or PDF from your computer and upload.</li>
+  <li>Alternatively, drag-and-drop the file onto the attachment area.</li>
+  <li>The file appears in the Attachments section and is stored in Frappe's file system.</li>
+</ol>
+<div class="tip">You can also attach files to any other document (Quotation, Invoice, Lead, etc.) using the same method. Attachments are visible to all users who have access to that document.</div>
+
+<h3>3.5 PDC (Post-Dated Cheque) Tracking</h3>
+<p>Use the <b>IB PDC</b> doctype to track post-dated cheques from customers:</p>
+<ol class="steps">
+  <li>Go to <b>IB PDC → New</b>.</li>
+  <li>Fill in: Customer, Cheque No, Cheque Date, Amount, Bank Name, Related Sales Invoice (optional).</li>
+  <li>Status: Pending → Presented → Cleared / Bounced.</li>
+  <li>The system sends a bell notification to Accounts roles <b>3 days before the cheque date</b>.</li>
+</ol>
+
+<h3>3.6 Credit Limit Configuration</h3>
+<p>Set customer-level credit limit in <b>Customer → Credit Limit</b> tab:</p>
+<ul>
+  <li><b>Credit Limit</b>: Maximum outstanding allowed (₹).</li>
+  <li><b>Bypass Credit Limit Check</b>: Tick to skip enforcement for this customer.</li>
+  <li><b>Custom Days</b>: Number of days an invoice can be overdue before blocking.</li>
+</ul>
+<p>SO submit is blocked only when BOTH conditions are true simultaneously: outstanding > credit_limit AND oldest unpaid invoice older than custom_days.</p>
+
+<h3>3.7 Overdue Block</h3>
+<p>When a customer has a Sales Invoice overdue by 30+ days:</p>
+<ul>
+  <li>Daily scheduler sets <code>custom_overdue_block=1</code> on the Customer.</li>
+  <li>New SO submit is <b>hard-blocked</b> for Sales Users; Sales Manager gets a warning only.</li>
+  <li>Block is <b>automatically cleared</b> when all overdue invoices are paid via Payment Entry.</li>
+</ul>
+
+
+<!-- ===== SECTION 4 ===== -->
+<h2 id="section4">4. Credit Notes, Debit Notes &amp; Returns</h2>
+
+<h3>4.1 Sales Return / Credit Note</h3>
+<p>A Credit Note is a Sales Invoice with <b>is_return = 1</b>. Use it when goods are returned by the customer.</p>
+<ol class="steps">
+  <li>Open the original submitted Sales Invoice.</li>
+  <li>Click <b>Make → Return / Credit Note</b>.</li>
+  <li>The system creates a return SI with negative quantities.</li>
+  <li>Fill in <b>Return Reason</b> (<code>custom_return_reason</code>) — this appears in the Credit Note Register report.</li>
+  <li>Submit the Credit Note. It auto-adjusts the outstanding on the original invoice.</li>
+</ol>
+<div class="note">Credit Notes get their own naming series: IB-{LOC}-CN-##### (separate from INV sequence).</div>
+
+<h3>4.2 Delivery Return (Stock Return)</h3>
+<ol class="steps">
+  <li>Open the submitted Delivery Note.</li>
+  <li>Click <b>Make → Return</b>.</li>
+  <li>The return DN brings stock back into the warehouse.</li>
+  <li>Create a Credit Note against the original SI separately (or from the return DN).</li>
+</ol>
+
+<h3>4.3 Purchase Debit Note</h3>
+<p>A Debit Note is a Purchase Invoice with <b>is_return = 1</b>. Use it when returning goods to a supplier.</p>
+<ol class="steps">
+  <li>Open the original submitted Purchase Invoice.</li>
+  <li>Click <b>Make → Return / Debit Note</b>.</li>
+  <li>Naming: IB-{LOC}-DN-##### (the DN- prefix in purchase returns).</li>
+  <li>Submit to update supplier outstanding.</li>
+</ol>
+
+<h3>4.4 Credit Note Register Report</h3>
+<p>Go to <b>Reports → IB Credit Note Register</b> to see all credit notes with return reasons, original invoices, and values. Filter by date range, customer, territory, or sales person.</p>
+
+<h3>4.5 General Ledger &amp; Accounting Impact</h3>
+<p>All submitted Sales Invoices, Credit Notes, and Payment Entries create GL Entries automatically:</p>
+<ul>
+  <li>SI submit: Debit Customer AR account, Credit Sales Revenue account + GST accounts.</li>
+  <li>Credit Note submit: Reverses the above (Debit Sales Returns, Credit Customer AR).</li>
+  <li>Payment Entry: Debit Bank/Cash account, Credit Customer AR account.</li>
+</ul>
+<p>View GL entries: <b>Accounts → General Ledger</b> report, or open any document → View → Ledger.</p>
+
+
+<!-- ===== SECTION 5 ===== -->
+<h2 id="section5">5. Lead Management &amp; CRM</h2>
+
+<h3>5.1 Creating a Lead</h3>
+<ol class="steps">
+  <li>Go to <b>Workspace → Sales &amp; CRM → Leads Pipeline</b> or <b>CRM → Lead → New</b>.</li>
+  <li>Fill in: Lead Name, Mobile No, Email, Territory.</li>
+  <li>Enter <b>Pincode</b> (<code>custom_pincode</code>) — the system auto-fills City and District via India Post API.</li>
+  <li>Save. The lead is automatically assigned to a sales person via round-robin within the Lead Sales Team for that territory.</li>
+</ol>
+
+<h3>5.2 Lead Statuses</h3>
+<table>
+  <tr><th>Status</th><th>Meaning</th></tr>
+  <tr><td>New</td><td>Just created, not yet contacted</td></tr>
+  <tr><td>Contacted</td><td>Initial contact made</td></tr>
+  <tr><td>Warm</td><td>Interested, follow-up scheduled</td></tr>
+  <tr><td>Hot</td><td>High probability, ready to quote</td></tr>
+  <tr><td>Cold</td><td>Went quiet, win-back eligible</td></tr>
+  <tr><td>Quoted</td><td>Quotation sent</td></tr>
+  <tr><td>Converted</td><td>Became a customer</td></tr>
+  <tr><td>Lost</td><td>Deal lost</td></tr>
+  <tr><td>Junk</td><td>Spam / invalid</td></tr>
+</table>
+
+<h3>5.3 Changing Lead Status (Quick)</h3>
+<p>In the Lead List view, click the coloured status pill next to a lead row to open a floating status picker — change status without opening the full form.</p>
+
+<h3>5.4 Logging Activity on a Lead</h3>
+<ol class="steps">
+  <li>Open a Lead.</li>
+  <li>Click <b>Log Activity</b> button (top of form).</li>
+  <li>Select Activity Type: Call / Meeting / WhatsApp / Email / Visit.</li>
+  <li>Select Outcome: Positive / Neutral / Negative / No Answer.</li>
+  <li>Add Notes and optionally set <b>Next Follow-Up Date</b>.</li>
+  <li>Click Save. An activity entry appears in the Lead's timeline.</li>
+</ol>
+
+<h3>5.5 Lead Scoring</h3>
+<p>Each lead gets an automatic score (0–100):</p>
+<ul>
+  <li>Temperature: Cold=0, Warm=30, Hot=60 points.</li>
+  <li>Status bonus: up to 30 additional points.</li>
+  <li>Contact completeness: mobile/email/product interest/follow-up date present.</li>
+</ul>
+<p>Score is visible as <code>custom_lead_score</code> on the Lead form.</p>
+
+<h3>5.6 Converting Lead to Customer</h3>
+<ol class="steps">
+  <li>Open the Lead (status should be Quoted or Hot).</li>
+  <li>Click <b>Make → Customer</b>.</li>
+  <li>The custom mapper carries: Territory, Pincode, City, District, Sales Person.</li>
+  <li>A new Customer record is created linked to this Lead.</li>
+</ol>
+
+<h3>5.7 Win-Back Nudges (Automatic)</h3>
+<p>Daily scheduler triggers alerts:</p>
+<ul>
+  <li>Open/Replied Quotations with no activity in 14+ days → alert sent to rep.</li>
+  <li>Leads in Cold/Contacted/Warm status with no activity in 30+ days → alert to lead owner.</li>
+</ul>
+
+<h3>5.8 Lead Sales Team Configuration</h3>
+<p>Go to <b>Lead Sales Team</b> doctype to configure round-robin assignment:</p>
+<ul>
+  <li>Add Members (Users) and their Territories.</li>
+  <li>Leads from matching territories are assigned in round-robin order.</li>
+  <li>The team leader gets the Sales Manager role automatically on save.</li>
+</ul>
+
+
+<!-- ===== SECTION 6 ===== -->
+<h2 id="section6">6. Customer Board &amp; Assignments</h2>
+
+<h3>6.1 Customer Board Overview</h3>
+<p>Access via <b>Workspace → Sales &amp; CRM → Customer Board</b>. This is a 4-column Kanban showing customers assigned for sales visits:</p>
+<table>
+  <tr><th>Column</th><th>Meaning</th></tr>
+  <tr><td>Dormant Pool</td><td>Customers with no orders in 90+ days, available to assign</td></tr>
+  <tr><td>Regular Pool</td><td>Active customers available to assign for today/tomorrow</td></tr>
+  <tr><td>Today</td><td>Customers assigned for visit today</td></tr>
+  <tr><td>Tomorrow</td><td>Customers pre-assigned for tomorrow</td></tr>
+</table>
+
+<h3>6.2 Adding a Customer to Your Board</h3>
+<ol class="steps">
+  <li>Open Customer Board.</li>
+  <li>Browse the Dormant or Regular pool columns (server-side paginated, 50/page).</li>
+  <li>Click the <b>+</b> button on any customer card to add them to Today or Tomorrow.</li>
+  <li>A 5-second undo toast appears — click Undo to reverse.</li>
+</ol>
+
+<h3>6.3 Sales Target Progress Card</h3>
+<p>At the top of the Customer Board, a target card shows the current month's sales target and MTD revenue for the logged-in user. Hidden when no target is set.</p>
+
+<h3>6.4 Assignment Admin (Manager View)</h3>
+<p>Access via <b>Workspace → Sales &amp; CRM → Assignment Admin</b> (Sales Manager / System Manager only):</p>
+<ul>
+  <li><b>Roster Overview</b>: All sales reps with avatar, stats, MTD progress, and target bar.</li>
+  <li><b>View As</b>: View any rep's board and add/remove assignments on their behalf.</li>
+  <li><b>Pool Assign Panel</b>: Bulk-assign customers from the territory pool to a user for a date.</li>
+</ul>
+
+<h3>6.5 Automatic Daily Assignment</h3>
+<p>At 12:00 AM daily, the scheduler:</p>
+<ol>
+  <li>Rolls over pending assignments from today to tomorrow.</li>
+  <li>Auto-assigns tomorrow's batch per each user's territory (dormant:regular ratio per IB Assignment Config).</li>
+</ol>
+
+<h3>6.6 Marking Assignment Done</h3>
+<p>When a Sales Order is submitted for a customer, their assignment is automatically marked as <b>Order Placed</b> (done).</p>
+
+<h3>6.7 IB Assignment Config</h3>
+<p>Go to <b>IB Assignment Config</b> (singleton) to configure:</p>
+<ul>
+  <li><b>Assignments Per Day</b>: How many customers each rep sees daily.</li>
+  <li><b>Dormant Threshold Days</b>: Days without order to classify as Dormant.</li>
+  <li><b>Dormant Ratio</b>: % of daily assignments from the Dormant pool.</li>
+</ul>
+
+<h3>6.8 Customer Health Score</h3>
+<p>Daily scheduler computes a weighted health score for each active customer:</p>
+<table>
+  <tr><th>Factor</th><th>Weight</th><th>Metric</th></tr>
+  <tr><td>Payment Punctuality</td><td>35%</td><td>Avg days paid after due date</td></tr>
+  <tr><td>Order Frequency</td><td>30%</td><td>Orders in last 90 days</td></tr>
+  <tr><td>Complaint Count</td><td>20%</td><td>Credit notes / returns</td></tr>
+  <tr><td>CSAT Rating</td><td>15%</td><td>Average rating from feedback</td></tr>
+</table>
+<ul>
+  <li>Green: score ≥ 70 | Amber: score ≥ 40 | Red: score &lt; 40</li>
+  <li>If score drops 15+ points in one day, an email alert goes to all Sales Manager / System Manager.</li>
+</ul>
+<p>View: <b>Workspace → Sales &amp; CRM → Customer Health</b> page.</p>
+
+
+<!-- ===== SECTION 7 ===== -->
+<h2 id="section7">7. Stock &amp; Inventory</h2>
+
+<h3>7.1 Live Stock Dashboard</h3>
+<p>Access via <b>Workspace → Stock &amp; Inventory → Live Stock Balance</b>.</p>
+<ul>
+  <li>Shows real-time stock for all items across 3 warehouses.</li>
+  <li><b>Filter chips</b>: Item Group, UOM (SQMT=orange / PCS=blue / KG=green), Warehouse, Hide Zero / Show Zero Only.</li>
+  <li><b>Multi-token search</b>: Type multiple words (e.g., "red 500 sqmt") — all tokens must match.</li>
+  <li><b>Color dots</b>: Visual color swatches from item color field.</li>
+  <li><b>Breakdown popover</b>: Click any row for per-warehouse bars, reserved %, spec tags.</li>
+  <li><b>CSV Export</b>: Download as spreadsheet.</li>
+  <li><b>Live updates</b>: Dashboard refreshes automatically when DN/SO/Stock Entry is submitted (WebSocket).</li>
+</ul>
+<p>Click an item's row to open the <b>Stock Ledger</b> for that item.</p>
+
+<h3>7.2 Stock Ledger</h3>
+<p><b>Workspace → Stock &amp; Inventory → Stock Ledger</b>. Filter by item, warehouse, and date range to see all stock movements with voucher references.</p>
+
+<h3>7.3 Item Price List</h3>
+<p><b>Workspace → Stock &amp; Inventory</b> → <b>IB Rate Card</b>. Shows all items with Rate 1–4 columns (color-coded headers). Click any row to open a popover with full rate details and spec information.</p>
+<ul>
+  <li>Managers can click the Edit button (toolbar) to update rates.</li>
+  <li>Click an item code to go to the Item master (same tab).</li>
+</ul>
+
+<h3>7.4 Batch Tracking</h3>
+<p>Items in item groups: BOPP, CLOTH, FOAM, SPECIALTY automatically have <code>has_batch_no = 1</code> (Batch Tracking enabled). When creating Stock Entries or Delivery Notes, select the batch number.</p>
+
+<h3>7.5 Stock Ageing Report</h3>
+<p>Go to <b>Reports → IB Stock Ageing</b>. Shows per-item/warehouse: quantity, first receipt date, age in days, and buckets (0-30, 31-60, 61-90, 90+ days). Old stock (60+ days) is highlighted.</p>
+
+<h3>7.6 Reorder Alerts</h3>
+<p>Daily scheduler checks bins against reorder levels configured on each item. When <code>actual_qty ≤ reorder_level</code>, a bell notification is sent to Purchase Manager / Purchase User / System Manager roles. Alerts are deduplicated (one per item per 7 days).</p>
+
+<h3>7.7 IB Jumbo Roll Traceability</h3>
+<p>The <b>IB Jumbo Roll</b> doctype tracks raw material rolls from receipt through production:</p>
+<ul>
+  <li>Fields: Supplier, Received Date, Batch No, Adhesive Lot, GSM, Width (mm), Length (mtr), Liner Type.</li>
+  <li>Status: Pending / In Production / Used / Rejected.</li>
+</ul>
+
+
+<!-- ===== SECTION 8 ===== -->
+<h2 id="section8">8. Purchase Module</h2>
+
+<h3>8.1 Purchase Workflow</h3>
+<div class="flow">
+  <div class="flow-step">Purchase Order (PO)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Goods Receipt (GRN)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Purchase Invoice (PI)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Payment Entry</div>
+</div>
+
+<h3>8.2 Creating a Purchase Order</h3>
+<ol class="steps">
+  <li>Go to <b>Workspace → Procurement Dashboard → Purchase Order → New</b>.</li>
+  <li>Set Location (auto-sets naming prefix and cost center).</li>
+  <li>Select Supplier. The GST template auto-switches between In-state, Out-state, and RCM based on GSTINs.</li>
+  <li>For ROLL UOM items: enter <b>SQMT Rate</b> (<code>custom_sqmt_rate</code>). The system auto-calculates Rate per ROLL = sqmt_rate × conversion_factor.</li>
+  <li>Submit. A cancellation reason is required to cancel.</li>
+</ol>
+
+<h3>8.3 PO Follow-Up Alert</h3>
+<p>If a submitted PO has no linked GRN (Goods Receipt) after 7 days, the Purchase Manager / Purchase User roles get a bell notification.</p>
+
+<h3>8.4 Vendor Payment Due Alert</h3>
+<p>If a Purchase Invoice has payment due within 7 days and outstanding > 0, all Purchase Manager / Purchase User / System Manager roles get a notification.</p>
+
+<h3>8.5 GSTR-2B &amp; Purchase Reconciliation</h3>
+<p>Access via <b>GST India Workspace → Purchase Reconciliation Tool</b>:</p>
+<ul>
+  <li>Download GSTR-2B from GST portal (API or manual JSON upload).</li>
+  <li>System auto-matches against submitted Purchase Invoices.</li>
+  <li>Unmatched items need manual review.</li>
+</ul>
+
+<h3>8.6 IB AP Aging Report</h3>
+<p>Go to <b>Reports → IB AP Aging</b>. Shows outstanding Purchase Invoices with age buckets. Filter by supplier.</p>
+
+
+<!-- ===== SECTION 9 ===== -->
+<h2 id="section9">9. GST, E-Invoice &amp; E-Way Bill (Compliance)</h2>
+
+<h3>9.1 GST Configuration Status</h3>
+<table>
+  <tr><th>Setting</th><th>Status</th></tr>
+  <tr><td>E-Invoice Enabled</td><td>Yes (from 2026-03-14)</td></tr>
+  <tr><td>E-Way Bill Enabled</td><td>Yes</td></tr>
+  <tr><td>API Mode</td><td>Production (sandbox_mode=0)</td></tr>
+  <tr><td>GSP</td><td>Adaequare Info Private Limited</td></tr>
+  <tr><td>MH GSTIN (27…)</td><td>LIVE — IRN &amp; EWB tested 2026-05-18</td></tr>
+  <tr><td>GJ GSTIN (24…)</td><td>Pending NIC portal registration</td></tr>
+  <tr><td>TN GSTIN (33…)</td><td>Pending NIC portal registration</td></tr>
+</table>
+
+<h3>9.2 E-Invoice (IRN) Auto-Generation</h3>
+<p>On Sales Invoice submit, IRN is generated automatically if:</p>
+<ul>
+  <li>Customer has a GSTIN (B2C invoices are skipped).</li>
+  <li>Invoice is not a return (credit notes skipped).</li>
+  <li>Invoice is not already IRN-stamped.</li>
+</ul>
+<p>On failure: a warning is shown but the SI is not blocked. Check the Error Log for details.</p>
+<div class="note">The IB Tax Invoice print format (feature 70) automatically renders the IRN QR code on Page 1 when an IRN exists.</div>
+
+<h3>9.3 E-Way Bill Auto-Generation</h3>
+<p>On Delivery Note submit, an E-Way Bill is auto-generated if GST API is enabled. The system:</p>
+<ul>
+  <li>Maps <code>custom_lr_number</code> → <code>lr_no</code> (Lorry Receipt number).</li>
+  <li>Maps IB Transport GSTIN → <code>gst_transporter_id</code>.</li>
+  <li>Sets Dispatch From address = warehouse address per location mapping.</li>
+</ul>
+<div class="tip">To generate E-Way Bill manually from DN list: select the DN → Actions → Generate E-Way Bill. An extended dialog lets you choose Transaction Type (Regular, Bill To-Ship To, Bill From-Dispatch From, Combination) and enter address overrides.</div>
+
+<h3>9.4 E-Way Bill Transaction Types</h3>
+<table>
+  <tr><th>Type</th><th>Code</th><th>Use When</th></tr>
+  <tr><td>Regular</td><td>1</td><td>Supplier ships directly to buyer</td></tr>
+  <tr><td>Bill To-Ship To</td><td>2</td><td>Billing address ≠ shipping address</td></tr>
+  <tr><td>Bill From-Dispatch From</td><td>3</td><td>Dispatch point ≠ billing address</td></tr>
+  <tr><td>Combination</td><td>4</td><td>Both Bill To-Ship To AND Bill From-Dispatch From apply</td></tr>
+</table>
+
+<h3>9.5 GSTR-1 Filing</h3>
+<ol class="steps">
+  <li>Go to <b>GST India → GSTR-1 Beta</b>.</li>
+  <li>Select Company + GSTIN + Year + Month.</li>
+  <li>Click <b>Recompute</b> — system generates B2B, CDNR, HSN summaries from submitted SIs.</li>
+  <li>Review the data. Download Excel or JSON.</li>
+  <li>Click <b>Upload to GST Portal</b> (requires enable_gstr_1_api=1 in GST Settings).</li>
+</ol>
+
+<h3>9.6 GSTR-3B Report</h3>
+<ol class="steps">
+  <li>Go to <b>GST India → GSTR 3B Report → New</b>.</li>
+  <li>Select Company + GSTIN + Year + Month → Save.</li>
+  <li>The JSON is generated with outward supply details, ITC eligibility, and inter-state supplies.</li>
+  <li>Download JSON for manual portal upload or use API upload.</li>
+</ol>
+
+<h3>9.7 GST Tax Templates</h3>
+<table>
+  <tr><th>Template Name</th><th>When Applied</th></tr>
+  <tr><td>Output GST In-state - IB</td><td>Same-state sales (CGST + SGST 9% each = 18%)</td></tr>
+  <tr><td>Output GST Out-state - IB</td><td>Inter-state sales (IGST 18%)</td></tr>
+  <tr><td>Output GST In-state + Transport - IB</td><td>In-state with freight tax row</td></tr>
+  <tr><td>Output GST Out-state + Transport - IB</td><td>Out-state with freight tax row</td></tr>
+  <tr><td>Input GST In-state - IB</td><td>Same-state purchases</td></tr>
+  <tr><td>Input GST Out-state - IB</td><td>Inter-state purchases</td></tr>
+  <tr><td>Input GST RCM In-state - IB</td><td>RCM purchases in-state</td></tr>
+  <tr><td>Input GST RCM Out-state - IB</td><td>RCM purchases out-state</td></tr>
+</table>
+
+<h3>9.8 IB Tax Invoice Print Format</h3>
+<p>The custom print format <b>IB Tax Invoice</b> (available on Sales Invoice) generates a 2-page output:</p>
+<ul>
+  <li><b>Page 1</b>: Tax Invoice with IRN/QR code block, company details, item table with per-row GST rates, CGST/SGST/IGST rows, bank details, previous balance, and signature.</li>
+  <li><b>Page 2</b>: E-Way Bill print with EWB QR code, address details From/To, goods table, vehicle details.</li>
+</ul>
+
+
+<!-- ===== SECTION 10 ===== -->
+<h2 id="section10">10. Reports &amp; Analytics</h2>
+
+<h3>10.1 Sales Reports</h3>
+<table>
+  <tr><th>Report</th><th>What It Shows</th><th>Key Filters</th></tr>
+  <tr><td>IB Sales KPIs</td><td>Per-rep: Leads, Quotations, Orders, conversion %, revenue, avg deal, lost deals. Bar chart + summary cards.</td><td>Date range, Territory, Sales Person, Lead Source</td></tr>
+  <tr><td>IB Daily Sales Report</td><td>Single-day snapshot: new leads, quotations, orders, dispatches, MTD revenue vs target per rep. 8 summary cards.</td><td>Date (default today), Territory</td></tr>
+  <tr><td>IB Lost Deal Analysis</td><td>Lost leads and lost quotations with loss reason, source, territory, month, value.</td><td>Date range, Source, Loss Reason, Territory, Sales Person</td></tr>
+  <tr><td>IB Territory Report</td><td>Per-territory: leads, quotations, orders, revenue, conversion %. Color-coded conversion %.</td><td>Date range</td></tr>
+  <tr><td>IB SKU Report</td><td>Per-item: orders, qty sold, revenue, avg rate, customer count. Top 10 chart.</td><td>Date range, Territory, Item Group</td></tr>
+  <tr><td>IB Gross Margin</td><td>Per-item: qty sold, revenue, COGS (valuation rate), gross profit, margin %. Color-coded margin %.</td><td>Date range, Territory, Item Group, Sales Person</td></tr>
+  <tr><td>IB Sales Person Summary</td><td>Per-rep: order count, total revenue, avg and max order value.</td><td>Date range, Sales Person, Status, Territory</td></tr>
+  <tr><td>IB Activity Log</td><td>All lead activity timeline entries: activity type, outcome, notes, next follow-up.</td><td>Date range, Sales Person, Activity Type, Outcome</td></tr>
+  <tr><td>IB Dispatch Report</td><td>Per-DN: customer, location, transporter, LR number, items, qty, value. Bar chart by transporter.</td><td>Date, Warehouse, Sales Person</td></tr>
+  <tr><td>IB Credit Note Register</td><td>All credit notes (SI returns) with return reason, original invoice, customer, value.</td><td>Date range, Customer, Territory, Sales Person</td></tr>
+</table>
+
+<h3>10.2 Finance Reports</h3>
+<table>
+  <tr><th>Report</th><th>What It Shows</th><th>Key Filters</th></tr>
+  <tr><td>IB AR Aging</td><td>Outstanding Sales Invoices in age buckets (0-30, 31-60, 61-90, 90+ days). Color-coded old invoices.</td><td>Customer, Territory, Sales Person</td></tr>
+  <tr><td>IB AP Aging</td><td>Outstanding Purchase Invoices in age buckets.</td><td>Supplier</td></tr>
+  <tr><td>IB Collections Report</td><td>Per-rep: invoiced, collected, outstanding, collection %. 3-dataset bar chart.</td><td>Date range, Territory, Sales Person</td></tr>
+  <tr><td>IB Cash Flow Statement</td><td>GL-entry based cash flow: inflows/outflows by category (collections, vendor payments, salaries, taxes). Running balance.</td><td>Bank Account, Date range</td></tr>
+  <tr><td>IB Bank Reconciliation</td><td>Payment Entries for IB bank accounts with clearance status.</td><td>Bank Account, Date range, Show Cleared</td></tr>
+</table>
+
+<h3>10.3 HR &amp; Production Reports</h3>
+<table>
+  <tr><th>Report</th><th>What It Shows</th></tr>
+  <tr><td>IB Payroll Summary</td><td>Per-employee payroll breakdown: Basic/HRA/CA/PF/ESIC/PT/Net. Prorated by attendance if month filter set.</td></tr>
+  <tr><td>IB Production Report</td><td>Work order summary by stage and status.</td></tr>
+  <tr><td>IB Purchase Pipeline</td><td>Submitted POs with receipt and invoice linkage status.</td></tr>
+  <tr><td>IB Stock Ageing</td><td>Per-item/warehouse stock age and value by bucket.</td></tr>
+</table>
+
+<h3>10.4 Using Report Charts</h3>
+<p>All custom reports support a <b>Chart Type</b> filter: Bar / Pie / Donut / Line / Percentage. Change this filter and re-run to switch chart style. Pie/Donut legends wrap to multiple lines automatically.</p>
+
+<h3>10.5 Standard ERPNext Reports Still Available</h3>
+<ul>
+  <li>General Ledger, Trial Balance, Balance Sheet, Profit &amp; Loss</li>
+  <li>Sales Register, Purchase Register</li>
+  <li>Stock Ledger Entry, Stock Balance, Stock Projected Qty</li>
+  <li>GSTR-1, GSTR-2B, GSTR-3B (via india_compliance)</li>
+  <li>Salary Register, Attendance Sheet, Leave Ledger</li>
+</ul>
+
+
+<!-- ===== SECTION 11 ===== -->
+<h2 id="section11">11. Dashboards</h2>
+
+<h3>11.1 Business Pulse (Main Dashboard)</h3>
+<p>Access: <b>Workspace → Dashboards → Business Pulse</b>. Shows:</p>
+<ul>
+  <li>4 KPI cards: Revenue MTD, Outstanding AR, Open Quotations, Low/Zero Stock — all clickable deep-links.</li>
+  <li>Revenue Trend chart (6 months).</li>
+  <li>Top Customers bar chart.</li>
+  <li>Recent Invoices table.</li>
+  <li>Quick Actions grid.</li>
+</ul>
+
+<h3>11.2 Finance Dashboard</h3>
+<p><b>Workspace → Dashboards → Finance Dashboard</b>. KPIs: Outstanding AR, Outstanding AP, Collections MTD, Cash Balance. Outstanding AR/AP tables with top debtors/creditors. Recent SI list.</p>
+
+<h3>11.3 HR Dashboard</h3>
+<p><b>Workspace → HR &amp; Payroll → HR Dashboard</b>. KPIs: Active Employees, Present Today, Pending Leaves, Payroll MTD. Tabs: Attendance / Leaves / Payroll / Statutory. Approve/reject leaves inline.</p>
+
+<h3>11.4 Procurement Dashboard</h3>
+<p><b>Workspace → Dashboards → Procurement Dashboard</b>. KPIs: Open POs, Pending GRNs, Pending PIs, Overdue Vendor Payments. Top Suppliers bar chart. Recent POs table.</p>
+
+<h3>11.5 Production Dashboard</h3>
+<p><b>Workspace → Production → Production Dashboard</b>. KPIs: Active Work Orders, Pending, Completed Today, Machines Active. Stage pipeline cards (clickable to Production Stages page). Priority strip. Wastage card. Active plan table.</p>
+
+<h3>11.6 Analytics Hub</h3>
+<p><b>Workspace → Dashboards → Analytics Hub</b>. Aggregated analytics combining sales, finance, and production KPIs.</p>
+
+
+<!-- ===== SECTION 12 ===== -->
+<h2 id="section12">12. HR, Attendance &amp; Payroll</h2>
+
+<h3>12.1 Attendance Terminal</h3>
+<p>Access: <b>Workspace → HR &amp; Payroll → Attendance Terminal</b> (manager view) or <b>/checkin</b> URL (employee self-service portal).</p>
+<ul>
+  <li>Managers can bulk check-in / mark absent for employees.</li>
+  <li>Filter by Factory vs Office.</li>
+  <li>Late check-in or early check-out triggers a <b>reason dialog</b> (reason stored in Employee Checkin).</li>
+</ul>
+
+<h3>12.2 Employee Self-Service Check-In</h3>
+<ol class="steps">
+  <li>Employee opens browser and goes to <code>/checkin</code>.</li>
+  <li>Employee selects their name and clicks Check-In / Check-Out.</li>
+  <li>If late (past shift start + 10 min grace), a reason dialog appears.</li>
+  <li>Record is saved to Employee Checkin doctype.</li>
+</ol>
+
+<h3>12.3 Auto-Absent Marking</h3>
+<p>Daily scheduler marks yesterday's employees Absent if no Attendance record exists. Excludes:</p>
+<ul>
+  <li>Weekends (Saturday/Sunday).</li>
+  <li>Holidays in the employee's holiday list.</li>
+  <li>Employees with an approved Leave Application for that day.</li>
+</ul>
+
+<h3>12.4 Salary Structures</h3>
+<table>
+  <tr><th>Structure</th><th>Applicable To</th><th>Key Formulas</th></tr>
+  <tr><td>IB Payroll</td><td>Office/General staff</td><td>Basic=base×2/3; HRA=base×20%; CA=remainder; PF=min(B+CA,15000)×12%; ESIC=(B+HRA)×0.75% if base≤21000; PT=₹175/₹200</td></tr>
+  <tr><td>Astro Payroll</td><td>Factory staff</td><td>3 tiers based on gross; B/HRA vary by tier; PF=min(B+HRA,15000)×12%; ESIC similar; PT=₹200 flat</td></tr>
+</table>
+
+<h3>12.5 Payroll Processing</h3>
+<ol class="steps">
+  <li>Ensure each employee has a <b>Salary Structure Assignment</b> with the correct salary structure and effective date.</li>
+  <li>PF opt-in: set <code>provident_fund_account</code> on Employee (blank = PF skipped).</li>
+  <li>ESIC opt-in: set <code>health_insurance_no</code> on Employee (blank = ESIC skipped; also auto-skipped if base &gt; ₹21,000).</li>
+  <li>Run Payroll from <b>HRMS → Payroll → Process Payroll</b>. Select month, company.</li>
+  <li>Salary slips are generated. The system credits 2 days leave (for IB Payroll) if employee has absences.</li>
+  <li>Submit all salary slips, then post the payment journal entry.</li>
+</ol>
+
+<h3>12.6 IB Payroll Summary Report</h3>
+<p>Go to <b>Reports → IB Payroll Summary</b>. Computes per-employee breakdown using the salary formula. Filter by Month, Employee Category (All/Factory/Office), Salary Structure.</p>
+
+<h3>12.7 Employee Exit &amp; Full &amp; Final Settlement</h3>
+<p>When an employee's <code>relieving_date</code> is set (status can be Active or Left at the time — both orders work):</p>
+<ul>
+  <li>On/after relieving day: System creates an <b>Employee Exit Handover</b> doc listing all pending Q/SO/DN/SI under that rep's name, and HR Managers get a bell notification. HR reassigns the pending documents.</li>
+  <li>Day after relieving: User account is disabled automatically.</li>
+</ul>
+<div class="note"><b>Fixed 2026-07-02:</b> the handover job previously required an exact <code>relieving_date = today</code> match plus <code>status = Active</code>; since HR commonly sets status to Left at the same time they enter a (often backdated) relieving_date, this silently skipped the handover for most real exits. The job now scans <code>relieving_date ≤ today</code> with no status filter, matching the retry-safe pattern already used by the account-disable job.</div>
+<p><b>IB Full Final Settlement</b> doctype auto-computes:</p>
+<ul>
+  <li>Years of Service, Gratuity (≥5 years: basic/26 × 15 × years), Leave Encashment, Total Payable.</li>
+</ul>
+
+<h3>12.8 IB Overtime Request</h3>
+<p>Employees can create <b>IB Overtime Request</b> with: date, shift, overtime hours, reason. HR Manager approves/rejects.</p>
+
+<h3>12.9 State-wise Holiday Lists</h3>
+<ul>
+  <li>Holiday List 2026 - Maharashtra</li>
+  <li>Holiday List 2026 - Tamil Nadu</li>
+  <li>Holiday List 2026 - Gujarat</li>
+</ul>
+<p>Assign the appropriate list to each employee via <code>holiday_list</code> field on Employee.</p>
+
+
+<!-- ===== SECTION 13 ===== -->
+<h2 id="section13">13. Production Module</h2>
+
+<h3>13.1 Production Stages</h3>
+<div class="flow">
+  <div class="flow-step">Coating</div><div class="flow-arrow">→</div>
+  <div class="flow-step">Slitting</div><div class="flow-arrow">→</div>
+  <div class="flow-step">Rewinding</div><div class="flow-arrow">→</div>
+  <div class="flow-step">Cutting</div><div class="flow-arrow">→</div>
+  <div class="flow-step">Packing</div><div class="flow-arrow">→</div>
+  <div class="flow-step">Ready to Deliver</div><div class="flow-arrow">→</div>
+  <div class="flow-step">Delivered</div>
+</div>
+
+<h3>13.2 Creating an Order Sheet</h3>
+<ol class="steps">
+  <li>Open a submitted Sales Order.</li>
+  <li>Click <b>Create Order Sheet</b> (custom button) — creates an IB Order Sheet linked to this SO.</li>
+  <li>The Order Sheet lists all items to produce. Set priority.</li>
+  <li>From the Order Sheet, create individual <b>IB Work Orders</b> for each stage.</li>
+</ol>
+
+<h3>13.3 Work Order Management</h3>
+<ul>
+  <li><b>IB Work Order</b>: linked to Order Sheet and Sales Order. Fields: Machine, Operator, Stage, Priority, Target Qty, Completed Qty, Wastage Qty.</li>
+  <li>Update stage: <b>Production Stages page</b> → drag cards between stage columns, or use the Start / Next Stage / Hold buttons.</li>
+  <li>Completing a stage auto-advances to the next stage in the item's route and marks the Order Sheet Item / Order Sheet complete once every stage is done.</li>
+  <li>When the last item in an Order Sheet reaches Ready to Deliver, the assigned sales person gets a bell notification automatically.</li>
+  <li>n8n integration: work order start/hold/complete/advance and Order Sheet completion each fire a webhook to n8n for further automation.</li>
+</ul>
+<div class="note"><b>Fixed 2026-07-02:</b> two bugs meant this section previously didn't work as described. (1) Completed Qty was never actually recorded (Production Entry logging is unused by design), so Order Sheet Items and Order Sheets could never reach "Completed" status — now falls back to Target Qty automatically. (2) The status-change endpoints used a low-level database update that skips Frappe's document-event pipeline entirely, so the Ready-to-Deliver bell and the n8n webhooks above never fired in practice. Both are now fixed and verified.</div>
+
+<h3>13.4 Production Dashboard</h3>
+<p><b>Workspace → Production → Production Dashboard</b>. Clickable KPI cards, stage pipeline (click to Production Stages), priority strip, wastage card, active plan table, recent production entries.</p>
+
+<h3>13.5 DPR (Daily Production Report)</h3>
+<p><b>Workspace → Production → DPR Report</b>. Shows today's production activities by machine and stage.</p>
+
+
+<!-- ===== SECTION 14 ===== -->
+<h2 id="section14">14. Finance &amp; Banking</h2>
+
+<h3>14.1 Bank Accounts</h3>
+<table>
+  <tr><th>Bank Account</th><th>Account No</th><th>IFSC</th><th>GL Account</th></tr>
+  <tr><td>GUJARAT &amp; MAHARASHTRA - HDFC</td><td>50200023672503</td><td>HDFC0000627</td><td>50200023672503 - HDFC - MH &amp; GJ - IB</td></tr>
+  <tr><td>CHENNAI - HDFC</td><td>50200044619421</td><td>—</td><td>50200044619421 - HDFC - Chennai - IB</td></tr>
+</table>
+
+<h3>14.2 Bank Statement Import</h3>
+<p>Access: <b>Workspace → Finance → Bank Import</b>.</p>
+<ol class="steps">
+  <li>Download your HDFC NetBanking CSV statement.</li>
+  <li>Drag-and-drop or upload the CSV file.</li>
+  <li>Preview shows parsed rows with deposit/withdrawal summary chips.</li>
+  <li>Click <b>Import</b>. Duplicate rows (same date+amount+ref) are automatically skipped.</li>
+  <li>The system creates <b>Bank Transaction</b> records (status: Unreconciled).</li>
+  <li>Go to <b>Accounts → Bank Reconciliation Tool</b> to match Bank Transactions to Payment Entries.</li>
+  <li>After matching, Payment Entries get a <code>clearance_date</code> and show as Cleared in the IB Bank Reconciliation report.</li>
+</ol>
+
+<h3>14.3 IB Bank Reconciliation Report</h3>
+<p>Go to <b>Reports → IB Bank Reconciliation</b>. Shows Payment Entries for IB bank accounts with clearance status (Cleared / Uncleared). Summary shows total entries, cleared count, uncleared amount, and entries pending 7+ days.</p>
+
+<h3>14.4 IB Cash Flow Statement Report</h3>
+<p>GL-entry based statement categorizing inflows and outflows:</p>
+<ul>
+  <li>Customer Collections, Vendor Payments, Salary &amp; Wages, Operating Expenses, Financing, Tax Payments, Inter-account.</li>
+  <li>Running balance column. Inflows green, outflows red.</li>
+</ul>
+
+
+<!-- ===== SECTION 15 ===== -->
+<h2 id="section15">15. WhatsApp Integration</h2>
+
+<h3>15.1 Overview</h3>
+<p>WhatsApp messages are sent via OpenWA (local gateway at <code>http://localhost:2785</code>). Each sales rep's WhatsApp session is connected separately.</p>
+
+<h3>15.2 Setting Up a WhatsApp Session</h3>
+<ol class="steps">
+  <li>Go to <b>IB WA Session → New</b>.</li>
+  <li>Set Session ID (unique identifier) and Phone number.</li>
+  <li>Click <b>Generate QR</b>. A QR code appears.</li>
+  <li>Open WhatsApp on the phone → Linked Devices → Link a Device → Scan QR.</li>
+  <li>Status changes to Connected.</li>
+</ol>
+
+<h3>15.3 Sending WhatsApp Message from a Document</h3>
+<ol class="steps">
+  <li>Open any sales document (SO, SI, DN).</li>
+  <li>Click the <b>WhatsApp</b> button (appears on forms).</li>
+  <li>Select a <b>Template</b> (configured in IB WA Template doctype).</li>
+  <li>Preview the message (variables auto-filled: customer name, document name, territory, etc.).</li>
+  <li>Optionally attach the document as a PDF (Packing List for DN, Tax Invoice for SI).</li>
+  <li>Click <b>Send</b>.</li>
+</ol>
+
+<h3>15.4 WA Templates</h3>
+<p>Templates are stored in <b>IB WA Template</b> doctype. Available variables in messages:</p>
+<ul>
+  <li><code>{customer}</code> — Customer name</li>
+  <li><code>{name}</code> — Document name</li>
+  <li><code>{territory}</code> — Territory</li>
+  <li><code>{contact}</code> — Contact person</li>
+  <li><code>{last_order}</code> — Date of last order</li>
+</ul>
+
+<h3>15.5 Automated WA Dormant Blast</h3>
+<p>Daily scheduler sends WA re-engagement to customers with no SO in 30+ days via the assigned rep's session. Deduplicated (one per customer per 30 days).</p>
+
+<h3>15.6 WA Broadcast (System-Wide)</h3>
+<p>Access: <b>Workspace → HR &amp; Payroll → WA Broadcast</b> (System Manager only).</p>
+<ol class="steps">
+  <li>Enter Title and Message.</li>
+  <li>Optionally attach an image.</li>
+  <li>Select Target: All Users or Specific Users.</li>
+  <li>Click <b>Send</b>. Message is delivered in real-time via WebSocket to all logged-in users (and via IB Broadcast Log for offline users).</li>
+</ol>
+
+
+<!-- ===== SECTION 16 ===== -->
+<h2 id="section16">16. AI Agents &amp; Automation</h2>
+
+<h3>16.1 AI Agents Overview</h3>
+<p>Access the AI Inbox: <b>Workspace → AI Agents → AI Inbox</b>. Six agents run daily and create <b>IB AI Action</b> records for human review.</p>
+
+<table>
+  <tr><th>Agent</th><th>What It Does</th><th>Action on Approval</th></tr>
+  <tr><td>auto_quote</td><td>Qualified leads (score &gt; 30, product interest set) → draft Quotation suggestion</td><td>Creates draft Quotation for the lead</td></tr>
+  <tr><td>demand_forecast</td><td>12-week SI velocity → 4-week SKU forecast card</td><td>Saves forecast data (informational)</td></tr>
+  <tr><td>smart_reorder</td><td>Items where bin qty ≤ reorder level → draft Material Request</td><td>Creates draft Material Request</td></tr>
+  <tr><td>collections</td><td>Overdue invoices → Claude-toned WhatsApp dunning message</td><td>Sends WA message via OpenWA</td></tr>
+  <tr><td>istix_enforcer</td><td>Work Orders in-progress 8h+ without completion → escalation</td><td>Sends bell notification</td></tr>
+  <tr><td>buying_dna</td><td>Customers last ordered &gt; 1.2× their avg cycle → CRM follow-up suggestion</td><td>Creates CRM activity suggestion</td></tr>
+</table>
+
+<h3>16.2 Approving / Rejecting AI Actions</h3>
+<ol class="steps">
+  <li>Open <b>AI Inbox</b>.</li>
+  <li>Filter by Status (Pending) and Agent if needed.</li>
+  <li>Review each action: agent badge, Claude badge (if AI-generated), reference link, draft JSON preview.</li>
+  <li>Click <b>Approve</b> to execute the action, or <b>Reject</b> to dismiss.</li>
+  <li>Decision is recorded with who approved and when (audit trail).</li>
+</ol>
+
+<h3>16.3 Running Agents Manually</h3>
+<p>From the AI Inbox page: click <b>Run All Agents</b> to trigger all 6 agents immediately without waiting for the daily scheduler.</p>
+<p>From the status bar: see Claude enabled/disabled status and count of pending actions.</p>
+
+<h3>16.4 n8n Workflow Integration</h3>
+<p>n8n is accessible at <code>http://localhost:5678</code>. Triggered by:</p>
+<ul>
+  <li>IB Work Order updates (stage changes)</li>
+  <li>IB Order Sheet creation (after SO → Order Sheet)</li>
+</ul>
+<p>Create workflows in n8n: Webhook node → process → optional Frappe API callback. Set <code>n8n_webhook_url</code> in site_config.json to wire up.</p>
+
+
+<!-- ===== SECTION 17 ===== -->
+<h2 id="section17">17. Custom Masters &amp; DocTypes</h2>
+
+<h3>17.1 Custom DocTypes Reference</h3>
+<table>
+  <tr><th>DocType</th><th>Purpose</th><th>Key Fields</th></tr>
+  <tr><td>IB Branding</td><td>Branding/print specifications master</td><td>brand_name, description</td></tr>
+  <tr><td>IB Transport</td><td>Transporter master with GSTIN</td><td>transporter_name, custom_transport_gst</td></tr>
+  <tr><td>Lead Sales Team</td><td>Round-robin assignment team</td><td>team_name, members (child), territories (child)</td></tr>
+  <tr><td>IB Assignment Config</td><td>Singleton — daily board settings</td><td>assignments_per_day, dormant_threshold_days, dormant_ratio</td></tr>
+  <tr><td>IB Customer Assignment</td><td>Daily board assignment records</td><td>customer, assigned_to, assigned_date, status, source_pool</td></tr>
+  <tr><td>IB Sales Target</td><td>Monthly revenue targets per rep</td><td>sales_user, month, target_amount</td></tr>
+  <tr><td>IB Customer Score</td><td>Daily health scores per customer</td><td>customer, score_date, total_score, health_status</td></tr>
+  <tr><td>IB Item Price List</td><td>Item price list master</td><td>item_code, rate1, rate2, rate3, rate4, specification</td></tr>
+  <tr><td>IB Sample Request</td><td>Sample dispatch lifecycle tracking</td><td>customer, status, sample_type, item, qty, feedback, outcome</td></tr>
+  <tr><td>IB Overtime Request</td><td>Employee overtime requests</td><td>employee, date, shift, overtime_hours, status, approved_by</td></tr>
+  <tr><td>IB Full Final Settlement</td><td>Exit settlement computation</td><td>employee, years_of_service, gratuity, leave_encashment, total_payable</td></tr>
+  <tr><td>IB PDC</td><td>Post-dated cheque tracker</td><td>customer, cheque_no, cheque_date, amount, status</td></tr>
+  <tr><td>IB Jumbo Roll</td><td>RM traceability for rolls</td><td>supplier, batch_no, gsm, width_mm, length_mtr, status</td></tr>
+  <tr><td>IB Customer Item Spec</td><td>Customer-specific item specs</td><td>customer, item_code, custom_width_mm, custom_thickness</td></tr>
+  <tr><td>IB Work Order</td><td>Production work order per stage</td><td>sales_order, item_code, stage, machine, operator, status, target_qty, completed_qty</td></tr>
+  <tr><td>IB Order Sheet</td><td>Production plan linked to SO</td><td>sales_order, items, status, priority</td></tr>
+  <tr><td>IB Machine</td><td>Production machine master</td><td>machine_type, status, location</td></tr>
+  <tr><td>IB AI Action</td><td>AI agent action queue</td><td>agent, action_type, status, title, draft_json, reference_doctype</td></tr>
+  <tr><td>IB Agent Run Log</td><td>AI agent execution audit</td><td>agent_code, status, run_at, records_processed, actions_taken</td></tr>
+  <tr><td>IB Broadcast Log</td><td>Broadcast message history</td><td>title, message, target, sent_by, sent_at</td></tr>
+  <tr><td>IB WA Session</td><td>WhatsApp session management</td><td>session_id, phone, status (Connected/Disconnected/QR Pending)</td></tr>
+  <tr><td>IB WA Template</td><td>WA message templates</td><td>template_name, message (with {customer} etc. vars), is_active</td></tr>
+  <tr><td>IB WA Log</td><td>WA message audit trail</td><td>customer, phone, template, message, status</td></tr>
+</table>
+
+<h3>17.2 IB Sample Request Lifecycle</h3>
+<div class="flow">
+  <div class="flow-step">Draft</div><div class="flow-arrow">→</div>
+  <div class="flow-step">Work Order Created</div><div class="flow-arrow">→</div>
+  <div class="flow-step">Sent</div><div class="flow-arrow">→</div>
+  <div class="flow-step">Feedback Received</div><div class="flow-arrow">→</div>
+  <div class="flow-step">Converted / Closed</div>
+</div>
+<p>Each transition uses a whitelisted method (button on form): <code>mark_work_order_created</code>, <code>mark_sent</code>, <code>record_feedback</code>, <code>close_request</code>, <code>convert_to_order</code>.</p>
+
+<h3>17.3 Rate Contracts (Pricing Rules)</h3>
+<p>Rate contracts use native ERPNext Pricing Rules (no custom code). To set a rate contract for a customer:</p>
+<ol class="steps">
+  <li>Go to <b>Accounts → Pricing Rule → New</b>.</li>
+  <li>Set: Applicable For = Customer, Apply On = Item Code, Price or Discount = Rate.</li>
+  <li>Set valid_from and valid_upto for the contract period.</li>
+  <li>On Quotation/SO, the rate auto-applies when the customer + item combo matches.</li>
+</ol>
+<div class="note">Q→SO mapper copies rate from Q row. If contract rate changes after Q submission, SO carries the old rate — correct manually if needed.</div>
+
+
+<!-- ===== SECTION 18 ===== -->
+<h2 id="section18">18. Automated Schedulers &amp; Alerts</h2>
+
+<h3>18.1 Daily Scheduler Jobs</h3>
+<table>
+  <tr><th>Job</th><th>What It Does</th><th>Recipients</th></tr>
+  <tr><td>Employee Exit Handover</td><td>Creates handover doc on relieving_date</td><td>HR Managers</td></tr>
+  <tr><td>User Disable</td><td>Disables user account on relieving_date+1</td><td>—</td></tr>
+  <tr><td>Daily Assignment</td><td>Rolls over pending assignments, generates tomorrow's board</td><td>Sales Users</td></tr>
+  <tr><td>Follow-Up Reminders</td><td>Overdue lead follow-up dates</td><td>Lead Owner</td></tr>
+  <tr><td>Quotation Expiry</td><td>Warns at 15/7/1 days; auto-expires past due</td><td>Sales Person</td></tr>
+  <tr><td>Customer Health Score</td><td>Computes daily health score per customer</td><td>Managers (if 15pt drop)</td></tr>
+  <tr><td>Dormant Check</td><td>Customers with no SO in 60+ days → ToDo + bell notification</td><td>Sales Person</td></tr>
+  <tr><td>Sales Target Notifications</td><td>50%/75% month elapsed if behind; end-of-month if target not met</td><td>Sales Person</td></tr>
+  <tr><td>Fulfillment SLA</td><td>SO with no DN after 48h</td><td>Sales Person</td></tr>
+  <tr><td>Win-Back Nudges</td><td>Stale quotations (14d) and cold leads (30d)</td><td>Sales Person / Lead Owner</td></tr>
+  <tr><td>Reorder Alert</td><td>Items below reorder level (7-day cooldown)</td><td>Purchase Manager / Purchase User / System Manager</td></tr>
+  <tr><td>Batch Expiry Alert</td><td>Batches expiring in 30 days (7-day cooldown)</td><td>Warehouse Manager / Stock User / Purchase Manager</td></tr>
+  <tr><td>PO Follow-Up</td><td>POs with no GRN after 7 days</td><td>Purchase Manager / Purchase User</td></tr>
+  <tr><td>Auto-Absent Marking</td><td>Marks yesterday Absent for employees with no attendance</td><td>—</td></tr>
+  <tr><td>Employee Doc Expiry</td><td>Employee documents (Passport, PAN) expiring in 30/7 days</td><td>HR Managers</td></tr>
+  <tr><td>Vendor Payment Alert</td><td>PO payment due within 7 days</td><td>Purchase Manager / Purchase User / System Manager</td></tr>
+  <tr><td>Overdue Invoice Alert</td><td>7d→rep bell; 15d→rep+managers; 30d→block+bell</td><td>Sales Person, Managers</td></tr>
+  <tr><td>PDC Alert</td><td>Cheque due in 3 days</td><td>Accounts User / Manager, Sales Manager, System Manager</td></tr>
+  <tr><td>WA Dormant Blast</td><td>WhatsApp re-engagement for 30d inactive customers</td><td>Customer (via rep's WA session)</td></tr>
+  <tr><td>AI Agents (Daily)</td><td>All 6 AI agents run once daily</td><td>AI Inbox (pending human review)</td></tr>
+</table>
+<div class="note">All scheduler alerts use deduplication markers in the Notification Log subject to avoid repeat notifications. Most have configurable cooldown periods.</div>
+
+
+<!-- ===== SECTION 19 ===== -->
+<h2 id="section19">19. Broadcast &amp; Notifications</h2>
+
+<h3>19.1 System Broadcast</h3>
+<p>System Managers can send announcements to all users or specific users via <b>Workspace → HR &amp; Payroll → WA Broadcast</b> (or the <code>ib-broadcast</code> page directly):</p>
+<ul>
+  <li>Real-time delivery via WebSocket to currently logged-in users.</li>
+  <li>Offline users see broadcasts on next login (from IB Broadcast Log, last 48 hours).</li>
+  <li>Users can mark individual broadcasts as seen to dismiss them.</li>
+  <li>History accessible via <b>Get Broadcast History</b> (System Manager only).</li>
+</ul>
+
+<h3>19.2 Bell Notifications (In-App)</h3>
+<p>Bell notifications appear in the Frappe notification bell icon (top navbar). All custom alerts are delivered as Notification Log entries. Types used:</p>
+<ul>
+  <li>Overdue invoice alerts, quota target nudges, follow-up reminders.</li>
+  <li>Payment received/sent confirmations (Accounts roles).</li>
+  <li>Dispatch notifications (DN submitted → sales person alerted).</li>
+  <li>Comment notifications (comment added on Q/SO → sales person alerted).</li>
+</ul>
+
+<h3>19.3 Comment Notifications</h3>
+<p>When any user adds a Comment on a Quotation or Sales Order, the document's <code>custom_sales_person_user</code> receives a bell notification. Self-comments are excluded.</p>
+
+<h3>19.4 Raven — Internal Team Chat</h3>
+<p>Raven (installed 2026-07-02) is a separate internal team chat app for Instabiz staff — distinct from the customer-facing WhatsApp integration above. Direct messages, channels, and file sharing between colleagues.</p>
+<ul>
+  <li>Open from the app switcher (top-left grid icon) or go directly to <code>/raven</code>.</li>
+  <li><b>General channel</b> — every staff member is a member by default; use for company-wide messages.</li>
+  <li><b>Direct Messages</b> — click a colleague's name in the People list to start a 1:1 chat.</li>
+  <li><b>New Channel</b> — create a topic or team-specific channel and invite the relevant people.</li>
+</ul>
+<div class="note">Every enabled user account has Raven access via the <code>Raven User</code> role automatically. If a user can't see other people in Raven, it is almost always because they haven't been added to the Raven workspace / General channel yet — this can happen for users on a Role Profile (Sales, Sales Manager, HR Manager), since Frappe re-syncs roles to the profile on every save and can silently strip a role added only to the individual user. Contact a System Manager.</div>
+
+
+<!-- ===== SECTION 20 ===== -->
+<h2 id="section20">20. Roles &amp; Permissions</h2>
+
+<h3>20.1 Key Roles</h3>
+<table>
+  <tr><th>Role</th><th>What They Can See / Do</th></tr>
+  <tr><td>System Manager</td><td>Full access to everything. All reports, all documents, all users.</td></tr>
+  <tr><td>Sales Manager</td><td>All sales documents (Q, SO, DN, SI) across all reps. All reports. Create/edit Sales Targets. Override overdue block (warning, not hard block). Floor price: warning not block.</td></tr>
+  <tr><td>Sales User</td><td>Only own documents (where custom_sales_person_user = me OR owner = me). Floor price: hard block below floor. SO submit: blocked by credit limit and overdue block.</td></tr>
+  <tr><td>Accounts User / Accounts Manager</td><td>Payment Entry, SI, financial reports. Bell notifications on PE submit.</td></tr>
+  <tr><td>Purchase Manager / Purchase User</td><td>PO, GRN, PI, purchase reports. Reorder alerts, expiry alerts, vendor payment alerts.</td></tr>
+  <tr><td>Warehouse Manager / Stock User</td><td>Inventory, stock movements, batch tracking, expiry alerts.</td></tr>
+  <tr><td>HR Manager / HR User</td><td>Employee records, attendance, leave management, payroll, F&amp;F settlement.</td></tr>
+</table>
+
+<h3>20.2 Data Isolation (Sales Documents)</h3>
+<p>Non-privileged users (Sales User role without Sales Manager or System Manager) see:</p>
+<ul>
+  <li>Documents where <code>custom_sales_person_user = their email</code>, OR</li>
+  <li>Documents they created (<code>owner = their email</code>) where custom_sales_person_user is not set.</li>
+</ul>
+<p>Privileged users (Sales Manager, System Manager) see all documents.</p>
+
+<h3>20.3 Customer Visibility for Sales Users</h3>
+<p>Sales Users see customers that are:</p>
+<ul>
+  <li>Permanently assigned to them (<code>custom_sales_person_user = me</code>), OR</li>
+  <li>Owned by them and unassigned (legacy docs), OR</li>
+  <li>Shared with them via IB Customer Share, OR</li>
+  <li>In their daily board (IB Customer Assignment, last 90 days) — only for unowned customers, OR</li>
+  <li>In their Lead Sales Team territories — only for unowned customers.</li>
+</ul>
+
+
+<!-- ===== SECTION 21 ===== -->
+<h2 id="section21">21. System Administration</h2>
+
+<h3>21.1 Common Commands (for Admins / Developers)</h3>
+<table>
+  <tr><th>When</th><th>Command</th></tr>
+  <tr><td>After Python changes</td><td><code>bench restart</code></td></tr>
+  <tr><td>After JS/CSS changes</td><td><code>bench build --app instabiz</code></td></tr>
+  <tr><td>After fixture JSON changes</td><td><code>bench --site frontend migrate</code></td></tr>
+  <tr><td>After hooks.py changes</td><td><code>bench --site frontend clear-cache</code></td></tr>
+  <tr><td>Export fixtures after schema changes</td><td><code>bench --site frontend export-fixtures --app instabiz</code></td></tr>
+  <tr><td>Run scheduler job manually</td><td><code>bench --site frontend execute instabiz.overrides.overdue_alert.run_overdue_alert</code></td></tr>
+  <tr><td>Bench Python console</td><td><code>bench --site frontend console</code></td></tr>
+  <tr><td>View error logs</td><td><code>tail -f logs/worker.error.log</code> or <code>tail -f logs/web.error.log</code></td></tr>
+</table>
+
+<h3>21.2 Print Formats Available</h3>
+<table>
+  <tr><th>Print Format</th><th>DocType</th><th>What It Prints</th></tr>
+  <tr><td>IB Tax Invoice</td><td>Sales Invoice</td><td>2-page: Page 1 = Tax Invoice with IRN/QR; Page 2 = E-Way Bill</td></tr>
+  <tr><td>IB Packing List</td><td>Delivery Note</td><td>Item-wise: rolls/box, carton weight, carton marking, LR number, signatures</td></tr>
+  <tr><td>IB Purchase Order</td><td>Purchase Order</td><td>Formatted PO with supplier details, terms</td></tr>
+  <tr><td>IB Purchase Invoice</td><td>Purchase Invoice</td><td>Formatted PI with tax breakup</td></tr>
+  <tr><td>IB GRN</td><td>Purchase Receipt</td><td>Goods Receipt Note</td></tr>
+  <tr><td>IB GST Tax Invoice</td><td>Sales Invoice</td><td>Alternative GST invoice format</td></tr>
+  <tr><td>General Ledger</td><td>Multiple</td><td>GL print for audit/sharing</td></tr>
+</table>
+
+<h3>21.3 Workspace Structure</h3>
+<p>The <b>Instabiz Workspace</b> is the main sidebar app shortcut set. Sections:</p>
+<ul>
+  <li><b>Dashboards</b>: Dashboard, Business Pulse, Analytics Hub, Finance Dashboard, Procurement Dashboard, HR Dashboard.</li>
+  <li><b>Sales &amp; CRM</b>: Customer Board, Customer Health, Leads Pipeline, Sales Incentives, Quotation, Sales Order, Customer Master, IB Rate Card, Assignment Admin.</li>
+  <li><b>Stock &amp; Inventory</b>: Delivery Note, Live Stock Balance, Stock Ledger.</li>
+  <li><b>Production</b>: Production Dashboard, Production Stages, DPR Report.</li>
+  <li><b>HR &amp; Payroll</b>: Employees, Attendance Terminal, Org Chart, WA Broadcast.</li>
+  <li><b>Finance</b>: Bank Import.</li>
+  <li><b>AI Agents</b>: AI Inbox, AI Actions (list), Agent Logs (list).</li>
+</ul>
+
+<h3>21.4 GST Settings Summary</h3>
+<table>
+  <tr><th>Setting</th><th>Value</th></tr>
+  <tr><td>enable_api</td><td>1 (enabled)</td></tr>
+  <tr><td>enable_e_invoice</td><td>1</td></tr>
+  <tr><td>auto_generate_e_invoice</td><td>1</td></tr>
+  <tr><td>generate_e_waybill_with_e_invoice</td><td>1</td></tr>
+  <tr><td>e_invoice_applicable_from</td><td>2026-03-14</td></tr>
+  <tr><td>enable_gstr_1_api</td><td>1</td></tr>
+  <tr><td>enable_auto_reconciliation</td><td>1</td></tr>
+  <tr><td>sandbox_mode</td><td>0 (Production)</td></tr>
+</table>
+
+<h3>21.5 Running Services</h3>
+<table>
+  <tr><th>Service</th><th>PM2 Name</th><th>Port</th><th>Start Command</th></tr>
+  <tr><td>Frappe Bench</td><td>—</td><td>8000</td><td><code>bench start</code></td></tr>
+  <tr><td>OpenWA (WhatsApp)</td><td>openwa</td><td>2785</td><td><code>pm2 start /home/dev/openwa/ecosystem.config.js</code></td></tr>
+  <tr><td>n8n Automation</td><td>n8n</td><td>5678</td><td><code>pm2 start /home/dev/n8n-data/ecosystem.config.js</code></td></tr>
+</table>
+
+<h3>21.6 site_config.json Keys</h3>
+<table>
+  <tr><th>Key</th><th>Purpose</th></tr>
+  <tr><td>openwa_url</td><td>OpenWA gateway URL (http://localhost:2785)</td></tr>
+  <tr><td>openwa_api_key</td><td>OpenWA session API key</td></tr>
+  <tr><td>anthropic_api_key</td><td>Claude API key for AI agents (blank = deterministic fallback)</td></tr>
+  <tr><td>n8n_webhook_url</td><td>n8n Webhook node URL for work order automation</td></tr>
+</table>
+
+<h3>21.7 Employee Drive Sync</h3>
+<p>When employee documents (PAN, Aadhar, etc.) are attached to an Employee record and the record is saved, files are automatically synced to <b>Frappe Drive</b>:</p>
+<ul>
+  <li>Creates "HR Documents" team (once) with all HR Manager / System Manager users.</li>
+  <li>Creates "Employee Documents" root folder with per-employee subfolders.</li>
+  <li>Each attached file is copied to the employee's Drive folder.</li>
+  <li>Employee form has a <b>Open in Drive</b> button linking to their folder.</li>
+  <li>If employee name changes, the Drive folder is automatically renamed.</li>
+</ul>
+
+<h3>21.8 Indexes &amp; Performance</h3>
+<p>Custom database indexes are maintained in <code>instabiz/overrides/indexes.py</code> and applied on migrate. Key indexed fields:</p>
+<ul>
+  <li><code>tabSales Order.custom_sales_person_user</code></li>
+  <li><code>tabIB Customer Assignment.assigned_to, assigned_date</code></li>
+  <li>Various other frequently-queried fields for the permission filters.</li>
+</ul>
+
+<!-- ===== APPENDIX ===== -->
+<h2 id="appendix" style="page-break-before:always;">Appendix: Feature Index</h2>
+<p>Quick reference for all 90 features implemented in instabiz (as of June 2026):</p>
+
+<table style="font-size:8.5pt;">
+  <tr><th>#</th><th>Feature</th><th>Module</th><th>Section</th></tr>
+  <tr><td>1</td><td>Sales Workflow Q→SO→DN→SI with custom mappers, location-aware naming</td><td>Sales</td><td>2</td></tr>
+  <tr><td>2</td><td>Lead Management — round-robin assignment, territory mapping, pincode autofill</td><td>CRM</td><td>5</td></tr>
+  <tr><td>3</td><td>Employee Exit Handover — scheduler creates handover docs, disables user</td><td>HR</td><td>12</td></tr>
+  <tr><td>4</td><td>Attendance / Check-in Portal at /checkin</td><td>HR</td><td>12</td></tr>
+  <tr><td>5</td><td>New User Onboarding — auto-creates Sales Person, copies UI settings</td><td>System</td><td>21</td></tr>
+  <tr><td>6</td><td>Custom Masters — IB Branding, IB Transport, Lead Sales Team</td><td>Masters</td><td>17</td></tr>
+  <tr><td>7</td><td>Role-based Data Isolation — non-privileged users see own docs only</td><td>Security</td><td>20</td></tr>
+  <tr><td>8</td><td>HRMS Payroll — IB Payroll &amp; Astro Payroll with PF/ESIC/PT</td><td>HR</td><td>12</td></tr>
+  <tr><td>9</td><td>IB Stock Dashboard — live stock, WebSocket updates, CSV export</td><td>Stock</td><td>7</td></tr>
+  <tr><td>10</td><td>IB Customer Board — 4-column kanban, daily scheduler, pool assign</td><td>CRM</td><td>6</td></tr>
+  <tr><td>11</td><td>Instabiz Workspace — 30+ shortcuts in sidebar</td><td>UX</td><td>21</td></tr>
+  <tr><td>12</td><td>IB Item Price List — custom page with spec rendering, popovers</td><td>Stock</td><td>7</td></tr>
+  <tr><td>13</td><td>Dormant Customer Detection — 60-day scheduler, ToDo + bell + WA link</td><td>CRM</td><td>18</td></tr>
+  <tr><td>14</td><td>Sales Target Setting — IB Sales Target doctype, progress bar</td><td>Sales</td><td>6</td></tr>
+  <tr><td>15</td><td>Customer Health Score — weighted 4-factor score, manager alerts</td><td>CRM</td><td>6</td></tr>
+  <tr><td>16</td><td>IB Sample Request — status machine with 5 transitions</td><td>Sales</td><td>17</td></tr>
+  <tr><td>17</td><td>Rate Contracts — native Pricing Rules, auto-apply on Q/SO</td><td>Sales</td><td>17</td></tr>
+  <tr><td>18</td><td>Lead Scoring — 0–100 score, auto-computed on save</td><td>CRM</td><td>5</td></tr>
+  <tr><td>19</td><td>Lead → Customer Conversion — custom mapper carrying territory, pincode</td><td>CRM</td><td>5</td></tr>
+  <tr><td>20</td><td>Lead Status Change Audit — timeline comment on every status change</td><td>CRM</td><td>5</td></tr>
+  <tr><td>21</td><td>Fulfillment SLA — SO with no DN after 48h → alert rep</td><td>Sales</td><td>18</td></tr>
+  <tr><td>22</td><td>Win-Back Nudges — stale Q (14d) and cold leads (30d) alerts</td><td>CRM</td><td>18</td></tr>
+  <tr><td>23</td><td>IB Sales KPIs Report — per-rep conversion metrics + chart</td><td>Analytics</td><td>10</td></tr>
+  <tr><td>24</td><td>IB Daily Sales Report — single-day snapshot with 8 summary cards</td><td>Analytics</td><td>10</td></tr>
+  <tr><td>25</td><td>IB Lost Deal Analysis Report — lost leads/quotations by reason</td><td>Analytics</td><td>10</td></tr>
+  <tr><td>25b</td><td>SO Cancellation Enforcement — custom_cancel_reason required</td><td>Sales</td><td>2</td></tr>
+  <tr><td>26</td><td>Margin % on Quotation — auto-computed from valuation_rate</td><td>Sales</td><td>2</td></tr>
+  <tr><td>27</td><td>Floor Price Enforcement — blocks rep, warns manager</td><td>Sales</td><td>2</td></tr>
+  <tr><td>28</td><td>Item Reorder Alert — daily, 7-day cooldown</td><td>Stock</td><td>18</td></tr>
+  <tr><td>29</td><td>E-Way Bill Auto-Generate — DN submit, custom dialog with txn types</td><td>GST</td><td>9</td></tr>
+  <tr><td>30</td><td>PO Follow-Up Alert — PO with no GRN after 7 days</td><td>Purchase</td><td>18</td></tr>
+  <tr><td>31</td><td>Auto-Absent Marking — daily, skips weekends/holidays/leaves</td><td>HR</td><td>18</td></tr>
+  <tr><td>32</td><td>IB Overtime Request — employee OT tracking with approval</td><td>HR</td><td>12</td></tr>
+  <tr><td>33</td><td>IB Full Final Settlement — auto gratuity/leave encashment calc</td><td>HR</td><td>12</td></tr>
+  <tr><td>34</td><td>Batch Tracking Auto-Set — BOPP/CLOTH/FOAM/SPECIALTY auto has_batch_no</td><td>Stock</td><td>7</td></tr>
+  <tr><td>35</td><td>Employee Custom Fields — emergency contact, notice period, CTC</td><td>HR</td><td>12</td></tr>
+  <tr><td>36</td><td>Batch Expiry Alert — 30 days warning, 7-day cooldown</td><td>Stock</td><td>18</td></tr>
+  <tr><td>37</td><td>Comment Notification on Q/SO — alerts assigned sales person</td><td>Sales</td><td>19</td></tr>
+  <tr><td>38</td><td>Dispatch Notification — DN submit → bell to sales person with LR details</td><td>Sales</td><td>19</td></tr>
+  <tr><td>39</td><td>Quotation Expiry — 15/7/1 day alerts, auto-expire</td><td>Sales</td><td>18</td></tr>
+  <tr><td>40</td><td>Follow-Up Reminders — overdue lead follow-up dates</td><td>CRM</td><td>18</td></tr>
+  <tr><td>41</td><td>IB Sample Request Transitions — whitelisted state machine</td><td>Sales</td><td>17</td></tr>
+  <tr><td>42</td><td>Employee Setup Script — one-time Employee record creation from Users</td><td>HR</td><td>21</td></tr>
+  <tr><td>43</td><td>M6 HR Masters — Departments, Shifts, Leave Types, Salary Structures</td><td>HR</td><td>12</td></tr>
+  <tr><td>44</td><td>Item Lifecycle (Discontinued) — blocks Q/SO save for discontinued items</td><td>Stock</td><td>7</td></tr>
+  <tr><td>45</td><td>IB Jumbo Roll — RM traceability doctype</td><td>Production</td><td>7</td></tr>
+  <tr><td>46</td><td>Packaging Specification on Item — rolls/box, carton weight, marking</td><td>Stock</td><td>7</td></tr>
+  <tr><td>47</td><td>State-wise Holiday Lists — Maharashtra, Tamil Nadu, Gujarat</td><td>HR</td><td>12</td></tr>
+  <tr><td>48</td><td>Customer Credit Limit Enforcement — dual condition (amount + days)</td><td>Finance</td><td>3</td></tr>
+  <tr><td>49</td><td>Employee Drive Sync — auto-upload employee docs to Frappe Drive</td><td>HR</td><td>21</td></tr>
+  <tr><td>50</td><td>Lead Activity Log — whitelisted log_lead_activity + timeline + button</td><td>CRM</td><td>5</td></tr>
+  <tr><td>51</td><td>Lead Source Filter on IB Sales KPIs</td><td>Analytics</td><td>10</td></tr>
+  <tr><td>52</td><td>IB Packing List — Jinja print format on DN</td><td>Stock</td><td>21</td></tr>
+  <tr><td>53</td><td>IB Stock Ageing Report — age buckets, color-coded</td><td>Stock</td><td>10</td></tr>
+  <tr><td>54</td><td>IB Dispatch Report — per-DN with transporter bar chart</td><td>Analytics</td><td>10</td></tr>
+  <tr><td>55</td><td>Vendor Payment Due Alert — PO payment due within 7 days</td><td>Purchase</td><td>18</td></tr>
+  <tr><td>56</td><td>E-Invoice (IRN) Auto-Generate — SI submit via india_compliance</td><td>GST</td><td>9</td></tr>
+  <tr><td>57</td><td>Overdue Invoice Alerts — 7d/15d/30d tiers with SO block</td><td>Finance</td><td>18</td></tr>
+  <tr><td>58</td><td>IB AR Aging Report — outstanding SI by age bucket</td><td>Finance</td><td>10</td></tr>
+  <tr><td>59</td><td>IB AP Aging Report — outstanding PI by age bucket</td><td>Finance</td><td>10</td></tr>
+  <tr><td>60</td><td>IB PDC Doctype — post-dated cheque tracker</td><td>Finance</td><td>3</td></tr>
+  <tr><td>61</td><td>PDC Presentation Alert — 3 days before cheque date</td><td>Finance</td><td>18</td></tr>
+  <tr><td>62</td><td>IB Territory Report — per-territory leads/orders/revenue</td><td>Analytics</td><td>10</td></tr>
+  <tr><td>63</td><td>IB SKU Report — per-item revenue, qty, customers</td><td>Analytics</td><td>10</td></tr>
+  <tr><td>64</td><td>IB Gross Margin Report — revenue vs COGS vs margin %</td><td>Analytics</td><td>10</td></tr>
+  <tr><td>65</td><td>Attendance Terminal Late/Early Reason — reason dialog for violations only</td><td>HR</td><td>12</td></tr>
+  <tr><td>66</td><td>Payment Entry Notification — bell to Accounts roles on PE submit</td><td>Finance</td><td>19</td></tr>
+  <tr><td>67</td><td>Payment Entry Auto-Reconcile — FIFO oldest SI matching</td><td>Finance</td><td>3</td></tr>
+  <tr><td>68</td><td>Advance Payment Tracking on SO — custom_advance_paid auto-updated</td><td>Sales</td><td>3</td></tr>
+  <tr><td>69</td><td>IB Collections Report — per-rep invoiced/collected/outstanding</td><td>Finance</td><td>10</td></tr>
+  <tr><td>70</td><td>IB Tax Invoice Print Format — 2-page IRN+EWB</td><td>GST</td><td>9</td></tr>
+  <tr><td>71</td><td>IB Credit Note Register — all returns with reasons</td><td>Finance</td><td>10</td></tr>
+  <tr><td>72</td><td>IB Payroll Summary Report — formula-based payroll breakdown</td><td>HR</td><td>10</td></tr>
+  <tr><td>73</td><td>IB Sales Person Summary Report — per-rep revenue metrics</td><td>Analytics</td><td>10</td></tr>
+  <tr><td>74</td><td>Bank Account Master — HDFC MH+GJ and Chennai accounts</td><td>Finance</td><td>14</td></tr>
+  <tr><td>75</td><td>IB Bank Reconciliation Report — PE clearance status</td><td>Finance</td><td>14</td></tr>
+  <tr><td>76</td><td>GSTR-1 via india_compliance — B2B/CDNR/HSN generation</td><td>GST</td><td>9</td></tr>
+  <tr><td>77</td><td>GSTR-3B via india_compliance — monthly 3B report</td><td>GST</td><td>9</td></tr>
+  <tr><td>78</td><td>GSTR-2B Download &amp; Match — Purchase Reconciliation Tool</td><td>GST</td><td>8</td></tr>
+  <tr><td>79</td><td>IB Bank Statement Import — HDFC CSV upload + Bank Transaction creation</td><td>Finance</td><td>14</td></tr>
+  <tr><td>80</td><td>IB Cash Flow Statement — GL-based with categories and running balance</td><td>Finance</td><td>14</td></tr>
+  <tr><td>81</td><td>Purchase Module Overrides — custom naming, GST auto-select, cancel enforcement</td><td>Purchase</td><td>8</td></tr>
+  <tr><td>82</td><td>Salary Slip Override — 2-day leave credit for IB Payroll</td><td>HR</td><td>12</td></tr>
+  <tr><td>83</td><td>WhatsApp Integration — OpenWA, templates, bulk blast</td><td>CRM</td><td>15</td></tr>
+  <tr><td>84</td><td>Production Module — IB Machine, IB Work Order, IB Order Sheet, 7-stage pipeline</td><td>Production</td><td>13</td></tr>
+  <tr><td>85</td><td>IB Activity Log Report — lead timeline entries</td><td>Analytics</td><td>10</td></tr>
+  <tr><td>86</td><td>IB Purchase Pipeline Report — PO with receipt/invoice linkage</td><td>Purchase</td><td>10</td></tr>
+  <tr><td>87</td><td>Broadcast — System Manager bulk announcements, real-time + history</td><td>System</td><td>19</td></tr>
+  <tr><td>88</td><td>IB Customer Item Spec — customer-specific item specifications with mismatch warning</td><td>Sales</td><td>17</td></tr>
+  <tr><td>89</td><td>AI Agents + AI Inbox — 6 agents, human-in-the-loop, audit trail</td><td>AI</td><td>16</td></tr>
+  <tr><td>90</td><td>n8n Workflow Automation — PM2-managed, triggered on Work Order/Order Sheet events</td><td>Automation</td><td>16</td></tr>
+</table>
+
+<p style="margin-top:30px; text-align:center; color:#999; font-size:8.5pt;">
+  Instabiz ERP Knowledge Base · Generated June 2026 · Instabiz Solutions India Pvt Ltd<br>
+  For support or corrections, update <code>apps/instabiz/CLAUDE.md</code> and regenerate.
+</p>
+
+</body>
+</html>

@@ -1,0 +1,211 @@
+{# ── Helpers ─────────────────────────────────────────────────────────────────── #}
+{% macro fd(d) %}{% if d %}{{ frappe.utils.formatdate(d, "dd-MMM-yyyy") }}{% endif %}{% endmacro %}
+{% macro fm(v) %}{{ frappe.utils.fmt_money(v|float, precision=2) }}{% endmacro %}
+
+{# ── Company ─────────────────────────────────────────────────────────────────── #}
+{% set co = frappe.get_cached_doc("Company", doc.company) %}
+{% set co_addr = frappe.db.get_value("Address",
+    {"link_doctype": "Company", "link_name": doc.company, "gstin": ["!=", ""]},
+    ["address_line1","address_line2","city","state","pincode","gstin"], as_dict=True) %}
+
+{# ── Customer ─────────────────────────────────────────────────────────────────── #}
+{% set cust = frappe.get_cached_doc("Customer", doc.customer) %}
+
+{# ── Against SI ───────────────────────────────────────────────────────────────── #}
+{% set si = frappe.db.get_value("Sales Invoice", doc.against_sales_invoice,
+    ["name","posting_date","company_gstin","billing_address_gstin"], as_dict=True)
+    if doc.against_sales_invoice else None %}
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 10px; color: #000; line-height: 1.5; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { vertical-align: top; padding: 3px 6px; }
+  strong { font-weight: bold; }
+  .right { text-align: right; }
+  .center { text-align: center; }
+  .lbl { color: #555; }
+
+  .outer { border: 1.5px solid #000; }
+  .outer td, .outer th { border: 1px solid #999; }
+  .hdg { background: #d32f2f; color: #fff; text-align: center;
+         font-size: 15px; font-weight: bold; letter-spacing: 2px;
+         padding: 7px 0; }
+  .sub-hdg { background: #ffebee; font-size: 10px; font-weight: bold;
+             color: #c62828; padding: 2px 6px; }
+  .it-tbl th { background: #f2f2f2; font-weight: bold; text-align: center; font-size: 10px; }
+  .it-tbl td { font-size: 10px; }
+  .total-row td { border-top: 1.5px solid #000; font-weight: bold; font-size: 11px; }
+  .kv td:first-child { color: #555; white-space: nowrap; padding-right: 5px; }
+  .watermark { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+               display: flex; align-items: center; justify-content: center;
+               pointer-events: none; z-index: 99999; overflow: hidden; }
+  .watermark span { display: block; font-size: 110px; font-weight: 900;
+                    color: rgba(211,47,47,.15); letter-spacing: 10px;
+                    text-transform: uppercase; white-space: nowrap;
+                    transform: rotate(-40deg); font-family: Arial, sans-serif;
+                    border: 12px solid rgba(211,47,47,.12);
+                    padding: 10px 30px; border-radius: 8px; }
+</style>
+
+{% if doc.docstatus == 2 %}
+<div class="watermark"><span>CANCELLED</span></div>
+{% endif %}
+
+{# ══ HEADER BAND ══════════════════════════════════════════════════════════════ #}
+<table style="margin-bottom:6px">
+  <tr>
+    <td style="width:20%; vertical-align:middle; padding:0 10px 0 0">
+      <img src="/files/letterhead.jpeg" style="height:50px; width:auto; max-width:100px; object-fit:contain">
+    </td>
+    <td style="vertical-align:middle">
+      <div style="font-size:13px; font-weight:bold; line-height:1.3">{{ doc.company | upper }}</div>
+      {% if co_addr %}
+      <div class="lbl">{{ co_addr.address_line1 or "" }}{% if co_addr.address_line2 %}, {{ co_addr.address_line2 }}{% endif %}</div>
+      <div class="lbl">{% if co_addr.city %}{{ co_addr.city }}, {% endif %}{{ co_addr.state or "" }} {{ co_addr.pincode or "" }}</div>
+      <div>GSTIN : <strong>{{ co_addr.gstin or "—" }}</strong></div>
+      {% endif %}
+    </td>
+    <td style="width:30%; text-align:right; vertical-align:middle">
+      <div class="hdg" style="border-radius:6px; padding:8px 16px; display:inline-block; min-width:160px">
+        CREDIT NOTE
+      </div>
+    </td>
+  </tr>
+</table>
+
+{# ══ META TABLE ═══════════════════════════════════════════════════════════════ #}
+<table class="outer" style="margin-bottom:6px">
+  <tr>
+    <td style="width:50%; border-right:1px solid #aaa; padding:5px 8px; vertical-align:top">
+      <div class="sub-hdg" style="margin-bottom:4px">Customer Details</div>
+      <div><strong>{{ cust.customer_name }}</strong></div>
+      {% if cust.customer_group %}<div class="lbl">{{ cust.customer_group }}</div>{% endif %}
+    </td>
+    <td style="width:50%; padding:0; vertical-align:top">
+      <table style="border:none; border-collapse:collapse; width:100%">
+        <tr>
+          <td style="border-bottom:1px solid #ddd; border-right:1px solid #ddd; padding:4px 7px; width:50%">
+            <div class="lbl" style="font-size:9px">Credit Note No.</div>
+            <div><strong>{{ doc.name }}</strong></div>
+          </td>
+          <td style="border-bottom:1px solid #ddd; padding:4px 7px; width:50%">
+            <div class="lbl" style="font-size:9px">Date</div>
+            <div><strong>{{ fd(doc.posting_date) }}</strong></div>
+          </td>
+        </tr>
+        <tr>
+          <td style="border-bottom:1px solid #ddd; border-right:1px solid #ddd; padding:4px 7px">
+            <div class="lbl" style="font-size:9px">Reason</div>
+            <div><strong>{{ doc.reason_code or "—" }}</strong></div>
+          </td>
+          <td style="border-bottom:1px solid #ddd; padding:4px 7px">
+            <div class="lbl" style="font-size:9px">Status</div>
+            <div><strong>{{ doc.status }}</strong></div>
+          </td>
+        </tr>
+        <tr>
+          <td colspan="2" style="padding:4px 7px">
+            <div class="lbl" style="font-size:9px">Against Sales Invoice</div>
+            <div>
+              <strong>{{ doc.against_sales_invoice or "—" }}</strong>
+              {% if si %}&nbsp;<span class="lbl">({{ fd(si.posting_date) }})</span>{% endif %}
+            </div>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+{# ══ ITEMS TABLE ══════════════════════════════════════════════════════════════ #}
+<table class="outer it-tbl" style="margin-bottom:0">
+  <thead>
+    <tr>
+      <th style="width:5%">Sl.</th>
+      <th>Item Code</th>
+      <th>Description</th>
+      <th style="width:9%">Qty</th>
+      <th style="width:10%">Rate (₹)</th>
+      <th style="width:12%">Amount (₹)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in doc.items %}
+    <tr>
+      <td class="center">{{ loop.index }}</td>
+      <td><strong>{{ row.item_code }}</strong></td>
+      <td>{{ row.item_name or "" }}</td>
+      <td class="right">{{ fm(row.qty) }}</td>
+      <td class="right">{{ fm(row.rate) }}</td>
+      <td class="right"><strong>{{ fm(row.amount) }}</strong></td>
+    </tr>
+    {% endfor %}
+
+    {# Filler rows for minimum height #}
+    {% for _ in range([5 - doc.items|length, 0]|max) %}
+    <tr style="height:16px"><td colspan="6"></td></tr>
+    {% endfor %}
+
+    <tr>
+      <td colspan="5" class="right" style="border-top:1px solid #aaa; border-left:none; border-right:none; border-bottom:none">
+        Sub Total
+      </td>
+      <td class="right" style="border-top:1px solid #aaa">
+        <strong>{{ fm(doc.total) }}</strong>
+      </td>
+    </tr>
+
+    {% if doc.taxes_and_charges and doc.total_taxes_and_charges %}
+    {% set template = frappe.get_cached_doc("Sales Taxes and Charges Template", doc.taxes_and_charges) %}
+    {% for t in template.taxes %}
+    {% set tax_amt = (doc.total * t.rate / 100) if t.charge_type == "On Net Total" else (t.tax_amount or 0) %}
+    {% if tax_amt %}
+    <tr>
+      <td colspan="5" class="right lbl" style="border:none; font-style:italic">
+        {{ t.description }} ({{ "%g" | format(t.rate) }} %)
+      </td>
+      <td class="right" style="border:1px solid #ccc">
+        {{ fm(tax_amt) }}
+      </td>
+    </tr>
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+
+    <tr class="total-row">
+      <td colspan="5" class="right" style="border-left:none; border-right:none; border-bottom:none">
+        GRAND TOTAL
+      </td>
+      <td class="right" style="font-size:12px">
+        ₹ {{ fm(doc.grand_total) }}
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+{# ══ FOOTER ═══════════════════════════════════════════════════════════════════ #}
+<table style="margin-top:6px; border:1px solid #ccc; border-collapse:collapse">
+  <tr>
+    <td style="width:60%; padding:6px 8px; border-right:1px solid #ccc; vertical-align:top">
+      {% if doc.remarks %}
+      <div class="lbl" style="font-size:9px; margin-bottom:2px">Remarks</div>
+      <div>{{ doc.remarks }}</div>
+      {% endif %}
+      <div style="margin-top:8px; font-size:9px; color:#555">
+        This Credit Note is issued as a financial adjustment against the referenced Sales Invoice.
+        No physical goods movement implied unless Reason Code is "Sales Return".
+      </div>
+    </td>
+    <td style="width:40%; padding:6px 8px; vertical-align:top; text-align:right">
+      <div><strong>for {{ doc.company | upper }}</strong></div>
+      <div style="height:45px"></div>
+      <div><strong>Authorised Signatory</strong></div>
+    </td>
+  </tr>
+</table>
+
+<div style="border-top:1px solid #ddd; text-align:center; padding:3px;
+            color:#777; font-size:9px; margin-top:4px">
+  This is a Computer Generated Credit Note
+</div>

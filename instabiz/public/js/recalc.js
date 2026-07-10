@@ -13,6 +13,10 @@ function ib_is_sqmt(uom) {
     return (uom || "").trim() === "SQMT";
 }
 
+function ib_is_roll(uom) {
+    return (uom || "").trim().toUpperCase() === "ROLL";
+}
+
 /**
  * Calculates raw quantity based on dimensions.
  * Returns null if calculation cannot be performed.
@@ -25,12 +29,17 @@ function ib_calc_qty(row) {
 
     if (ib_is_sqmt(row.uom)) {
         // Only require width and length to attempt a calculation
-        if (!w || !l) return null; 
+        if (!w || !l) return null;
         // Do NOT pass a second argument to flt() here to preserve .6, .666 etc.
-        return flt((w / 1000) * l * p * t); 
+        return flt((w / 1000) * l * p * t);
     }
-    
-    // For other UOMs (PCS, ROLL, etc.)
+
+    // ROLL: 1 row = 1 roll; qty_pkg and total_pkg are forced to 1
+    if (ib_is_roll(row.uom)) {
+        return 1;
+    }
+
+    // For other UOMs (PCS, KG, etc.)
     if (!p || !t) return null;
     return flt(p * t);
 }

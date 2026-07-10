@@ -81,13 +81,46 @@ def check_duplicate_lead(doc, method=None):
         )
 
 
-def set_territory_from_pincode(doc, method=None):
-    """If territory not set but custom_pincode is, derive territory from pincode via India Post."""
-    if doc.territory or not doc.get("custom_pincode"):
-        return
-    pincode = str(doc.custom_pincode).strip()
+# GST state code (first 2 digits of GSTIN) → ERPNext Territory name
+_GSTIN_STATE_MAP = {
+    "01": "Jammu and Kashmir",  "02": "Himachal Pradesh",
+    "03": "Punjab",              "04": "Chandigarh",
+    "05": "Uttarakhand",         "06": "Haryana",
+    "07": "Delhi",               "08": "Rajasthan",
+    "09": "Uttar Pradesh",       "10": "Bihar",
+    "11": "Sikkim",              "12": "Arunachal Pradesh",
+    "13": "Nagaland",            "14": "Manipur",
+    "15": "Mizoram",             "16": "Tripura",
+    "17": "Meghalaya",           "18": "Assam",
+    "19": "West Bengal",         "20": "Jharkhand",
+    "21": "Odisha",              "22": "Chhattisgarh",
+    "23": "Madhya Pradesh",      "24": "Gujarat",
+    "25": "Daman and Diu",       "26": "Dadra and Nagar Haveli",
+    "27": "Maharashtra",         "28": "Andhra Pradesh",
+    "29": "Karnataka",           "30": "Goa",
+    "31": "Lakshadweep",         "32": "Kerala",
+    "33": "Tamil Nadu",          "34": "Puducherry",
+    "35": "Andaman and Nicobar Islands", "36": "Telangana",
+    "37": "Andhra Pradesh",      "38": "Ladakh",
+}
+
+
+def _territory_from_gstin(gstin: str):
+    """Return Frappe Territory name from GSTIN state code, or None."""
+    gstin = (gstin or "").strip()
+    if len(gstin) < 2:
+        return None
+    state_name = _GSTIN_STATE_MAP.get(gstin[:2])
+    if not state_name:
+        return None
+    return frappe.db.get_value("Territory", state_name) or None
+
+
+def _territory_from_pincode(pincode: str):
+    """Return (territory, state) from India Post pincode API, or (None, None)."""
+    pincode = str(pincode).strip()
     if not re.match(r"^\d{6}$", pincode):
-        return
+        return None, None
     try:
         url = f"https://api.postalpincode.in/pincode/{pincode}"
         with urllib.request.urlopen(url, timeout=3) as resp:
@@ -95,10 +128,29 @@ def set_territory_from_pincode(doc, method=None):
         if data and data[0].get("Status") == "Success" and data[0].get("PostOffice"):
             state = data[0]["PostOffice"][0].get("State", "")
             territory = frappe.db.get_value("Territory", state) or None
-            if territory:
-                doc.territory = territory
+            return territory, state
     except Exception:
-        pass  # silent — pincode lookup is best-effort on insert
+        pass
+    return None, None
+
+
+def set_territory_from_pincode(doc, method=None):
+    """Derive territory on Lead insert: GSTIN state code first, pincode fallback."""
+    # GSTIN is authoritative (government-issued, unambiguous state code)
+    gstin = (doc.get("custom_gstin") or "").strip()
+    if gstin:
+        territory = _territory_from_gstin(gstin)
+        if territory:
+            doc.territory = territory
+            return
+    # Only try pincode if territory not already set (manually or from GSTIN)
+    if doc.territory:
+        return
+    pincode = doc.get("custom_pincode") or ""
+    if pincode:
+        territory, _ = _territory_from_pincode(pincode)
+        if territory:
+            doc.territory = territory
 
 
 def assign_lead_owner(doc, method=None):
@@ -149,7 +201,7 @@ def _do_assign(doc):
     lock_key = f"ib_rr_{team_name}"
     acquired = frappe.db.sql("SELECT GET_LOCK(%s, 30)", lock_key)[0][0]
     if not acquired:
-        frappe.log_error(f"Round-robin lock timeout for team {team_name}", "IB Lead Assignment")
+        frappe.log_error(f"Round-robin lock timeout for team {team_name}", frappe.get_traceback())
         return
     try:
         team = frappe.get_doc("Lead Sales Team", team_name)
@@ -215,6 +267,12 @@ def set_lead_status(lead, status):
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
 	old_status = doc.custom_status or ""
 	frappe.db.set_value("Lead", lead, "custom_status", status)
+	# frappe.db.set_value bypasses Document events — Lead.on_update (compute_lead_score,
+	# status bonus up to 30 pts) never fires from this path. Recompute + persist explicitly
+	# so the score picker stays live instead of freezing at whatever it was pre-status-change.
+	doc.custom_status = status
+	compute_lead_score(doc)
+	frappe.db.set_value("Lead", lead, "custom_lead_score", doc.custom_lead_score, update_modified=False)
 	if old_status != status:
 		actor = frappe.db.get_value("User", frappe.session.user, "full_name") or frappe.session.user
 		frappe.get_doc({
@@ -249,6 +307,12 @@ def custom_make_customer(source_name, target_doc=None):
 		customer_doc.custom_bt_city = lead.city
 	if lead.get("custom_district"):
 		customer_doc.custom_district = lead.custom_district
+
+	# Carry international flag + country
+	if lead.get("custom_is_international"):
+		customer_doc.custom_is_international = 1
+	if lead.get("custom_country"):
+		customer_doc.custom_country = lead.custom_country
 
 	# Wire the sales person user so permissions work immediately
 	if lead.lead_owner:
@@ -343,6 +407,11 @@ def log_lead_activity(lead, activity_type, outcome, notes, next_follow_up_date=N
 
 	if next_follow_up_date:
 		frappe.db.set_value("Lead", lead, "custom_next_follow_up_date", next_follow_up_date, update_modified=False)
+		# follow-up-date presence is worth +10 in compute_lead_score(); db.set_value skips
+		# the on_update hook that would normally recompute it.
+		doc.custom_next_follow_up_date = next_follow_up_date
+		compute_lead_score(doc)
+		frappe.db.set_value("Lead", lead, "custom_lead_score", doc.custom_lead_score, update_modified=False)
 
 	return "ok"
 
@@ -364,3 +433,65 @@ def get_team_member_users(team):
         as_list=True,
     )
     return [r[0] for r in rows if r[0]]
+
+
+@frappe.whitelist()
+def rectify_lead_territories(dry_run=True):
+    """Re-derive territory for all leads using India Post pincode API.
+
+    System Manager / Sales Manager only. Set dry_run=0 to actually update.
+    Returns list of {lead, name, old_territory, new_territory} for all changes.
+    """
+    if not any(r in frappe.get_roles() for r in ("Sales Manager", "System Manager")):
+        frappe.throw(_("Only Sales Managers can rectify lead territories."), frappe.PermissionError)
+
+    dry_run = frappe.utils.cint(dry_run)
+
+    leads = frappe.db.sql(
+        """
+        SELECT name, lead_name, territory,
+               IFNULL(custom_pincode, '') AS pincode,
+               IFNULL(custom_gstin, '')   AS gstin
+        FROM `tabLead`
+        WHERE status NOT IN ('Converted', 'Junk')
+        ORDER BY creation ASC
+        """,
+        as_dict=True,
+    )
+
+    changes = []
+    for lead in leads:
+        new_territory = None
+
+        # GSTIN is authoritative — try it first
+        if lead.gstin:
+            new_territory = _territory_from_gstin(lead.gstin)
+
+        # Fall back to pincode API
+        if not new_territory and lead.pincode:
+            new_territory, _ = _territory_from_pincode(lead.pincode)
+
+        if not new_territory:
+            continue
+        if new_territory == lead.territory:
+            continue
+
+        changes.append({
+            "lead": lead.name,
+            "name": lead.lead_name or lead.name,
+            "old_territory": lead.territory or "",
+            "new_territory": new_territory,
+        })
+
+        if not dry_run:
+            frappe.db.set_value("Lead", lead.name, "territory", new_territory, update_modified=False)
+
+    if not dry_run and changes:
+        frappe.db.commit()
+
+    return {
+        "dry_run": bool(dry_run),
+        "total_leads": len(leads),
+        "changes": len(changes),
+        "details": changes,
+    }

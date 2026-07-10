@@ -164,6 +164,82 @@ def _require_manager():
 		frappe.throw("Not permitted", frappe.PermissionError)
 
 
+# ── Incentive Slab API ────────────────────────────────────────────────────────
+
+@frappe.whitelist()
+def get_incentive_slabs():
+	"""Return all IB Incentive Slab records ordered by from_pct."""
+	return frappe.db.get_all(
+		"IB Incentive Slab",
+		fields=["name", "slab_label", "from_pct", "to_pct", "commission_pct", "is_active"],
+		order_by="from_pct asc",
+	)
+
+
+@frappe.whitelist()
+def save_incentive_slab(name, slab_label, from_pct, to_pct, commission_pct, is_active=1):
+	"""Create or update an IB Incentive Slab. Requires Sales Manager / System Manager."""
+	_require_manager()
+	from_pct = flt(from_pct)
+	to_pct = flt(to_pct)
+	commission_pct = flt(commission_pct)
+	is_active = int(is_active)
+
+	if name and frappe.db.exists("IB Incentive Slab", name):
+		doc = frappe.get_doc("IB Incentive Slab", name)
+		doc.slab_label = slab_label
+		doc.from_pct = from_pct
+		doc.to_pct = to_pct
+		doc.commission_pct = commission_pct
+		doc.is_active = is_active
+		doc.save(ignore_permissions=True)
+	else:
+		doc = frappe.get_doc({
+			"doctype": "IB Incentive Slab",
+			"slab_label": slab_label,
+			"from_pct": from_pct,
+			"to_pct": to_pct,
+			"commission_pct": commission_pct,
+			"is_active": is_active,
+		})
+		doc.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"status": "ok", "name": doc.name}
+
+
+@frappe.whitelist()
+def delete_incentive_slab(name):
+	"""Delete an IB Incentive Slab record."""
+	_require_manager()
+	frappe.delete_doc("IB Incentive Slab", name, ignore_permissions=True)
+	frappe.db.commit()
+	return {"status": "ok"}
+
+
+def compute_incentive(actual, target):
+	"""Given actual revenue and target, return incentive earned using active slabs."""
+	if not target or not actual:
+		return 0.0, 0.0
+	achievement_pct = (actual / target) * 100
+	slabs = frappe.db.get_all(
+		"IB Incentive Slab",
+		filters={"is_active": 1},
+		fields=["from_pct", "to_pct", "commission_pct"],
+		order_by="from_pct asc",
+	)
+	commission_pct = 0.0
+	for s in slabs:
+		cap = flt(s.to_pct) or 999999  # 0 = no cap
+		if flt(s.from_pct) <= achievement_pct < cap:
+			commission_pct = flt(s.commission_pct)
+			break
+		if achievement_pct >= cap and flt(s.to_pct) == 0:
+			commission_pct = flt(s.commission_pct)
+			break
+	incentive = round(actual * commission_pct / 100, 2)
+	return incentive, commission_pct
+
+
 # ── Scheduler ─────────────────────────────────────────────────────────────────
 
 _MARKER_50 = "[ib-target-50]"
@@ -174,6 +250,7 @@ _MARKER_EOM = "[ib-target-eom]"
 @frappe.whitelist()
 def run_target_notifications():
 	"""Daily check — send bell notifications for target milestones."""
+	_require_manager()
 	today = getdate(nowdate())
 	mf = _month_first(today)
 	total_days = _month_days(today)
@@ -236,6 +313,7 @@ def _notify_if_new(user, month_first, marker, subject, body):
 		"subject": f"{subject} {marker}",
 		"email_content": body,
 		"for_user": user,
+		"from_user": "Administrator",
 		"type": "Alert",
 		"document_type": "IB Sales Target",
 		"document_name": "",

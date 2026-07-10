@@ -30,7 +30,7 @@ def _send_expiry_alerts():
 			try:
 				_send_expiry_alert_email(q, days)
 			except Exception:
-				frappe.log_error(frappe.get_traceback(), f"Quotation expiry alert failed: {q.name}")
+				frappe.log_error(f"IB Quotation expiry alert: {q.name}", frappe.get_traceback())
 
 
 def _send_expiry_alert_email(q: dict, days_remaining: int) -> None:
@@ -65,6 +65,6 @@ def _auto_expire_quotations():
 		try:
 			frappe.db.set_value("Quotation", q.name, "status", "Expired")
 		except Exception:
-			frappe.log_error(frappe.get_traceback(), f"Auto-expire failed: {q.name}")
+			frappe.log_error(f"IB Auto-expire failed: {q.name}", frappe.get_traceback())
 	if overdue:
 		frappe.db.commit()

@@ -1,0 +1,20 @@
+{
+ "creation": "2026-06-20 00:00:00.000000",
+ "doctype": "Page",
+ "modified": "2026-06-20 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "instabiz",
+ "name": "ib-hrms-dashboard",
+ "owner": "Administrator",
+ "page_name": "ib-hrms-dashboard",
+ "restrict_to_domain": null,
+ "roles": [
+  {"role": "System Manager"},
+  {"role": "HR Manager"},
+  {"role": "HR User"},
+  {"role": "Factory Management"}
+ ],
+ "standard": "Yes",
+ "system_page": 0,
+ "title": "HR Dashboard"
+}

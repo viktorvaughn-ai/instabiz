@@ -13,6 +13,16 @@ const _IB_HIDE_ADDR_FIELDS = [
 
 frappe.ui.form.on("Customer", {
 	refresh: function (frm) {
+		// Pre-fill Handled By on new customer forms immediately (before save)
+		if (frm.is_new() && !frm.doc.custom_sales_person_user
+				&& frappe.session.user !== "Administrator") {
+			frm.set_value("custom_sales_person_user", frappe.session.user);
+			frappe.db.get_value("User", frappe.session.user, "full_name").then(r => {
+				const name = r && r.message && r.message.full_name;
+				if (name) frm.set_value("custom_sales_person", name);
+			});
+		}
+
 		_IB_HIDE_ADDR_FIELDS.forEach(function (f) {
 			frm.set_df_property(f, "hidden", 1);
 		});
@@ -26,7 +36,6 @@ frappe.ui.form.on("Customer", {
 			if (frm.doc.custom_overdue_block) {
 				_ib_render_clear_overdue_block_button(frm);
 			}
-			_ib_render_fix_location_button(frm);
 		}
 		// Share button — visible to the assigned sales user AND managers
 		if (!frm.is_new() && frm.doc.custom_sales_person_user) {
@@ -45,6 +54,7 @@ frappe.ui.form.on("Customer", {
 					customer_name: frm.doc.customer_name,
 				});
 			}, IB_ICONS.svg("whatsapp", 16));
+			_ib_render_send_statement_btn(frm);
 		}
 	},
 
@@ -185,7 +195,7 @@ function _ib_render_assign_to_user_button(frm) {
 						callback(r) {
 							if (r.message && r.message.status === "ok") {
 								d.hide();
-								frappe.show_alert({ message: `Assigned to ${values.sales_user_label} — added to today's board`, indicator: "green" });
+								frappe.show_alert({ message: `Assigned to ${values.sales_user_label}`, indicator: "green" });
 								frm.reload_doc();
 							}
 						},
@@ -233,36 +243,6 @@ function _ib_sync_territory_from_state(frm) {
 	});
 }
 
-function _ib_render_fix_location_button(frm) {
-	frm.remove_custom_button("Fix Territory from Billing State", "Location");
-	frm.add_custom_button("Fix Territory from Billing State", () => {
-		frappe.confirm(
-			"Set territory = billing state for ALL customers where they differ?<br>"
-			+ "This is a bulk operation and cannot be undone easily.",
-			() => {
-				frappe.call({
-					method: "instabiz.overrides.customer.backfill_territory_from_billing_state",
-					callback(r) {
-						if (r.exc) return;
-						const res = r.message;
-						let msg = `Updated ${res.updated} customers.`;
-						if (res.skipped > 0) {
-							msg += ` ${res.skipped} skipped (billing state not found in Territory list).`;
-						}
-						if (res.unresolved && res.unresolved.length) {
-							msg += "<br><b>Unresolved:</b><br>";
-							res.unresolved.forEach(u => {
-								msg += `• ${u.customer}: "${u.bt_state}"<br>`;
-							});
-						}
-						frappe.msgprint({ title: "Territory Sync Done", message: msg, indicator: "green" });
-					},
-				});
-			}
-		);
-	}, "Location");
-}
-
 // ── Customer sharing ─────────────────────────────────────────────────────────
 
 function _ib_render_share_button(frm) {
@@ -270,6 +250,31 @@ function _ib_render_share_button(frm) {
 	frm.add_custom_button("Manage Sharing", () => {
 		_ib_show_share_dialog(frm.doc.name, frm.doc.customer_name);
 	}, "Assign");
+}
+
+function _ib_render_send_statement_btn(frm) {
+	frm.remove_custom_button("Send Outstanding Statement", "WhatsApp");
+	frm.add_custom_button(__("Send Outstanding Statement"), () => {
+		frappe.confirm(
+			`Send outstanding invoices list to <b>${frappe.utils.escape_html(frm.doc.customer_name)}</b> via WhatsApp?`,
+			() => {
+				frappe.call({
+					method: "instabiz.overrides.whatsapp.send_outstanding_statement",
+					args: { customer: frm.doc.name },
+					freeze: true,
+					freeze_message: "Sending statement…",
+					callback(r) {
+						if (r.message && r.message.status === "ok") {
+							frappe.show_alert({
+								message: `Statement sent — ${r.message.invoices} invoice(s)`,
+								indicator: "green",
+							});
+						}
+					},
+				});
+			}
+		);
+	}, "WhatsApp");
 }
 
 function _ib_show_share_dialog(customer, customer_name) {

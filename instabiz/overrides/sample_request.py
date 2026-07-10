@@ -39,3 +39,12 @@ def convert_to_order(name: str, sales_order: str) -> None:
 	doc.outcome = "Converted"
 	doc.status = "Converted"
 	doc.save()
+
+
+@frappe.whitelist()
+def close_request(name: str) -> None:
+	doc = frappe.get_doc("IB Sample Request", name)
+	if doc.status in ("Converted", "Closed"):
+		frappe.throw(_("Request is already closed or converted."))
+	doc.status = "Closed"
+	doc.save()

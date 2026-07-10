@@ -76,10 +76,11 @@ class IbOrgChart {
 				self._reload();
 			},
 		});
-		this.page.add_inner_button(`${frappe.utils.icon("maximize-2", "xs")} Expand All`, () => self._toggle_all(true));
-		this.page.add_inner_button(`${frappe.utils.icon("minimize-2", "xs")} Collapse All`, () => self._toggle_all(false));
-		this.page.add_inner_button(`${frappe.utils.icon("download", "xs")} Export PNG`, () => self._export_png());
-		this.page.add_inner_button(`${frappe.utils.icon("maximize", "xs")} Fit to Screen`, () => self._fit());
+		const _ic = (name) => `<iconify-icon icon="lucide:${name}" width="12" height="12" style="vertical-align:middle;margin-right:4px"></iconify-icon>`;
+		this.page.add_inner_button(`${_ic("maximize-2")} Expand All`, () => self._toggle_all(true));
+		this.page.add_inner_button(`${_ic("minimize-2")} Collapse All`, () => self._toggle_all(false));
+		this.page.add_inner_button(`${_ic("download")} Export PNG`, () => self._export_png());
+		this.page.add_inner_button(`${_ic("maximize")} Fit to Screen`, () => self._fit());
 	}
 
 	// ── Layout ────────────────────────────────────────────────────────────────

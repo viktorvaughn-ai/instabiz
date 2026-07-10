@@ -51,12 +51,12 @@ IB_DOCTYPES.forEach(function (doctype) {
                 if (frm.page.btn_secondary) frm.page.btn_secondary.hide();
             }
 
-            // Send WhatsApp button (submitted docs with a customer only)
+            // Send WhatsApp button — visible on all doc states when a customer exists
             // Quotation uses party_name (not customer) when quotation_to === "Customer"
             const _wa_customer = frm.doc.customer
                 || (frm.doc.quotation_to === "Customer" ? frm.doc.party_name : null);
-            if (frm.doc.docstatus === 1 && _wa_customer) {
-                frm.add_custom_button(__("Send WhatsApp"), () => {
+            if (_wa_customer) {
+                frm.add_custom_button(__("WhatsApp"), () => {
                     ib_show_wa_dialog({
                         customer: _wa_customer,
                         customer_name: frm.doc.customer_name || _wa_customer,
@@ -119,15 +119,23 @@ IB_DOCTYPES.forEach(function (doctype) {
         },
 
         // Dimension triggers - Recalculate Qty then Amount
-        uom:        ib_debounce(async (frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, true),  IB_DEBOUNCE),
+        uom: ib_debounce(async (frm, cdt, cdn) => {
+            ib_toggle_roll_fields(frm, cdt, cdn);
+            await ib_recalc_row(frm, cdt, cdn, true);
+        }, IB_DEBOUNCE),
         width_mm:   ib_debounce(async (frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, true),  IB_DEBOUNCE),
         length_mtr: ib_debounce(async (frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, true),  IB_DEBOUNCE),
         qty_pkg:    ib_debounce(async (frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, true),  IB_DEBOUNCE),
         total_pkg:  ib_debounce(async (frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, true),  IB_DEBOUNCE),
-        
+
         // Direct value triggers - Recalculate Amount only
         qty:        ib_debounce(async (frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, false), IB_DEBOUNCE),
         rate:       ib_debounce(async (frm, cdt, cdn) => ib_recalc_row(frm, cdt, cdn, false), IB_DEBOUNCE),
+
+        // Re-apply field visibility each time a row dialog opens
+        form_render(frm, cdt, cdn) {
+            ib_toggle_roll_fields(frm, cdt, cdn);
+        },
 
         items_remove: (frm) => frm.refresh_field("items"),
     });
@@ -226,6 +234,33 @@ function _ib_update_items_dialog(frm, doctype) {
     dialog.show();
 }
 
+// ── ROLL UOM: hide qty_pkg + total_pkg, force both to 1 ──────────────────────
+
+function ib_toggle_roll_fields(frm, cdt, cdn) {
+    const row = locals[cdt][cdn];
+    if (!row) return;
+    const is_roll = ib_is_roll(row.uom);
+
+    if (is_roll) {
+        if (flt(row.qty_pkg) !== 1) frappe.model.set_value(cdt, cdn, "qty_pkg", 1);
+        if (flt(row.total_pkg) !== 1) frappe.model.set_value(cdt, cdn, "total_pkg", 1);
+    }
+
+    // Toggle visibility in expanded row dialog
+    const grid = frm.fields_dict.items && frm.fields_dict.items.grid;
+    if (!grid) return;
+    const grid_row = grid.grid_rows_by_docname && grid.grid_rows_by_docname[cdn];
+    if (grid_row && grid_row.fields_dict) {
+        ["qty_pkg", "total_pkg"].forEach(f => {
+            const fd = grid_row.fields_dict[f];
+            if (fd) {
+                fd.df.hidden = is_roll ? 1 : 0;
+                fd.refresh();
+            }
+        });
+    }
+}
+
 // ── Quotation: Margin % on item rows ─────────────────────────────────────────
 
 function _ib_update_margin(frm, cdt, cdn) {
@@ -257,9 +292,36 @@ frappe.ui.form.on("Quotation Item", {
     },
 });
 
-// ── Quotation: Sale Type → clear taxes when Export ───────────────────────────
+// ── Sales Invoice: dedicated WhatsApp share for e-invoice PDF ─────────────────
+frappe.ui.form.on("Sales Invoice", {
+	refresh(frm) {
+		if (!frm.doc.customer) return;
+		// Dedicated "Share Invoice" WA button — always visible, sends IB GST Tax Invoice PDF
+		frm.add_custom_button(__("Share Invoice"), () => {
+			const phone = frappe.db.get_value("Customer", frm.doc.customer, "mobile_no");
+			const name = frm.doc.customer_name || frm.doc.customer;
+			// Direct WhatsApp with PDF — reuse existing dialog with attach pre-checked
+			ib_show_wa_dialog({
+				customer: frm.doc.customer,
+				customer_name: name,
+				ref_doctype: "Sales Invoice",
+				ref_docname: frm.doc.name,
+			});
+		}, __("WhatsApp"));
+	},
+});
+
+// ── Quotation: Sale Type & Currency → clear taxes; currency → convert rates ───
 
 frappe.ui.form.on("Quotation", {
+    refresh(frm) {
+        // Unhide conversion_rate when a non-INR currency is active
+        if (frm.doc.currency && frm.doc.currency !== "INR") {
+            frm.set_df_property("conversion_rate", "hidden", 0);
+            frm.refresh_field("conversion_rate");
+        }
+    },
+
     custom_sale_type(frm) {
         if (frm.doc.custom_sale_type === "Export") {
             setTimeout(() => {
@@ -268,7 +330,7 @@ frappe.ui.form.on("Quotation", {
                 frm.clear_table("taxes");
                 frm.refresh_field("taxes");
             }, 100);
-        } else {
+        } else if (!frm.doc.currency || frm.doc.currency === "INR") {
             frappe.db.get_value(
                 "Sales Taxes and Charges Template",
                 { is_default: 1, company: frm.doc.company },
@@ -293,6 +355,57 @@ frappe.ui.form.on("Quotation", {
                     });
             });
         }
+    },
+
+    currency(frm) {
+        const is_foreign = frm.doc.currency && frm.doc.currency !== "INR";
+
+        // Show/hide conversion_rate field
+        frm.set_df_property("conversion_rate", "hidden", is_foreign ? 0 : 1);
+        frm.refresh_field("conversion_rate");
+
+        if (!is_foreign) return;
+
+        // Foreign currency = export; clear taxes immediately
+        frm.doc.taxes_and_charges = "";
+        frm.refresh_field("taxes_and_charges");
+        frm.clear_table("taxes");
+        frm.refresh_field("taxes");
+
+        // Fetch exchange rate then convert item rates from INR to the selected currency
+        frappe.call({
+            method: "erpnext.setup.utils.get_exchange_rate",
+            args: {
+                transaction_date: frm.doc.transaction_date || frappe.datetime.get_today(),
+                from_currency: frm.doc.currency,
+                to_currency: "INR",
+            },
+            callback(r) {
+                const conv_rate = r && flt(r.message);
+                if (!conv_rate || conv_rate <= 0) {
+                    frappe.show_alert({
+                        message: __("No exchange rate found for {0}. Set conversion rate manually.", [frm.doc.currency]),
+                        indicator: "orange",
+                    }, 6);
+                    return;
+                }
+
+                frm.set_value("conversion_rate", conv_rate);
+
+                // Convert item rates: assume current rates are in INR
+                (frm.doc.items || []).forEach(item => {
+                    if (!item.rate) return;
+                    const new_rate = flt(item.rate / conv_rate, 4);
+                    frappe.model.set_value(item.doctype, item.name, "rate", new_rate);
+                });
+                frm.refresh_field("items");
+
+                frappe.show_alert({
+                    message: __("Rates converted to {0}. 1 {0} = {1} INR.", [frm.doc.currency, flt(conv_rate, 2)]),
+                    indicator: "blue",
+                }, 5);
+            },
+        });
     },
 });
 

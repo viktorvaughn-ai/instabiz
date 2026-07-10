@@ -4,10 +4,16 @@ import time
 
 import frappe
 import requests
-from frappe.utils import add_days, now, today
+from frappe.utils import add_days, fmt_money, formatdate, now, today
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
+
+# Template record name in IB WA Template used for auto-send on Quotation submit.
+# Create an IB WA Template with template_name="Quotation" and is_active=1.
+# Supported placeholders: {customer}, {quotation_no}, {items}, {total},
+#   {valid_till}, {name} (sender), {territory}, {contact}, {last_order}
+_QUOTATION_TEMPLATE_NAME = "Quotation"
 
 def _base_url():
 	return frappe.conf.get("openwa_url", "http://localhost:2785").rstrip("/")
@@ -176,7 +182,7 @@ def send_whatsapp(customer, template_name, ref_doctype=None, ref_docname=None, m
 	except Exception as e:
 		status = "Failed"
 		error_msg = str(e)
-		frappe.log_error(str(e), "IB WA Send Failed")
+		frappe.log_error("IB WA Send Failed", str(e))
 
 	_log(customer, mobile, template_name, message, user, status, error_msg, ref_doctype or "", ref_docname or "")
 	frappe.db.commit()
@@ -254,6 +260,132 @@ def sync_session_status(session_id):
 		return {"status": "Disconnected", "error": str(e)}
 
 
+# ── Quotation send ───────────────────────────────────────────────────────────
+
+def on_quotation_submit(doc, method):
+	"""doc_event: Quotation.on_submit → enqueue WA send if template + phone available."""
+	template_name = frappe.db.get_value(
+		"IB WA Template",
+		{"template_name": _QUOTATION_TEMPLATE_NAME, "is_active": 1},
+		"name",
+	)
+	if not template_name:
+		return
+
+	mobile = (
+		frappe.db.get_value("Customer", doc.customer, "custom_primary_contact_person")
+		or frappe.db.get_value("Customer", doc.customer, "mobile_no")
+	)
+	if not mobile:
+		return
+
+	frappe.enqueue(
+		"instabiz.overrides.whatsapp._send_quotation_wa_bg",
+		quotation_name=doc.name,
+		template_name=template_name,
+		sent_by=doc.custom_sales_person_user or frappe.session.user,
+		queue="short",
+	)
+
+
+@frappe.whitelist()
+def send_quotation_via_whatsapp(quotation_name, template_name=None):
+	"""Whitelisted: manually send quotation WA from UI. Runs synchronously."""
+	if not template_name:
+		template_name = frappe.db.get_value(
+			"IB WA Template",
+			{"template_name": _QUOTATION_TEMPLATE_NAME, "is_active": 1},
+			"name",
+		)
+	if not template_name:
+		frappe.throw(
+			f'No active IB WA Template named "{_QUOTATION_TEMPLATE_NAME}" found. '
+			"Create one in <b>IB WA Template</b> with that name and mark it Active.",
+			title="WA Template Missing",
+		)
+	_send_quotation_wa_bg(quotation_name, template_name, frappe.session.user)
+	return {"status": "ok"}
+
+
+def _send_quotation_wa_bg(quotation_name, template_name, sent_by=None):
+	"""Background-safe: send quotation text + PDF via the sender's WA session."""
+	if not sent_by:
+		sent_by = "Administrator"
+
+	q = frappe.get_doc("Quotation", quotation_name)
+
+	mobile = (
+		frappe.db.get_value("Customer", q.customer, "custom_primary_contact_person")
+		or frappe.db.get_value("Customer", q.customer, "mobile_no")
+	)
+	if not mobile:
+		frappe.log_error("IB WA Quotation", f"No mobile for {q.customer} — skip {quotation_name}")
+		return
+
+	# Prefer sender's session; fall back to any connected session
+	session_name = frappe.db.get_value(
+		"IB WA Session", {"user": sent_by, "status": "Connected"}, "session_id"
+	) or frappe.db.get_value(
+		"IB WA Session", {"status": "Connected"}, "session_id", order_by="name asc"
+	)
+	if not session_name:
+		frappe.log_error("IB WA Quotation", f"No connected WA session — skip {quotation_name}")
+		return
+
+	session_uuid = _resolve_session_uuid(session_name)
+	chat_id = _format_phone(mobile)
+
+	template = frappe.get_doc("IB WA Template", template_name)
+	message = _render_quotation_message(template.message, q, sent_by)
+
+	status, error_msg = "Sent", ""
+	try:
+		_send_text(session_uuid, chat_id, message)
+		_send_document(session_uuid, chat_id, "Quotation", quotation_name,
+		               caption=f"Quotation {quotation_name}")
+	except Exception as e:
+		status, error_msg = "Failed", str(e)
+		frappe.log_error("IB WA Quotation", str(e))
+
+	_log(q.customer, mobile, template_name, message,
+	     sent_by, status, error_msg, "Quotation", quotation_name)
+	frappe.db.commit()
+
+
+def _render_quotation_message(template_message, quotation, sent_by):
+	"""Render an IB WA Template message with Quotation variables."""
+	sender_name = frappe.db.get_value("User", sent_by, "full_name") or sent_by
+
+	items = quotation.get("items") or []
+	if len(items) == 1:
+		item_summary = items[0].item_name or items[0].item_code or "Item"
+	elif len(items) > 1:
+		first = items[0].item_name or items[0].item_code or "Item"
+		item_summary = f"{first} + {len(items) - 1} more"
+	else:
+		item_summary = "Items"
+
+	total = fmt_money(quotation.grand_total or 0, currency="INR")
+	valid_till = formatdate(str(quotation.valid_till)) if quotation.valid_till else "—"
+	territory = frappe.db.get_value("Customer", quotation.customer, "territory") or ""
+
+	try:
+		return template_message.format(
+			customer=quotation.customer_name or quotation.customer,
+			quotation_no=quotation.name,
+			items=item_summary,
+			total=total,
+			valid_till=valid_till,
+			name=sender_name,
+			territory=territory,
+			contact=quotation.customer_name or "",
+			last_order="N/A",
+		)
+	except KeyError as exc:
+		frappe.log_error("IB WA Quotation Template", f"Unknown placeholder {exc} in template")
+		return template_message
+
+
 # ── Scheduler: 30-day dormant WA blast ───────────────────────────────────────
 
 def run_wa_dormant_blast():
@@ -328,9 +460,94 @@ def run_wa_dormant_blast():
 			sent += 1
 
 		except Exception as e:
-			frappe.log_error(str(e), f"IB WA Dormant Blast: {row.customer}")
+			frappe.log_error("IB WA Dormant Blast", str(e))
 			_log(row.customer, row.mobile_no, template_name, "", "Administrator", "Failed", str(e))
 
 		frappe.db.commit()
 
 	frappe.logger().info(f"IB WA Dormant Blast: sent {sent} messages")
+
+
+# ── Outstanding Statement ─────────────────────────────────────────────────────
+
+@frappe.whitelist()
+def send_outstanding_statement(customer):
+	"""Send customer's outstanding SI list as a WhatsApp text message."""
+	from frappe.utils import formatdate, flt
+
+	user = frappe.session.user
+	cust = frappe.db.get_value(
+		"Customer", customer,
+		["customer_name", "custom_primary_contact_person", "mobile_no"],
+		as_dict=True,
+	)
+	if not cust:
+		frappe.throw(f"Customer {customer} not found.")
+
+	mobile = cust.custom_primary_contact_person or cust.mobile_no
+	if not mobile:
+		frappe.throw(
+			f"No mobile number on record for <b>{cust.customer_name}</b>.",
+			title="No Mobile Number",
+		)
+
+	invoices = frappe.db.sql(
+		"""
+		SELECT name, posting_date, due_date, outstanding_amount, currency
+		FROM `tabSales Invoice`
+		WHERE customer = %s
+		  AND docstatus = 1
+		  AND outstanding_amount > 0
+		ORDER BY due_date ASC
+		LIMIT 30
+		""",
+		customer,
+		as_dict=True,
+	)
+
+	if not invoices:
+		frappe.throw(
+			f"No outstanding invoices for <b>{cust.customer_name}</b>.",
+			title="Nothing Outstanding",
+		)
+
+	from frappe.utils import today as _today, getdate
+	today_date = getdate(_today())
+	total = sum(flt(i.outstanding_amount) for i in invoices)
+	currency = invoices[0].currency or "INR"
+	symbol = "₹" if currency == "INR" else currency
+
+	lines = [f"*Outstanding Statement — {cust.customer_name}*"]
+	lines.append(f"Date: {formatdate(_today())}\n")
+	for inv in invoices:
+		overdue = getdate(inv.due_date) < today_date if inv.due_date else False
+		flag = " ⚠️" if overdue else ""
+		due = formatdate(inv.due_date) if inv.due_date else "—"
+		amt = f"{symbol}{flt(inv.outstanding_amount):,.0f}"
+		lines.append(f"• {inv.name}  |  Due {due}  |  {amt}{flag}")
+
+	lines.append(f"\n*Total Outstanding: {symbol}{total:,.0f}*")
+	lines.append("\n_Please arrange payment at your earliest convenience._")
+
+	message = "\n".join(lines)
+
+	session_name = _get_session_for_user(user)
+	session_uuid = _resolve_session_uuid(session_name)
+	chat_id = _format_phone(mobile)
+
+	status = "Sent"
+	error_msg = ""
+	try:
+		_send_text(session_uuid, chat_id, message)
+	except Exception as e:
+		status = "Failed"
+		error_msg = str(e)
+		frappe.log_error("IB WA Outstanding Statement", str(e))
+
+	_log(customer, mobile, "Outstanding Statement", message, user, status, error_msg, "Customer", customer)
+	frappe.db.commit()
+
+	if status == "Failed":
+		frappe.throw(f"WhatsApp send failed: {error_msg}", title="WA Send Failed")
+
+	return {"status": "ok", "invoices": len(invoices), "total": total}

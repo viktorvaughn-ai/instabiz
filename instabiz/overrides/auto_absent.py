@@ -4,15 +4,24 @@ Daily scheduler: mark absent for employees who have no attendance record
 for the previous working day and are not on approved leave.
 
 Skips: holidays (per employee holiday list), weekends (Sat/Sun),
-       employees with docstatus != 1 (inactive/left).
+       employees with docstatus != 1 (inactive/left),
+       factory employees (dept contains "Factory" — their attendance comes
+       from biometric device and must be imported/entered manually).
 """
 import frappe
-from frappe.utils import add_days, get_weekday, nowdate
+from frappe.utils import add_days, get_weekday, nowdate, getdate
+
+# Departments excluded from auto-absent (biometric / manual attendance)
+_FACTORY_DEPT_KEYWORD = "Factory"
+
+
+def _is_factory_employee(department):
+    return department and _FACTORY_DEPT_KEYWORD.lower() in (department or "").lower()
 
 
 def run_auto_absent():
 	yesterday = add_days(nowdate(), -1)
-	weekday = get_weekday(yesterday)  # 0=Mon ... 6=Sun
+	weekday = get_weekday(getdate(yesterday))  # 0=Mon ... 6=Sun
 
 	# Skip weekends
 	if weekday in (5, 6):
@@ -22,11 +31,17 @@ def run_auto_absent():
 	active_employees = frappe.db.get_all(
 		"Employee",
 		filters={"status": "Active", "docstatus": ["!=", 2]},
-		fields=["name", "employee_name", "holiday_list"],
+		fields=["name", "employee_name", "holiday_list", "department"],
 	)
 
 	marked = 0
+	skipped_factory = 0
 	for emp in active_employees:
+		# Skip factory employees — biometric attendance, do not auto-absent
+		if _is_factory_employee(emp.department):
+			skipped_factory += 1
+			continue
+
 		# Skip if it was a holiday for this employee
 		if _is_holiday(yesterday, emp.holiday_list):
 			continue
@@ -65,7 +80,9 @@ def run_auto_absent():
 	if marked:
 		frappe.db.commit()
 
-	frappe.logger().info(f"[auto_absent] {yesterday}: marked {marked} employees absent")
+	frappe.logger().info(
+		f"[auto_absent] {yesterday}: marked {marked} absent, skipped {skipped_factory} factory employees"
+	)
 
 
 def _is_holiday(date, holiday_list):

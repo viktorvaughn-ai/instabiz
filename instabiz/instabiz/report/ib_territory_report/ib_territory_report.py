@@ -35,7 +35,7 @@ def _data(filters):
 		       SUM(custom_status = 'Lost') AS lost_leads
 		FROM `tabLead`
 		WHERE territory IS NOT NULL AND territory != ''
-		AND creation BETWEEN %(from_date)s AND %(to_date)s
+		AND DATE(creation) BETWEEN %(from_date)s AND %(to_date)s
 		GROUP BY territory
 		""",
 		{"from_date": from_date, "to_date": to_date}, as_dict=True,
@@ -46,7 +46,7 @@ def _data(filters):
 		SELECT territory, COUNT(*) AS quotations
 		FROM `tabQuotation`
 		WHERE docstatus = 1 AND territory IS NOT NULL
-		AND creation BETWEEN %(from_date)s AND %(to_date)s
+		AND transaction_date BETWEEN %(from_date)s AND %(to_date)s
 		GROUP BY territory
 		""",
 		{"from_date": from_date, "to_date": to_date}, as_dict=True,

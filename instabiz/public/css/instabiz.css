@@ -2845,3 +2845,171 @@ mark.ib-search-hl {
     cursor: pointer;
 }
 .ib-cb-today-user-select:focus { outline: none; border-color: var(--ib-primary); }
+
+/* ── Loading skeleton shimmer ── */
+@keyframes ib-skel-shimmer {
+    0%   { background-position: -1200px 0; }
+    100% { background-position: 1200px 0; }
+}
+.ib-skel {
+    background: linear-gradient(
+        90deg,
+        var(--bg-color, #f3f4f6) 0%,
+        var(--border-color, #e5e7eb) 45%,
+        var(--bg-color, #f3f4f6) 100%
+    );
+    background-size: 2400px 100%;
+    animation: ib-skel-shimmer 1.6s infinite linear;
+    border-radius: 4px;
+    display: block;
+}
+.ib-skel-card   { height: 88px;  border-radius: 8px; margin-bottom: 8px; }
+.ib-skel-kpi    { height: 100px; border-radius: 10px; }
+.ib-skel-line   { height: 12px; margin-bottom: 6px; }
+.ib-skel-line--short  { width: 55%; }
+.ib-skel-line--medium { width: 78%; }
+.ib-skel-wo-card { height: 88px; border-radius: 6px; margin-bottom: 6px; }
+
+/* ── Production pipeline drag-and-drop ── */
+.ib-ps-wo-ghost {
+    opacity: 0.35;
+    background: var(--card-bg);
+    border: 2px dashed var(--ib-primary) !important;
+}
+.ib-ps-wo-drag {
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+    transform: rotate(2deg) scale(1.02);
+    cursor: grabbing !important;
+    z-index: 999;
+}
+.ib-ps-col-body--drag-over {
+    background: rgba(217,119,87,0.07) !important;
+    border-radius: 0 0 8px 8px;
+}
+.ib-ps-wo-card { cursor: grab; }
+.ib-ps-wo-card:active { cursor: grabbing; }
+
+/* ── Dashboard shared: skeleton shimmer & countUp helpers ── */
+@keyframes ib-skel-shimmer {
+    0%   { background-position: -400% 0; }
+    100% { background-position:  400% 0; }
+}
+.ib-skel {
+    background: linear-gradient(90deg,
+        var(--border-color, #e2e8f0) 25%,
+        var(--bg-color, #f8fafc)     50%,
+        var(--border-color, #e2e8f0) 75%);
+    background-size: 400% 100%;
+    animation: ib-skel-shimmer 1.5s ease-in-out infinite;
+    border-radius: 4px;
+    display: block;
+}
+.ib-skel-kpi-wrap {
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: flex; flex-direction: column; gap: 8px;
+}
+.ib-skel-lbl  { height: 10px; width: 55%; }
+.ib-skel-val  { height: 28px; width: 48%; }
+.ib-skel-sub  { height: 8px;  width: 35%; }
+.ib-skel-cell { height: 14px; width: 80%;  display: inline-block; }
+.ib-skel-row  { height: 40px; width: 100%; margin-bottom: 4px; border-radius: 6px; }
+
+/* countUp number reveal — soft fade-in */
+[data-countup] { display: inline-block; }
+
+/* ── Shared dashboard delta badges ── */
+.ib-delta     { font-size: 11px; font-weight: 500; }
+.ib-delta.pos { color: #16a34a; }
+.ib-delta.neg { color: #dc2626; }
+.ib-delta.neu { color: var(--text-muted); }
+
+/* ═══════════════════════════════════════════════════════════════
+   IB DESIGN SYSTEM — v2  (2026-06)
+   Global additions: icon-action buttons, tabs, page transitions
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Shared icon-action button (used across all pages) ── */
+button.ib-icon-btn {
+    -webkit-appearance: none; appearance: none;
+    width: 30px; height: 30px;
+    border: none !important; background: transparent !important; box-shadow: none !important;
+    border-radius: 7px; cursor: pointer; margin: 0; padding: 0; line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--text-muted);
+    transition: background 0.13s, color 0.13s;
+    flex-shrink: 0;
+}
+button.ib-icon-btn:focus-visible { outline: 2px solid var(--ib-primary); outline-offset: 1px; }
+button.ib-icon-btn--primary:hover { background: var(--ib-tint-mid) !important; color: var(--ib-primary); }
+button.ib-icon-btn--red:hover     { background: color-mix(in srgb, #b91c1c 8%, transparent) !important; color: #b91c1c; }
+button.ib-icon-btn--green:hover   { background: color-mix(in srgb, #15803d 8%, transparent) !important; color: #15803d; }
+/* legacy aliases */
+button.ib-icon-btn--blue:hover    { background: var(--ib-tint-mid) !important; color: var(--ib-primary); }
+button.ib-icon-btn--orange:hover  { background: var(--ib-tint-mid) !important; color: var(--ib-primary-dark); }
+button.ib-icon-btn--violet:hover  { background: var(--ib-tint-mid) !important; color: var(--ib-primary); }
+
+/* ── Price list tabs ── */
+.ib-pl-tabs {
+    display: flex; gap: 0; padding: 10px 0 0;
+    border-bottom: 2px solid var(--border-color); margin-bottom: 14px;
+}
+.ib-pl-tab {
+    padding: 8px 28px; border: 1.5px solid transparent; border-bottom: none;
+    border-radius: 8px 8px 0 0; font-size: 13px; font-weight: 600;
+    cursor: pointer; color: var(--text-muted); background: transparent;
+    transition: all .15s; margin-bottom: -2px; margin-right: 4px;
+}
+.ib-pl-tab:hover   { background: var(--bg-color); color: var(--text-color); }
+.ib-pl-tab--active {
+    background: var(--card-bg); color: var(--ib-primary);
+    border-color: var(--border-color); border-bottom-color: var(--card-bg);
+}
+.ib-pl-tab-badge {
+    display: inline-block; margin-left: 6px; padding: 1px 7px;
+    border-radius: 10px; font-size: 10px; font-weight: 700;
+    background: var(--bg-color); color: var(--text-muted);
+}
+.ib-pl-tab--active .ib-pl-tab-badge { background: var(--ib-primary); color: #fff; }
+
+/* ── Price list: icon action buttons (hover-reveal) ── */
+.ib-pl-acts { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
+button.ib-pl-act {
+    -webkit-appearance: none; appearance: none;
+    width: 28px; height: 28px;
+    border: none !important; background: transparent !important; box-shadow: none !important;
+    border-radius: 6px; cursor: pointer; margin: 0; padding: 0; line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--text-muted);
+    transition: background .12s, color .12s, opacity .15s;
+    opacity: 0; flex-shrink: 0;
+}
+.ib-pl-row:hover button.ib-pl-act,
+.ib-pl-row:focus-within button.ib-pl-act { opacity: 1; }
+button.ib-pl-act:focus-visible           { opacity: 1; outline: 2px solid var(--ib-primary); outline-offset: 1px; }
+button.ib-pl-act--edit:hover  { background: var(--ib-tint-mid) !important; color: var(--ib-primary); }
+button.ib-pl-act--hist:hover  { background: var(--ib-tint-mid) !important; color: var(--ib-primary-dark); }
+button.ib-pl-act--del:hover   { background: color-mix(in srgb, #b91c1c 8%, transparent) !important; color: #b91c1c; }
+
+/* ── Quick-action button icon variant (main dashboard, business pulse) ── */
+.ib-md-qbtn iconify-icon,
+.ib-md-qbtn .ib-md-qbtn-icon {
+    display: block; margin-bottom: 5px;
+    font-size: 0; /* suppress emoji fallback */
+}
+iconify-icon { display: inline-flex; align-items: center; }
+
+/* ── KPI card decorative icon ── */
+.ib-md-kpi-icon iconify-icon { opacity: 1; }
+
+/* ── Page fade-in ── */
+@keyframes ib-page-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.ib-md-wrap,
+.ib-pl-root,
+.ib-sd-page { animation: ib-page-in 200ms ease both; }
+

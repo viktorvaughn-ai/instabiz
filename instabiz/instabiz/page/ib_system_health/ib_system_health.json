@@ -1,0 +1,17 @@
+{
+ "creation": "2026-07-02 00:00:00.000000",
+ "doctype": "Page",
+ "modified": "2026-07-02 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "instabiz",
+ "name": "ib-system-health",
+ "owner": "Administrator",
+ "page_name": "ib-system-health",
+ "restrict_to_domain": null,
+ "roles": [
+  {"role": "System Manager"}
+ ],
+ "standard": "Yes",
+ "system_page": 0,
+ "title": "System Health"
+}

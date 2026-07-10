@@ -1,0 +1,367 @@
+frappe.pages["ib-collections-dashboard"].on_page_load = function (wrapper) {
+	frappe.ui.make_app_page({ parent: wrapper, title: "Collections", single_column: true });
+	wrapper._ib_col = new IBCollectionsDashboard(wrapper);
+};
+
+frappe.pages["ib-collections-dashboard"].on_page_show = function (wrapper) {
+	if (wrapper._ib_col) wrapper._ib_col.load();
+};
+
+class IBCollectionsDashboard {
+	constructor(wrapper) {
+		this.$wrap = $(wrapper).find(".layout-main-section");
+		this._search = "";
+		this._filter_sp = null;
+		this._overdue_only = false;
+		this._invoices = [];
+		this._privileged = false;
+		this._sp_loaded = false;
+		this._loading = false;
+		this._inject_styles();
+		this._build_layout();
+		// load() started by on_page_show — no double call on first visit
+	}
+
+	_inject_styles() {
+		if (document.getElementById("ib-col-css")) return;
+		const s = document.createElement("style");
+		s.id = "ib-col-css";
+		s.textContent = `
+:root { --ib-p:#d97757; }
+.ib-col-wrap { padding:16px; max-width:1400px; }
+.ib-col-toolbar { display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+.ib-col-toolbar h2 { font-size:1.2rem; font-weight:700; color:var(--heading-color); margin:0; flex:1; }
+.ib-col-input { padding:6px 12px; border:1px solid var(--border-color); border-radius:6px;
+  font-size:12px; background:var(--card-bg,#fff); color:var(--text-color); min-width:200px; }
+.ib-col-input:focus { outline:none; border-color:var(--ib-p); }
+.ib-col-btn { padding:6px 14px; border:1px solid var(--border-color); border-radius:6px;
+  background:var(--card-bg,#fff); color:var(--text-color); cursor:pointer; font-size:12px; transition:all .15s; }
+.ib-col-btn:hover { border-color:var(--ib-p); color:var(--ib-p); }
+.ib-col-btn.active { background:var(--ib-p); color:#fff; border-color:var(--ib-p); }
+.ib-col-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:16px; }
+.ib-col-kpi { background:var(--card-bg,#fff); border:1px solid var(--border-color); border-radius:8px;
+  padding:14px 16px; position:relative; overflow:hidden; }
+.ib-col-kpi-bar { position:absolute; left:0; top:0; bottom:0; width:4px; border-radius:8px 0 0 8px; }
+.ib-col-kpi-l { font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.06em; }
+.ib-col-kpi-v { font-size:1.3rem; font-weight:700; color:var(--heading-color); margin-top:4px; }
+.ib-col-tbl-wrap { background:var(--card-bg,#fff); border:1px solid var(--border-color); border-radius:10px; overflow:auto; }
+.ib-col-tbl { width:100%; border-collapse:collapse; font-size:12px; min-width:900px; }
+.ib-col-tbl th { text-align:left; padding:10px 12px; color:var(--text-muted); font-weight:500;
+  border-bottom:2px solid var(--border-color); position:sticky; top:0; background:var(--card-bg,#fff); z-index:1; }
+.ib-col-tbl td { padding:10px 12px; border-bottom:1px solid var(--border-color); vertical-align:middle; }
+.ib-col-tbl tr:last-child td { border-bottom:none; }
+.ib-col-tbl tbody tr.ib-col-data-row:hover td { background:var(--control-bg,#f8fafc); }
+.ib-col-badge { display:inline-block; padding:2px 8px; border-radius:99px; font-size:10px; font-weight:600; }
+.ib-col-badge.red { background:#fee2e2; color:#dc2626; }
+.ib-col-badge.amber { background:#fef3c7; color:#d97706; }
+.ib-col-badge.green { background:#d1fae5; color:#059669; }
+.ib-col-badge.blue { background:#dbeafe; color:#1d4ed8; }
+.ib-col-expand-btn { background:none; border:none; cursor:pointer; color:var(--text-muted); font-size:14px; padding:0 4px; }
+.ib-col-inv-row { background:var(--control-bg,#f8fafc); }
+.ib-col-inv-row td { padding:6px 12px; font-size:11px; color:var(--text-muted); border-bottom:1px solid var(--border-color); }
+.ib-col-inv-inner { display:flex; gap:12px; align-items:center; flex-wrap:wrap; padding:4px 0; }
+.ib-col-pay-btn { padding:4px 10px; border:1px solid var(--ib-p); border-radius:5px;
+  color:var(--ib-p); background:none; cursor:pointer; font-size:11px; font-weight:600;
+  transition:all .15s; white-space:nowrap; }
+.ib-col-pay-btn:hover { background:var(--ib-p); color:#fff; }
+.ib-col-advance-tag { display:inline-block; padding:2px 7px; border-radius:99px;
+  font-size:10px; font-weight:600; background:#dbeafe; color:#1d4ed8; }
+.ib-col-loading { display:flex; align-items:center; justify-content:center; padding:32px;
+  color:var(--text-muted); font-size:13px; gap:8px; }
+.ib-col-spinner { width:16px; height:16px; border:2px solid var(--border-color);
+  border-top-color:var(--ib-p); border-radius:50%; animation:ib-spin .6s linear infinite; }
+@keyframes ib-spin { to { transform:rotate(360deg); } }
+`;
+		document.head.appendChild(s);
+	}
+
+	_build_layout() {
+		this.$wrap.html(`
+		<div class="ib-col-wrap">
+			<div class="ib-col-toolbar">
+				<h2>Collections Dashboard</h2>
+				<input class="ib-col-input" id="ib-col-search" placeholder="Search customer…" />
+				<select class="ib-col-input" id="ib-col-sp" style="min-width:160px;display:none">
+					<option value="">All Reps</option>
+				</select>
+				<button class="ib-col-btn" id="ib-col-overdue">Overdue Only</button>
+				<button class="ib-col-btn" id="ib-col-refresh">↻ Refresh</button>
+				<button class="ib-col-btn" id="ib-col-si">Outstanding SIs</button>
+			</div>
+			<div id="ib-col-kpis" class="ib-col-kpis"></div>
+			<div class="ib-col-tbl-wrap">
+				<table class="ib-col-tbl">
+					<thead><tr>
+						<th style="width:32px"></th>
+						<th>Customer</th>
+						<th id="ib-col-th-sp" style="display:none">Rep</th>
+						<th style="text-align:right">Outstanding</th>
+						<th style="text-align:right">Advance</th>
+						<th style="text-align:right">Net Due</th>
+						<th>Earliest Due</th>
+						<th>Status</th>
+						<th>Invoices</th>
+						<th>Action</th>
+					</tr></thead>
+					<tbody id="ib-col-body">
+						<tr><td colspan="9"><div class="ib-col-loading"><div class="ib-col-spinner"></div>Loading…</div></td></tr>
+					</tbody>
+				</table>
+			</div>
+		</div>`);
+
+		let _search_t;
+		this.$wrap.find("#ib-col-search").on("input", (e) => {
+			clearTimeout(_search_t);
+			_search_t = setTimeout(() => { this._search = e.target.value.trim(); this.load(); }, 350);
+		});
+		this.$wrap.find("#ib-col-sp").on("change", (e) => {
+			this._filter_sp = e.target.value || null;
+			this.load();
+		});
+		this.$wrap.find("#ib-col-overdue").on("click", () => {
+			this._overdue_only = !this._overdue_only;
+			this.$wrap.find("#ib-col-overdue").toggleClass("active", this._overdue_only);
+			this.load();
+		});
+		this.$wrap.find("#ib-col-refresh").on("click", () => this.load());
+		this.$wrap.find("#ib-col-si").on("click", () =>
+			frappe.set_route("List", "Sales Invoice", { outstanding_amount: [">", 0], docstatus: 1 })
+		);
+	}
+
+	_cols() { return this._privileged ? 10 : 9; }
+
+	load() {
+		if (this._loading) return;
+		this._loading = true;
+		this.$wrap.find("#ib-col-body").html(
+			`<tr><td colspan="${this._cols()}"><div class="ib-col-loading"><div class="ib-col-spinner"></div>Loading…</div></td></tr>`
+		);
+		frappe.call({
+			method: "instabiz.instabiz.page.ib_collections_dashboard.ib_collections_dashboard.get_collections_data",
+			args: {
+				search: this._search || null,
+				filter_sp: this._filter_sp,
+				overdue_only: this._overdue_only ? 1 : 0,
+			},
+			callback: (r) => {
+				this._loading = false;
+				if (!r.message) return;
+				const d = r.message;
+				this._invoices = d.invoices || [];
+				this._privileged = d.privileged;
+				this._render_kpis(d.kpis);
+				this._render_table(d.customers || []);
+				if (d.privileged && !this._sp_loaded) {
+					this._sp_loaded = true;
+					this._setup_sp_filter();
+				}
+			},
+			error: () => {
+				this._loading = false;
+				this.$wrap.find("#ib-col-body").html(
+					`<tr><td colspan="${this._cols()}" style="text-align:center;color:#dc2626;padding:24px">Failed to load data</td></tr>`
+				);
+			}
+		});
+	}
+
+	_setup_sp_filter() {
+		frappe.call({
+			method: "instabiz.instabiz.page.ib_collections_dashboard.ib_collections_dashboard.get_sales_users",
+			callback: (r) => {
+				if (!r.message) return;
+				const $sel = this.$wrap.find("#ib-col-sp");
+				$sel.find("option:not(:first)").remove();
+				r.message.forEach(u => {
+					$sel.append(`<option value="${frappe.utils.escape_html(u.user)}">${frappe.utils.escape_html(u.full_name || u.user)}</option>`);
+				});
+				if (this._filter_sp) $sel.val(this._filter_sp);
+				$sel.show();
+				this.$wrap.find("#ib-col-th-sp").show();
+			}
+		});
+	}
+
+	_fmt(v) {
+		return "₹" + Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+	}
+
+	_render_kpis(k) {
+		this.$wrap.find("#ib-col-kpis").html(`
+			<div class="ib-col-kpi">
+				<div class="ib-col-kpi-bar" style="background:#ef4444"></div>
+				<div class="ib-col-kpi-l">Total Outstanding</div>
+				<div class="ib-col-kpi-v" style="color:#dc2626">${this._fmt(k.total_outstanding)}</div>
+			</div>
+			<div class="ib-col-kpi">
+				<div class="ib-col-kpi-bar" style="background:#1d4ed8"></div>
+				<div class="ib-col-kpi-l">Advance Available</div>
+				<div class="ib-col-kpi-v" style="color:#1d4ed8">${this._fmt(k.total_advance)}</div>
+			</div>
+			<div class="ib-col-kpi">
+				<div class="ib-col-kpi-bar" style="background:#d97757"></div>
+				<div class="ib-col-kpi-l">Net Due</div>
+				<div class="ib-col-kpi-v">${this._fmt(k.net_outstanding)}</div>
+			</div>
+			<div class="ib-col-kpi">
+				<div class="ib-col-kpi-bar" style="background:#f59e0b"></div>
+				<div class="ib-col-kpi-l">Overdue Customers</div>
+				<div class="ib-col-kpi-v" style="color:${k.overdue_count > 0 ? "#d97706" : "inherit"}">${k.overdue_count} / ${k.customer_count}</div>
+			</div>
+			<div class="ib-col-kpi">
+				<div class="ib-col-kpi-bar" style="background:#10b981"></div>
+				<div class="ib-col-kpi-l">Collected (90d)</div>
+				<div class="ib-col-kpi-v" style="color:#059669">${this._fmt(k.collected_90d)}</div>
+			</div>
+		`);
+	}
+
+	_render_table(customers) {
+		const cols = this._cols();
+		if (!customers.length) {
+			this.$wrap.find("#ib-col-body").html(
+				`<tr><td colspan="${cols}" style="text-align:center;color:var(--text-muted);padding:32px">No outstanding customers</td></tr>`
+			);
+			return;
+		}
+
+		const rows = customers.map((c, idx) => {
+			const overdue_days = Math.max(0, Number(c.days_overdue || 0));
+			const overdue = overdue_days > 0;
+			const status_cls = overdue ? (overdue_days > 30 ? "red" : "amber") : "green";
+			const status_lbl = overdue ? `${overdue_days}d overdue` : "Current";
+			const inv_list = this._invoices.filter(i => i.customer === c.customer);
+			const sp_cell = this._privileged
+				? `<td>${frappe.utils.escape_html(c.sp_name || c.sp_user || "—")}</td>` : "";
+
+			const inv_chips = inv_list.map(inv => {
+				const od = Math.max(0, Number(inv.days_overdue || 0));
+				const cls = od > 30 ? "red" : od > 0 ? "amber" : "green";
+				return `<span class="ib-col-inv-chip"
+					data-inv="${frappe.utils.escape_html(inv.name)}"
+					style="display:inline-flex;align-items:center;gap:6px;padding:4px 8px;
+					background:var(--card-bg,#fff);border:1px solid var(--border-color);
+					border-radius:6px;cursor:pointer;">
+					<span class="ib-col-inv-link" style="color:var(--ib-p);font-size:11px">${frappe.utils.escape_html(inv.name)}</span>
+					<span class="ib-col-badge ${cls}" style="font-size:9px">${this._fmt(inv.outstanding_amount)}</span>
+					${od > 0 ? `<span style="font-size:9px;color:#dc2626">+${od}d</span>` : ""}
+				</span>`;
+			}).join("");
+
+			return `
+			<tr class="ib-col-data-row" data-customer="${frappe.utils.escape_html(c.customer)}">
+				<td><button class="ib-col-expand-btn" data-idx="${idx}" title="Show invoices">▶</button></td>
+				<td style="font-weight:600">
+					<span class="ib-col-cust-link" data-customer="${frappe.utils.escape_html(c.customer)}"
+						style="color:var(--ib-p);cursor:pointer">
+						${frappe.utils.escape_html(c.customer_name || c.customer)}
+					</span>
+					${c.advance > 0 ? `<span class="ib-col-advance-tag" style="margin-left:6px">Adv: ${this._fmt(c.advance)}</span>` : ""}
+				</td>
+				${sp_cell}
+				<td style="text-align:right;font-weight:700;color:#dc2626">${this._fmt(c.outstanding)}</td>
+				<td style="text-align:right;color:#1d4ed8">${c.advance > 0 ? this._fmt(c.advance) : "—"}</td>
+				<td style="text-align:right;font-weight:600">${this._fmt(c.net_outstanding)}</td>
+				<td>${c.earliest_due ? frappe.datetime.str_to_user(c.earliest_due) : "—"}</td>
+				<td><span class="ib-col-badge ${status_cls}">${status_lbl}</span></td>
+				<td style="color:var(--text-muted)">${c.invoice_count}</td>
+				<td>
+					<button class="ib-col-pay-btn"
+						data-customer="${frappe.utils.escape_html(c.customer)}"
+						data-cname="${frappe.utils.escape_html(c.customer_name || c.customer)}">
+						Log Payment
+					</button>
+				</td>
+			</tr>
+			<tr class="ib-col-inv-row" id="ib-col-inv-${idx}" style="display:none">
+				<td colspan="${cols}">
+					<div class="ib-col-inv-inner">
+						${inv_chips || '<span style="color:var(--text-muted);font-size:11px">No outstanding invoices loaded</span>'}
+					</div>
+				</td>
+			</tr>`;
+		}).join("");
+
+		this.$wrap.find("#ib-col-body").html(rows);
+		this._bind_table_events();
+	}
+
+	_bind_table_events() {
+		// Expand/collapse invoice row
+		this.$wrap.find(".ib-col-expand-btn").on("click", function () {
+			const idx = $(this).data("idx");
+			const $inv = $(`#ib-col-inv-${idx}`);
+			const open = $inv.is(":visible");
+			$inv.toggle(!open);
+			$(this).text(open ? "▶" : "▼");
+		});
+
+		// Customer link → Customer form
+		this.$wrap.find(".ib-col-cust-link").on("click", function () {
+			frappe.set_route("Form", "Customer", $(this).data("customer"));
+		});
+
+		// Invoice chip → SI form
+		this.$wrap.find(".ib-col-inv-chip").on("click", function () {
+			frappe.set_route("Form", "Sales Invoice", $(this).data("inv"));
+		});
+
+		// Log Payment button
+		const self = this;
+		this.$wrap.find(".ib-col-pay-btn").on("click", function () {
+			self._show_payment_dialog($(this).data("customer"), $(this).data("cname"));
+		});
+	}
+
+	_show_payment_dialog(customer, customer_name) {
+		const inv_list = this._invoices.filter(i => i.customer === customer);
+		const fields = [
+			{ fieldtype: "Currency", fieldname: "amount", label: "Amount Received", reqd: 1 },
+			{ fieldtype: "Date", fieldname: "posting_date", label: "Date", default: frappe.datetime.get_today(), reqd: 1 },
+			{ fieldtype: "Link", fieldname: "mode_of_payment", label: "Mode of Payment", options: "Mode of Payment", reqd: 1 },
+			{ fieldtype: "Data", fieldname: "reference_no", label: "Cheque / Reference No" },
+		];
+
+		if (inv_list.length) {
+			fields.push({
+				fieldtype: "Select",
+				fieldname: "against_invoice",
+				label: "Against Invoice (optional — leave blank to auto-allocate)",
+				options: [""].concat(inv_list.map(i => `${i.name} (₹${Number(i.outstanding_amount).toLocaleString("en-IN", { maximumFractionDigits: 0 })})`)).join("\n"),
+			});
+		}
+
+		const d = new frappe.ui.Dialog({
+			title: `Log Payment — ${customer_name}`,
+			fields,
+			primary_action_label: "Open Payment Entry",
+			primary_action(vals) {
+				// Extract just the invoice name (before the space) if selected
+				const inv_raw = (vals.against_invoice || "").trim();
+				const against_invoice = inv_raw ? inv_raw.split(" ")[0] : null;
+
+				frappe.route_options = {
+					payment_type: "Receive",
+					party_type: "Customer",
+					party: customer,
+					posting_date: vals.posting_date,
+					paid_amount: vals.amount,
+					received_amount: vals.amount,
+					reference_no: vals.reference_no || "",
+					mode_of_payment: vals.mode_of_payment,
+				};
+				if (against_invoice) {
+					frappe.route_options["references"] = JSON.stringify([{
+						reference_doctype: "Sales Invoice",
+						reference_name: against_invoice,
+					}]);
+				}
+				d.hide();
+				frappe.new_doc("Payment Entry");
+			}
+		});
+		d.show();
+	}
+}

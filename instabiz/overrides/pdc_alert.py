@@ -38,18 +38,21 @@ def run_pdc_alert():
 		for user in users:
 			if frappe.db.exists("Notification Log", {"for_user": user, "subject": ["like", f"%{marker}%"]}):
 				continue
+			base = (
+				f"PDC due in 3 days: #{pdc.cheque_no} "
+				f"{pdc.customer_name or pdc.customer} "
+				f"Rs.{pdc.amount:,.0f} on {pdc.cheque_date}"
+			)
+			subject = f"{base[:140 - len(marker) - 1]} {marker}"
 			frappe.get_doc({
 				"doctype":       "Notification Log",
 				"for_user":      user,
+				"from_user":     "Administrator",
 				"type":          "Alert",
 				"document_type": "IB PDC",
 				"document_name": pdc.name,
-				"subject":       (
-					f"🏦 PDC due in 3 days — Cheque #{pdc.cheque_no} | "
-					f"Customer: {pdc.customer_name or pdc.customer} | "
-					f"Bank: {pdc.bank_name} | "
-					f"Amount: ₹{pdc.amount:,.2f} | "
-					f"Date: {pdc.cheque_date} {marker}"
-				),
+				"subject":       subject,
 				"email_content": "",
 			}).insert(ignore_permissions=True)
+
+	frappe.db.commit()

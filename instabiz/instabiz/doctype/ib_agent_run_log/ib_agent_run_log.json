@@ -1,0 +1,111 @@
+{
+ "actions": [],
+ "autoname": "IB-ARL-.YYYY.-.#####",
+ "creation": "2026-06-22 00:00:00",
+ "doctype": "DocType",
+ "description": "AI agent run audit trail",
+ "engine": "InnoDB",
+ "field_order": [
+  "agent_code",
+  "trigger_type",
+  "status",
+  "col_break_1",
+  "run_at",
+  "duration_seconds",
+  "records_processed",
+  "actions_taken",
+  "section_detail",
+  "summary_json",
+  "error_details"
+ ],
+ "fields": [
+  {
+   "fieldname": "agent_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Agent",
+   "reqd": 1
+  },
+  {
+   "fieldname": "trigger_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Trigger",
+   "options": "schedule\nmanual\nevent",
+   "default": "schedule",
+   "reqd": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "running\nsuccess\nfailed\npartial",
+   "default": "running",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "run_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Run At"
+  },
+  {
+   "fieldname": "duration_seconds",
+   "fieldtype": "Float",
+   "label": "Duration (s)",
+   "precision": 2
+  },
+  {
+   "fieldname": "records_processed",
+   "fieldtype": "Int",
+   "label": "Records Processed"
+  },
+  {
+   "fieldname": "actions_taken",
+   "fieldtype": "Int",
+   "label": "Actions Queued"
+  },
+  {
+   "fieldname": "section_detail",
+   "fieldtype": "Section Break",
+   "label": "Details"
+  },
+  {
+   "fieldname": "summary_json",
+   "fieldtype": "Code",
+   "label": "Summary",
+   "options": "JSON"
+  },
+  {
+   "fieldname": "error_details",
+   "fieldtype": "Text",
+   "label": "Error Details"
+  }
+ ],
+ "is_submittable": 0,
+ "module": "Instabiz",
+ "name": "IB Agent Run Log",
+ "permissions": [
+  {
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "write": 1,
+   "create": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC"
+}

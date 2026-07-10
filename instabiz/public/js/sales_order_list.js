@@ -67,6 +67,7 @@ frappe.listview_settings["Sales Order"] = {
         listview.render_list = function () {
             _orig_render_list();
             ib_disable_status_click_filter(listview);
+            ib_inject_so_prod_badges(listview);
         };
 
         frappe.router.on("change", function () {
@@ -145,6 +146,40 @@ function ib_setup_so_total_bar(listview) {
     // .off().on() keeps binding idempotent across before_render calls
     listview.$result.off("change.ib_so_total").on("change.ib_so_total", "input[type=checkbox]", function () {
         setTimeout(() => ib_update_so_total_bar(listview), 0);
+    });
+}
+
+// ── Production badge injection ────────────────────────────────────────────────
+
+function ib_inject_so_prod_badges(listview) {
+    if (!listview.data || !listview.data.length) return;
+    const soNames = listview.data.map(r => r.name).filter(Boolean);
+    if (!soNames.length) return;
+
+    frappe.call({
+        method: "instabiz.overrides.production.get_so_list_badges",
+        args: { sales_orders: soNames },
+        callback(r) {
+            const badges = r.message || {};
+            soNames.forEach(name => {
+                const info = badges[name];
+                if (!info) return;
+                const $row = listview.$result.find(`.list-row[data-name="${CSS.escape(name)}"]`);
+                if (!$row.length) return;
+                $row.find(".ib-so-prod-badge").remove();
+                const $badge = $(`
+                    <span class="ib-so-prod-badge" style="
+                        display:inline-flex;align-items:center;gap:3px;
+                        background:${info.color}15;color:${info.color};
+                        border:1px solid ${info.color}40;border-radius:10px;
+                        padding:1px 7px;font-size:10px;font-weight:600;
+                        white-space:nowrap;vertical-align:middle;margin-left:6px">
+                        <iconify-icon icon="lucide:factory" width="9" height="9"></iconify-icon>
+                        ${frappe.utils.escape_html(info.badge)}
+                    </span>`);
+                $row.find(".level-item.list-row-activity").prepend($badge);
+            });
+        },
     });
 }
 

@@ -92,7 +92,7 @@ def _assign_machine_load_balanced(stage, location=None):
 	placeholders = ", ".join(["%s"] * len(machine_names))
 	load_rows = frappe.db.sql(
 		f"""
-		SELECT machine, COUNT(*) AS load
+		SELECT machine, COUNT(*) AS load_count
 		FROM `tabIB Work Order`
 		WHERE machine IN ({placeholders}) AND status IN ('Pending', 'In Progress')
 		GROUP BY machine
@@ -100,7 +100,7 @@ def _assign_machine_load_balanced(stage, location=None):
 		tuple(machine_names),
 		as_dict=True,
 	)
-	load_map = {r.machine: r.load for r in load_rows}
+	load_map = {r.machine: r.load_count for r in load_rows}
 
 	# Sort by load ascending — ties broken by name (stable order)
 	pool.sort(key=lambda m: load_map.get(m.name, 0))
@@ -139,13 +139,16 @@ def get_production_dashboard():
 	"""KPIs + stage pipeline counts + recent entries."""
 	today_date = today()
 
-	active_wo = frappe.db.count("IB Work Order", {"status": "In Progress"})
+	active_wo = frappe.db.sql(
+		"SELECT COUNT(*) FROM `tabIB Work Order` WHERE status NOT IN ('Completed','Cancelled')"
+	)[0][0]
 	pending_wo = frappe.db.count("IB Work Order", {"status": "Pending"})
 
 	completed_today = frappe.db.sql(
 		"""
 		SELECT COUNT(*) FROM `tabIB Work Order`
-		WHERE DATE(completed_at) = %s
+		WHERE status = 'Completed'
+		  AND DATE(COALESCE(completed_at, modified)) = %s
 		""",
 		(today_date,),
 	)[0][0]
@@ -297,7 +300,8 @@ def save_machine(
 	notes=None,
 	name=None,  # ignored — machine_code IS the name (autoname = field:machine_code)
 ):
-	"""Create or update IB Machine."""
+	"""Create or update IB Machine. Requires Factory Management or System Manager."""
+	_require_production_role()
 	exists = frappe.db.exists("IB Machine", machine_code)
 	if exists:
 		doc = frappe.get_doc("IB Machine", machine_code)
@@ -411,6 +415,10 @@ def create_order_sheet(sales_order, priority="Normal", notes=None):
 	if not locked:
 		frappe.throw(_("Could not acquire lock for Order Sheet creation. Please try again."))
 
+	# Everything below holds the advisory lock — release it on ANY exit path
+	# (validation error, SO fetch failure, insert failure, WO auto-create failure),
+	# not just the duplicate-check branch. Otherwise the lock leaks for the life
+	# of the DB connection and blocks all future Order Sheet creation for this SO.
 	try:
 		existing = frappe.db.get_value(
 			"IB Order Sheet",
@@ -421,44 +429,42 @@ def create_order_sheet(sales_order, priority="Normal", notes=None):
 			frappe.throw(
 				_("An active Order Sheet ({0}) already exists for Sales Order {1}").format(existing, sales_order)
 			)
-	except frappe.ValidationError:
+
+		so = frappe.get_doc("Sales Order", sales_order)
+
+		customer_name = frappe.db.get_value("Customer", so.customer, "customer_name") or so.customer
+
+		doc = frappe.new_doc("IB Order Sheet")
+		doc.sales_order = sales_order
+		doc.customer = so.customer
+		doc.customer_name = customer_name
+		doc.order_date = so.transaction_date
+		doc.delivery_date = so.delivery_date
+		doc.priority = priority
+		doc.status = "Draft"
+		if notes:
+			doc.notes = notes
+
+		# Pull items from SO
+		for item in so.items:
+			doc.append("items", {
+				"item_code": item.item_code,
+				"item_name": item.item_name,
+				"qty": item.qty,
+				"uom": item.uom,
+				"completed_qty": 0.0,
+				"status": "Pending",
+			})
+
+		doc.insert(ignore_permissions=True)
+		frappe.db.commit()
+
+		# Auto-create WOs for ALL applicable stages per item (route-aware)
+		auto_create_all_stage_wos(doc.name)
+
+		return doc.name
+	finally:
 		frappe.db.sql("SELECT RELEASE_LOCK(%s)", lock_name)
-		raise
-
-	so = frappe.get_doc("Sales Order", sales_order)
-
-	customer_name = frappe.db.get_value("Customer", so.customer, "customer_name") or so.customer
-
-	doc = frappe.new_doc("IB Order Sheet")
-	doc.sales_order = sales_order
-	doc.customer = so.customer
-	doc.customer_name = customer_name
-	doc.order_date = so.transaction_date
-	doc.delivery_date = so.delivery_date
-	doc.priority = priority
-	doc.status = "Draft"
-	if notes:
-		doc.notes = notes
-
-	# Pull items from SO
-	for item in so.items:
-		doc.append("items", {
-			"item_code": item.item_code,
-			"item_name": item.item_name,
-			"qty": item.qty,
-			"uom": item.uom,
-			"completed_qty": 0.0,
-			"status": "Pending",
-		})
-
-	doc.insert(ignore_permissions=True)
-	frappe.db.commit()
-
-	# Auto-create WOs for ALL applicable stages per item (route-aware)
-	auto_create_all_stage_wos(doc.name)
-
-	frappe.db.sql("SELECT RELEASE_LOCK(%s)", lock_name)
-	return doc.name
 
 
 @frappe.whitelist()
@@ -491,13 +497,13 @@ def get_stage_pipeline(date=None):
 	rows = frappe.db.sql(
 		"""
 		SELECT wo.name, wo.item_code, wo.stage, wo.machine, wo.status,
-			wo.target_qty, wo.completed_qty, wo.wastage_pct, wo.order_sheet,
-			osi.item_name,
-			os.priority
+			wo.target_qty, wo.target_uom, wo.completed_qty, wo.wastage_pct,
+			wo.order_sheet, wo.order_sheet_item, wo.priority AS wo_priority,
+			COALESCE(osi.item_name, wo.item_name) AS item_name,
+			os.priority, os.customer_name
 		FROM `tabIB Work Order` wo
 		LEFT JOIN `tabIB Order Sheet` os ON os.name = wo.order_sheet
-		LEFT JOIN `tabIB Order Sheet Item` osi
-			ON osi.parent = wo.order_sheet AND osi.item_code = wo.item_code
+		LEFT JOIN `tabIB Order Sheet Item` osi ON osi.name = wo.order_sheet_item
 		WHERE wo.status IN ('Pending', 'In Progress')
 		ORDER BY wo.stage, FIELD(os.priority, 'Urgent', 'High', 'Normal', 'Low'), wo.creation
 		""",
@@ -516,12 +522,15 @@ def get_stage_pipeline(date=None):
 			"item_code": row.item_code,
 			"item_name": row.item_name,
 			"machine": row.machine,
-			"priority": row.priority,
+			"priority": row.priority or row.wo_priority,
 			"status": row.status,
 			"target_qty": row.target_qty,
+			"target_uom": row.target_uom,
 			"completed_qty": row.completed_qty,
 			"wastage_pct": row.wastage_pct,
 			"order_sheet": row.order_sheet,
+			"order_sheet_item": row.order_sheet_item,
+			"customer_name": row.customer_name,
 		}
 		if key in pipeline:
 			pipeline[key].append(entry)
@@ -714,20 +723,23 @@ def assign_machine(work_order, machine):
 def start_work_order(work_order):
 	"""Set status=In Progress, record started_at."""
 	_require_production_role()
-	doc = frappe.get_doc("IB Work Order", work_order)
-	if doc.status == "In Progress":
-		frappe.throw(_("Work Order {0} is already In Progress.").format(work_order))
-	if doc.status not in ("Pending", "On Hold"):
+	current_status = frappe.db.get_value("IB Work Order", work_order, "status")
+	if current_status == "In Progress":
+		return {"status": "ok", "started_at": frappe.db.get_value("IB Work Order", work_order, "started_at")}
+	if current_status not in ("Pending", "On Hold"):
 		frappe.throw(
 			_("Work Order {0} cannot be started from status '{1}'. Expected: Pending or On Hold.").format(
-				work_order, doc.status
+				work_order, current_status
 			)
 		)
-	doc.status = "In Progress"
-	doc.started_at = now()
-	doc.save(ignore_permissions=True)
+	started_at = now()
+	frappe.db.set_value("IB Work Order", work_order, {"status": "In Progress", "started_at": started_at})
+	# frappe.db.set_value bypasses Document events — fire the n8n webhook explicitly.
+	from instabiz.overrides.n8n_hooks import on_work_order_update
+	doc = frappe.get_doc("IB Work Order", work_order)
+	on_work_order_update(doc)
 	frappe.db.commit()
-	return {"status": "ok", "started_at": doc.started_at}
+	return {"status": "ok", "started_at": started_at}
 
 
 @frappe.whitelist()
@@ -743,28 +755,46 @@ def complete_work_order(work_order):
 				work_order, doc.status
 			)
 		)
+	completed_at = now()
+	# completed_qty is never populated (IB Production Entry is unused by design) — fall back
+	# to target_qty so the WO/Order Sheet Item actually reach "Completed" status.
+	qty_done = flt(doc.completed_qty) or flt(doc.target_qty)
+	frappe.db.set_value(
+		"IB Work Order", work_order,
+		{"status": "Completed", "completed_at": completed_at, "completed_qty": qty_done},
+	)
+	# frappe.db.set_value bypasses Document events — the IB Work Order.on_update hook
+	# (on_work_order_update_notify + n8n's on_work_order_update) never fires from this
+	# path. Call both directly so the bell + webhook actually fire.
 	doc.status = "Completed"
-	doc.completed_at = now()
-	doc.save(ignore_permissions=True)
+	doc.completed_at = completed_at
+	doc.completed_qty = qty_done
+	on_work_order_update_notify(doc)
+	from instabiz.overrides.n8n_hooks import on_work_order_update
+	on_work_order_update(doc)
 
 	# Update Order Sheet Item completed_qty and status
 	if doc.order_sheet and doc.item_code:
-		_update_order_sheet_item(doc.order_sheet, doc.item_code, doc.completed_qty)
+		_update_order_sheet_item(doc.order_sheet, doc.item_code, qty_done,
+								 order_sheet_item=doc.order_sheet_item or None)
 		_update_order_sheet_progress(doc.order_sheet)
 
 	frappe.db.commit()
-	return {"status": "ok", "completed_at": doc.completed_at}
+	return {"status": "ok", "completed_at": completed_at}
 
 
 @frappe.whitelist()
 def put_on_hold(work_order):
 	"""Set status=On Hold."""
 	_require_production_role()
-	doc = frappe.get_doc("IB Work Order", work_order)
-	if doc.status == "On Hold":
+	current_status = frappe.db.get_value("IB Work Order", work_order, "status")
+	if current_status == "On Hold":
 		frappe.throw(_("Work Order {0} is already On Hold.").format(work_order))
-	doc.status = "On Hold"
-	doc.save(ignore_permissions=True)
+	frappe.db.set_value("IB Work Order", work_order, "status", "On Hold")
+	# frappe.db.set_value bypasses Document events — fire the n8n webhook explicitly.
+	from instabiz.overrides.n8n_hooks import on_work_order_update
+	doc = frappe.get_doc("IB Work Order", work_order)
+	on_work_order_update(doc)
 	frappe.db.commit()
 	return {"status": "ok"}
 
@@ -826,7 +856,6 @@ def get_dpr(date=None):
 		SELECT pe.name, pe.work_order, pe.stage, pe.machine,
 			pe.operator, pe.entry_date,
 			pe.input_qty, pe.output_qty, pe.wastage_qty, pe.wastage_pct,
-			pe.status,
 			TIMESTAMPDIFF(MINUTE, pe.start_time, pe.end_time) AS duration_min
 		FROM `tabIB Production Entry` pe
 		WHERE pe.entry_date = %s AND pe.docstatus = 1
@@ -836,17 +865,34 @@ def get_dpr(date=None):
 		as_dict=True,
 	)
 
+	# WO completions for the day — visible even when no entries are logged
+	wo_done = frappe.db.sql(
+		"""
+		SELECT stage, COUNT(*) AS cnt, SUM(completed_qty) AS qty
+		FROM `tabIB Work Order`
+		WHERE status = 'Completed' AND DATE(COALESCE(completed_at, modified)) = %s
+		GROUP BY stage
+		""",
+		(date,),
+		as_dict=True,
+	)
+	wo_summary = {
+		"wo_completed": sum(r.cnt for r in wo_done),
+		"wo_by_stage": {r.stage: {"count": r.cnt, "qty": flt(r.qty)} for r in wo_done},
+	}
+
 	if not entries:
 		return {
 			"date": date,
 			"summary": {
 				"total_entries": 0,
-				"total_input_qty": 0,
-				"total_output_qty": 0,
+				"total_input": 0,
+				"total_output": 0,
 				"avg_wastage_pct": 0,
 				"total_hours": 0,
+				**wo_summary,
 			},
-			"stage_table": [],
+			"stages": [],
 			"machine_breakdown": {},
 		}
 
@@ -880,10 +926,10 @@ def get_dpr(date=None):
 
 	summary = {
 		"total_entries": len(entries),
-		"total_input_qty": total_input,
-		"total_output_qty": total_output,
+		"total_input":   total_input,
+		"total_output":  total_output,
 		"avg_wastage_pct": avg_wastage,
-		"total_hours": total_hours,
+		"total_hours":   total_hours,
 	}
 
 	# Stage table
@@ -999,20 +1045,35 @@ def get_dpr(date=None):
 				})
 			machine_breakdown[stage] = mb_list
 
+	# Embed machines list into each stage row for JS consumption
+	for row in stage_table:
+		raw_machines = machine_breakdown.get(row["stage"], [])
+		row["machines"] = [
+			{
+				"machine": m.get("machine_name") or m.get("machine_code") or "",
+				"entries": m.get("entries", 0),
+				"output_qty": m.get("output_qty", 0),
+				"wastage_pct": m.get("wastage_pct", 0),
+				"above_norm": m.get("above_norm", False),
+				"status": "Above Norm" if m.get("above_norm") else "Normal",
+			}
+			for m in raw_machines
+		]
+
 	return {
 		"date": date,
-		"summary": summary,
-		"stage_table": stage_table,
+		"stages": stage_table,
+		"summary": {**summary, **wo_summary},
 		"machine_breakdown": machine_breakdown,
 	}
 
 
 @frappe.whitelist()
-def get_weekly_dpr(week_start=None):
-	"""Return 7-day production summary."""
+def get_weekly_dpr(week_start=None, date=None):
+	"""Return 7-day production summary. `date` is an alias for `week_start` (JS sends `date`)."""
 	if not week_start:
-		# Default to Monday of current week
-		today_dt = getdate(today())
+		week_start = date or today()
+		today_dt = getdate(week_start)
 		week_start = add_days(today_dt, -today_dt.weekday())
 	else:
 		week_start = getdate(week_start)
@@ -1047,17 +1108,29 @@ def get_weekly_dpr(week_start=None):
 		r = row_map.get(day_str)
 		result.append({
 			"date": day_str,
-			"entries": r.entries if r else 0,
-			"total_input_qty": flt(r.total_input_qty) if r else 0.0,
-			"total_output_qty": flt(r.total_output_qty) if r else 0.0,
-			"total_wastage_qty": flt(r.total_wastage_qty) if r else 0.0,
-			"avg_wastage_pct": round(flt(r.avg_wastage_pct), 1) if r else 0.0,
-			"total_hours": round(flt(r.total_minutes) / 60, 2) if r else 0.0,
+			"entries":     r.entries if r else 0,
+			"input_qty":   flt(r.total_input_qty)  if r else 0.0,
+			"output_qty":  flt(r.total_output_qty) if r else 0.0,
+			"wastage_qty": flt(r.total_wastage_qty) if r else 0.0,
+			"wastage_pct": round(flt(r.avg_wastage_pct), 1) if r else 0.0,
+			"hours":       round(flt(r.total_minutes) / 60, 2) if r else 0.0,
 		})
+
+	total_output = sum(d["output_qty"] for d in result)
+	days_with_data = sum(1 for d in result if d["entries"] > 0)
+	avg_daily = round(total_output / days_with_data, 1) if days_with_data else 0.0
+	avg_wastage = round(
+		sum(d["wastage_pct"] for d in result if d["entries"] > 0) / days_with_data, 1
+	) if days_with_data else 0.0
 
 	return {
 		"week_start": str(week_start),
 		"week_end": str(week_end),
+		"summary": {
+			"total_output": total_output,
+			"avg_daily": avg_daily,
+			"avg_wastage_pct": avg_wastage,
+		},
 		"days": result,
 	}
 
@@ -1066,13 +1139,22 @@ def get_weekly_dpr(week_start=None):
 # Helpers (not whitelisted)
 # ---------------------------------------------------------------------------
 
-def _update_order_sheet_item(order_sheet, item_code, completed_qty):
-	"""Update IB Order Sheet Item completed_qty and flip status."""
-	rows = frappe.db.get_all(
-		"IB Order Sheet Item",
-		filters={"parent": order_sheet, "item_code": item_code},
-		fields=["name", "qty"],
-	)
+def _update_order_sheet_item(order_sheet, item_code, completed_qty, order_sheet_item=None):
+	"""Update IB Order Sheet Item completed_qty and flip status.
+
+	Uses order_sheet_item (child row name) as direct key when available — avoids
+	updating all rows when the same item_code appears multiple times in one OS.
+	Falls back to item_code scan for legacy WOs.
+	"""
+	if order_sheet_item:
+		row = frappe.db.get_value("IB Order Sheet Item", order_sheet_item, ["name", "qty"], as_dict=True)
+		rows = [row] if row else []
+	else:
+		rows = frappe.db.get_all(
+			"IB Order Sheet Item",
+			filters={"parent": order_sheet, "item_code": item_code},
+			fields=["name", "qty"],
+		)
 	if not rows:
 		return
 	for row in rows:
@@ -1097,7 +1179,13 @@ def _update_order_sheet_progress(order_sheet_name):
 	if not items:
 		return
 	if all(item.status == "Completed" for item in items):
+		already_completed = frappe.db.get_value("IB Order Sheet", order_sheet_name, "status") == "Completed"
 		frappe.db.set_value("IB Order Sheet", order_sheet_name, "status", "Completed")
+		if not already_completed:
+			# frappe.db.set_value bypasses Document events — the n8n order_sheet_completed
+			# webhook (wired to IB Order Sheet.on_update) never fires from this path.
+			from instabiz.overrides.n8n_hooks import on_order_sheet_updated
+			on_order_sheet_updated(frappe.get_doc("IB Order Sheet", order_sheet_name))
 
 
 @frappe.whitelist()
@@ -1111,14 +1199,48 @@ def advance_to_next_stage(work_order):
 	"""
 	_require_production_role()
 	doc = frappe.get_doc("IB Work Order", work_order)
+
+	# Idempotency: already completed — find the next-stage WO that was activated and return it
+	if doc.status == "Completed":
+		stage_route = _get_stage_route(doc.item_code)
+		try:
+			route_idx = stage_route.index(doc.stage)
+		except ValueError:
+			return {"status": "ok", "next_stage": None, "message": "Already completed"}
+		if route_idx >= len(stage_route) - 1:
+			return {"status": "ok", "next_stage": None, "message": "Production complete — item delivered"}
+		next_stage = stage_route[route_idx + 1]
+		lf = {"order_sheet": doc.order_sheet, "stage": next_stage, "status": ["not in", ["Cancelled"]]}
+		if doc.order_sheet_item:
+			lf["order_sheet_item"] = doc.order_sheet_item
+		else:
+			lf["item_code"] = doc.item_code
+		existing_name = frappe.db.get_value("IB Work Order", lf, "name")
+		return {"status": "ok", "next_stage": next_stage, "new_work_order": existing_name or ""}
+
 	if doc.status != "In Progress":
 		frappe.throw(_("Work Order {0} must be In Progress to advance. Current status: {1}").format(work_order, doc.status))
 
 	# Complete current stage
+	completed_at = now()
+	# completed_qty is never populated (IB Production Entry is unused by design) — fall back
+	# to target_qty so the WO/Order Sheet Item actually reach "Completed" status.
+	qty_done = flt(doc.completed_qty) or flt(doc.target_qty)
+	frappe.db.set_value(
+		"IB Work Order", work_order,
+		{"status": "Completed", "completed_at": completed_at, "completed_qty": qty_done},
+	)
 	doc.status = "Completed"
-	doc.completed_at = now()
-	doc.save(ignore_permissions=True)
-	_update_order_sheet_item(doc.order_sheet, doc.item_code, flt(doc.completed_qty))
+	doc.completed_at = completed_at
+	doc.completed_qty = qty_done
+	# frappe.db.set_value bypasses Document events — the IB Work Order.on_update hook
+	# (on_work_order_update_notify + n8n's on_work_order_update) never fires from this
+	# path. Call both directly so the bell + webhook actually fire.
+	on_work_order_update_notify(doc)
+	from instabiz.overrides.n8n_hooks import on_work_order_update
+	on_work_order_update(doc)
+	_update_order_sheet_item(doc.order_sheet, doc.item_code, qty_done,
+							 order_sheet_item=doc.order_sheet_item or None)
 
 	# Determine next stage from item's route (route-aware, skips inapplicable stages)
 	stage_route = _get_stage_route(doc.item_code)
@@ -1138,10 +1260,15 @@ def advance_to_next_stage(work_order):
 	location = _get_os_location(doc.order_sheet)
 
 	# Check if WO for next stage was pre-created (by auto_create_all_stage_wos)
+	# Prefer per-row key (order_sheet_item) — falls back to item_code for legacy WOs
+	lookup_filters = {"order_sheet": doc.order_sheet, "stage": next_stage, "status": ["not in", ["Cancelled"]]}
+	if doc.order_sheet_item:
+		lookup_filters["order_sheet_item"] = doc.order_sheet_item
+	else:
+		lookup_filters["item_code"] = doc.item_code
 	existing = frappe.db.get_value(
 		"IB Work Order",
-		{"order_sheet": doc.order_sheet, "item_code": doc.item_code, "stage": next_stage,
-		 "status": ["not in", ["Cancelled"]]},
+		lookup_filters,
 		["name", "machine"],
 		as_dict=True,
 	)
@@ -1166,16 +1293,17 @@ def advance_to_next_stage(work_order):
 
 	# WO doesn't exist yet — create it now (fallback for Order Sheets created before this feature)
 	new_wo = frappe.new_doc("IB Work Order")
-	new_wo.order_sheet = doc.order_sheet
-	new_wo.sales_order = doc.sales_order or ""
-	new_wo.item_code = doc.item_code
-	new_wo.item_name = doc.item_name
-	new_wo.stage = next_stage
-	new_wo.priority = doc.priority
-	new_wo.target_qty = flt(doc.completed_qty) or flt(doc.target_qty)
-	new_wo.target_uom = doc.target_uom
-	new_wo.status = "Pending"
-	new_wo.machine = _assign_machine_load_balanced(next_stage, location) or ""
+	new_wo.order_sheet      = doc.order_sheet
+	new_wo.order_sheet_item = doc.order_sheet_item or ""
+	new_wo.sales_order      = doc.sales_order or ""
+	new_wo.item_code        = doc.item_code
+	new_wo.item_name        = doc.item_name
+	new_wo.stage            = next_stage
+	new_wo.priority         = doc.priority
+	new_wo.target_qty       = flt(doc.completed_qty) or flt(doc.target_qty)
+	new_wo.target_uom       = doc.target_uom
+	new_wo.status           = "Pending"
+	new_wo.machine          = _assign_machine_load_balanced(next_stage, location) or ""
 	new_wo.insert(ignore_permissions=True)
 
 	_update_order_sheet_progress(doc.order_sheet)
@@ -1210,9 +1338,10 @@ def auto_create_all_stage_wos(order_sheet):
 		stage_route = _get_stage_route(item.item_code)
 
 		for idx, stage in enumerate(stage_route):
+			# Per-row key: order_sheet + order_sheet_item (child row name) + stage
 			existing = frappe.db.get_value(
 				"IB Work Order",
-				{"order_sheet": order_sheet, "item_code": item.item_code,
+				{"order_sheet": order_sheet, "order_sheet_item": item.name,
 				 "stage": stage, "status": ["not in", ["Cancelled"]]},
 				"name",
 			)
@@ -1221,15 +1350,16 @@ def auto_create_all_stage_wos(order_sheet):
 				continue
 
 			wo = frappe.new_doc("IB Work Order")
-			wo.order_sheet  = order_sheet
-			wo.sales_order  = os_doc.sales_order or ""
-			wo.item_code    = item.item_code
-			wo.item_name    = item.item_name
-			wo.stage        = stage
-			wo.priority     = os_doc.priority or "Normal"
-			wo.target_qty   = flt(item.qty)
-			wo.target_uom   = item.uom
-			wo.status       = "Pending"
+			wo.order_sheet       = order_sheet
+			wo.order_sheet_item  = item.name   # per-row key
+			wo.sales_order       = os_doc.sales_order or ""
+			wo.item_code         = item.item_code
+			wo.item_name         = item.item_name
+			wo.stage             = stage
+			wo.priority          = os_doc.priority or "Normal"
+			wo.target_qty        = flt(item.qty)
+			wo.target_uom        = item.uom
+			wo.status            = "Pending"
 			# Assign machine only to first stage — rest assigned when stage activates
 			if idx == 0:
 				wo.machine = _assign_machine_load_balanced(stage, location) or ""
@@ -1376,7 +1506,7 @@ def get_wo_entries(work_order):
 		fields=[
 			"name", "entry_date", "stage", "machine", "operator",
 			"input_qty", "output_qty", "wastage_qty", "wastage_pct",
-			"hours_worked", "wastage_reason", "status", "docstatus",
+			"hours_worked", "wastage_reason", "docstatus",
 		],
 		order_by="entry_date desc, creation desc",
 	)
@@ -1704,4 +1834,324 @@ def get_so_production_status(sales_order):
 		"status":          os_doc.status,
 		"delivery_date":   str(os_doc.delivery_date) if os_doc.delivery_date else None,
 		"items":           items_out,
+	}
+
+
+# ── Drag-and-drop stage move (Pipeline view) ──────────────────────────────────
+
+_VALID_STAGES = {"Coating", "Slitting", "Rewinding", "Cutting", "Packing", "Ready to Deliver", "Delivered"}
+
+
+@frappe.whitelist()
+def move_work_order_stage(work_order, new_stage):
+	"""Reassign a Work Order to a different pipeline stage (drag-and-drop in Pipeline view)."""
+	_require_production_role()
+	if new_stage not in _VALID_STAGES:
+		frappe.throw(frappe._("Invalid stage: {0}").format(new_stage))
+	doc = frappe.get_doc("IB Work Order", work_order)
+	if doc.status == "Completed":
+		frappe.throw(frappe._("Cannot move completed Work Order {0} to a different stage.").format(work_order))
+	old_stage = doc.stage
+	if old_stage == new_stage:
+		return {"ok": True, "changed": False}
+	doc.stage = new_stage
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"ok": True, "changed": True, "old_stage": old_stage, "new_stage": new_stage}
+
+
+# ── Sales Order production panel ──────────────────────────────────────────────
+
+@frappe.whitelist()
+def get_so_production_panel(sales_order):
+	"""Production stage progress + dispatch status for SO form panel."""
+	result = get_so_production_status(sales_order)
+	result["dispatch"] = _get_dispatch_info(sales_order)
+
+	if result.get("has_order_sheet"):
+		items = result.get("items", [])
+		rtd_done = bool(items) and all(
+			any(s["status"] == "Completed" and s["stage"] == "Ready to Deliver"
+				for s in item.get("stages", []))
+			for item in items
+		)
+		result["ready_to_deliver"] = rtd_done
+	else:
+		result["ready_to_deliver"] = False
+
+	return result
+
+
+def _get_dispatch_info(sales_order):
+	"""Return dispatch status from linked Delivery Notes."""
+	dns = frappe.db.sql("""
+		SELECT DISTINCT dn.name, dn.status, dn.posting_date,
+		       dn.custom_lr_number, dn.lr_no, dn.transporter_name, dn.vehicle_no
+		FROM `tabDelivery Note` dn
+		JOIN `tabDelivery Note Item` dni ON dni.parent = dn.name
+		WHERE dn.docstatus = 1 AND dni.against_sales_order = %s
+		ORDER BY dn.posting_date DESC
+		LIMIT 5
+	""", (sales_order,), as_dict=True)
+
+	if not dns:
+		return {"status": "Not Dispatched", "dns": []}
+
+	latest = dns[0]
+	lr = latest.get("custom_lr_number") or latest.get("lr_no") or ""
+
+	si_exists = frappe.db.sql("""
+		SELECT 1 FROM `tabSales Invoice` si
+		JOIN `tabSales Invoice Item` sii ON sii.parent = si.name
+		WHERE si.docstatus = 1 AND sii.sales_order = %s LIMIT 1
+	""", (sales_order,))
+
+	if si_exists or latest.status == "Completed":
+		dispatch_status = "Delivered"
+	elif lr:
+		dispatch_status = "In Transit"
+	else:
+		dispatch_status = "Dispatched"
+
+	return {
+		"status": dispatch_status,
+		"latest_dn": latest.name,
+		"lr_number": lr,
+		"transporter": latest.transporter_name or "",
+		"vehicle": latest.vehicle_no or "",
+		"posting_date": str(latest.posting_date) if latest.posting_date else None,
+		"dns": [dict(dn) for dn in dns],
+	}
+
+
+@frappe.whitelist()
+def get_so_list_badges(sales_orders):
+	"""Batch fetch production + dispatch badge for a list of SO names."""
+	if isinstance(sales_orders, str):
+		sales_orders = json.loads(sales_orders)
+	if not sales_orders:
+		return {}
+
+	ph = ", ".join(["%s"] * len(sales_orders))
+	t = tuple(sales_orders)
+
+	os_rows = frappe.db.sql(
+		f"SELECT sales_order, name, status FROM `tabIB Order Sheet` WHERE sales_order IN ({ph}) AND status != 'Cancelled'",
+		t, as_dict=True,
+	)
+	os_map = {r.sales_order: r for r in os_rows}
+
+	dn_rows = frappe.db.sql(f"""
+		SELECT DISTINCT dni.against_sales_order AS so, dn.name, dn.status,
+		       dn.custom_lr_number, dn.lr_no
+		FROM `tabDelivery Note` dn
+		JOIN `tabDelivery Note Item` dni ON dni.parent = dn.name
+		WHERE dn.docstatus = 1 AND dni.against_sales_order IN ({ph})
+		ORDER BY dn.posting_date DESC
+	""", t, as_dict=True)
+	dn_map = {}
+	for r in dn_rows:
+		if r.so not in dn_map:
+			dn_map[r.so] = r
+
+	rtd_rows = frappe.db.sql(f"""
+		SELECT os.sales_order, COUNT(*) AS cnt
+		FROM `tabIB Work Order` wo
+		JOIN `tabIB Order Sheet` os ON os.name = wo.order_sheet
+		WHERE os.sales_order IN ({ph})
+		  AND wo.stage = 'Ready to Deliver' AND wo.status = 'Completed'
+		GROUP BY os.sales_order
+	""", t, as_dict=True)
+	rtd_map = {r.sales_order: r.cnt for r in rtd_rows}
+
+	result = {}
+	for so in sales_orders:
+		os = os_map.get(so)
+		dn = dn_map.get(so)
+		rtd = rtd_map.get(so, 0)
+
+		if dn:
+			lr = dn.custom_lr_number or dn.lr_no or ""
+			if dn.status == "Completed":
+				badge, color = "Delivered", "#059669"
+			elif lr:
+				badge, color = "In Transit", "#0891b2"
+			else:
+				badge, color = "Dispatched", "#2563eb"
+		elif rtd > 0:
+			badge, color = "Ready to Deliver", "#ea580c"
+		elif os:
+			badge, color = "In Production", "#7c3aed"
+		else:
+			badge, color = "Not Started", "#9ca3af"
+
+		result[so] = {"badge": badge, "color": color}
+
+	return result
+
+
+# ── Job bundles ───────────────────────────────────────────────────────────────
+
+@frappe.whitelist()
+def get_job_bundles():
+	"""Group Pending WOs by item_code+stage across order sheets for efficient batch assignment."""
+	rows = frappe.db.sql("""
+		SELECT wo.name, wo.item_code, wo.item_name, wo.stage, wo.target_qty,
+		       wo.target_uom, wo.machine, wo.batch_group, wo.order_sheet,
+		       os.priority, os.sales_order, os.customer_name, os.delivery_date
+		FROM `tabIB Work Order` wo
+		JOIN `tabIB Order Sheet` os ON os.name = wo.order_sheet
+		WHERE wo.status = 'Pending'
+		ORDER BY wo.item_code, wo.stage,
+		         FIELD(os.priority, 'Urgent', 'High', 'Normal', 'Low')
+	""", as_dict=True)
+
+	bundle_map = {}
+	for wo in rows:
+		key = f"{wo.item_code}|||{wo.stage}"
+		if key not in bundle_map:
+			bundle_map[key] = {
+				"item_code": wo.item_code,
+				"item_name": wo.item_name or wo.item_code,
+				"stage": wo.stage,
+				"wos": [],
+				"total_qty": 0.0,
+				"uom": wo.target_uom or "",
+				"existing_batch_group": None,
+			}
+		b = bundle_map[key]
+		b["wos"].append({
+			"name": wo.name,
+			"order_sheet": wo.order_sheet,
+			"sales_order": wo.sales_order,
+			"customer_name": wo.customer_name,
+			"priority": wo.priority,
+			"target_qty": flt(wo.target_qty),
+			"delivery_date": str(wo.delivery_date) if wo.delivery_date else None,
+			"machine": wo.machine or "",
+			"batch_group": wo.batch_group or "",
+		})
+		b["total_qty"] += flt(wo.target_qty)
+		if wo.batch_group and not b["existing_batch_group"]:
+			b["existing_batch_group"] = wo.batch_group
+
+	bundles = [v for v in bundle_map.values() if len(v["wos"]) >= 2]
+	for bundle in bundles:
+		bundle["suggested_machine"] = _assign_machine_load_balanced(bundle["stage"]) or ""
+	bundles.sort(key=lambda b: -len(b["wos"]))
+	return bundles
+
+
+@frappe.whitelist()
+def batch_assign_machine(work_orders, machine, batch_group=None):
+	"""Assign the same machine (and batch_group tag) to multiple Pending WOs."""
+	_require_production_role()
+	if isinstance(work_orders, str):
+		work_orders = json.loads(work_orders)
+	if not frappe.db.exists("IB Machine", machine):
+		frappe.throw(_("Machine {0} does not exist").format(machine))
+
+	if not batch_group:
+		batch_group = f"BATCH-{today()}-{machine}"
+
+	updated = []
+	for wo_name in work_orders:
+		doc = frappe.get_doc("IB Work Order", wo_name)
+		if doc.status != "Pending":
+			continue
+		doc.machine = machine
+		doc.batch_group = batch_group
+		doc.save(ignore_permissions=True)
+		updated.append(wo_name)
+
+	frappe.db.commit()
+	return {"updated": updated, "machine": machine, "batch_group": batch_group}
+
+
+# ── Ready-to-Deliver notification (doc event) ─────────────────────────────────
+
+def on_work_order_update_notify(doc, method=None):
+	"""Bell to sales person when all items on an Order Sheet reach Ready to Deliver."""
+	if doc.stage != "Ready to Deliver" or doc.status != "Completed":
+		return
+	if not doc.order_sheet:
+		return
+
+	so_name = frappe.db.get_value("IB Order Sheet", doc.order_sheet, "sales_order")
+	if not so_name:
+		return
+
+	sales_person_user = frappe.db.get_value("Sales Order", so_name, "custom_sales_person_user")
+	if not sales_person_user:
+		return
+
+	marker = f"[ib-prod-rtd-{so_name}]"
+	already = frappe.db.sql("""
+		SELECT name FROM `tabNotification Log`
+		WHERE for_user = %s AND subject LIKE %s AND DATE(creation) = %s LIMIT 1
+	""", (sales_person_user, f"%{marker}%", today()))
+	if already:
+		return
+
+	os_item_count = frappe.db.sql(
+		"SELECT COUNT(DISTINCT item_code) FROM `tabIB Order Sheet Item` WHERE parent = %s",
+		(doc.order_sheet,),
+	)[0][0]
+	if not os_item_count:
+		return
+
+	rtd_done = frappe.db.sql("""
+		SELECT COUNT(DISTINCT item_code) FROM `tabIB Work Order`
+		WHERE order_sheet = %s AND stage = 'Ready to Deliver' AND status = 'Completed'
+	""", (doc.order_sheet,))[0][0]
+
+	if rtd_done < os_item_count:
+		return
+
+	customer = frappe.db.get_value("IB Order Sheet", doc.order_sheet, "customer_name") or ""
+	frappe.get_doc({
+		"doctype": "Notification Log",
+		"subject": f"Order Ready for Dispatch: {so_name} {marker}",
+		"email_content": (
+			f"<p>Sales Order <strong>{so_name}</strong> for <strong>{customer}</strong> "
+			f"has completed all production stages and is <strong>Ready to Deliver</strong>. "
+			f"Please arrange packaging and dispatch to the customer's delivery address.</p>"
+		),
+		"for_user": sales_person_user,
+		"type": "Alert",
+		"document_type": "Sales Order",
+		"document_name": so_name,
+		"from_user": "Administrator",
+	}).insert(ignore_permissions=True)
+	frappe.db.commit()
+
+
+# ── n8n connectivity helpers ──────────────────────────────────────────────────
+
+@frappe.whitelist()
+def test_n8n_connection():
+	"""Test n8n webhook connectivity. Returns ok/error for dashboard display."""
+	url = frappe.conf.get("n8n_webhook_url") or ""
+	if not url:
+		return {"ok": False, "error": "n8n_webhook_url not configured in site_config.json"}
+	try:
+		import requests
+		resp = requests.post(
+			url,
+			json={"event": "ping", "payload": {"test": True, "site": frappe.local.site}},
+			timeout=5,
+		)
+		return {"ok": resp.status_code < 400, "status_code": resp.status_code, "url": url}
+	except Exception as e:
+		return {"ok": False, "error": str(e), "url": url}
+
+
+@frappe.whitelist()
+def get_n8n_status():
+	"""Return n8n configuration state for the dashboard panel."""
+	url = frappe.conf.get("n8n_webhook_url") or ""
+	return {
+		"configured": bool(url),
+		"webhook_url": url,
+		"n8n_ui": "http://localhost:5678",
 	}

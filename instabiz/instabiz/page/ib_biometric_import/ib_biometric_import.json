@@ -1,0 +1,14 @@
+{
+    "creation": "2026-06-30 00:00:00.000000",
+    "doctype": "Page",
+    "module": "Instabiz",
+    "name": "ib-biometric-import",
+    "page_name": "ib-biometric-import",
+    "roles": [
+        {"role": "HR Manager"},
+        {"role": "HR User"},
+        {"role": "System Manager"}
+    ],
+    "standard": "Yes",
+    "title": "Biometric Attendance Import"
+}

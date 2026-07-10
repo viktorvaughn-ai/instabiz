@@ -41,7 +41,7 @@ def _data(filters):
 	source    = filters.get("source")
 
 	# ── Leads per rep ────────────────────────────────────────────────────────
-	lead_cond = "WHERE l.creation BETWEEN %(from_date)s AND %(to_date)s"
+	lead_cond = "WHERE DATE(l.creation) BETWEEN %(from_date)s AND %(to_date)s"
 	if territory:
 		lead_cond += " AND l.territory = %(territory)s"
 	if sp_user:
@@ -68,7 +68,7 @@ def _data(filters):
 	lead_map = {r.user: r for r in leads}
 
 	# ── Quotations per rep ───────────────────────────────────────────────────
-	q_cond = "WHERE q.creation BETWEEN %(from_date)s AND %(to_date)s AND q.docstatus = 1 AND q.custom_sales_person_user != ''"
+	q_cond = "WHERE q.transaction_date BETWEEN %(from_date)s AND %(to_date)s AND q.docstatus = 1 AND q.custom_sales_person_user != ''"
 	if territory:
 		q_cond += " AND q.territory = %(territory)s"
 	if sp_user:

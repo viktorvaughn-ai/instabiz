@@ -49,6 +49,7 @@ class CustomCustomer(Customer):
 			if saved_name:
 				self.customer_name = saved_name
 		_sync_territory_from_billing_state(self)
+		_sync_territory_from_gstin(self)  # GSTIN overrides billing state (more authoritative)
 		super().validate()
 
 	def onload(self):
@@ -271,6 +272,108 @@ def _sync_territory_from_billing_state(doc):
 
 	if territory and territory != doc.territory:
 		doc.territory = territory
+
+
+# ── Territory sync from GSTIN state code ─────────────────────────────────────
+
+# Maps GSTIN 2-digit state code → Territory name as it exists in this system.
+# Codes without a matching Territory are absent from the dict (skip silently).
+_GSTIN_CODE_TO_TERRITORY = {
+	"02": "Himachal Pradesh",
+	"03": "Punjab",
+	"04": "Delhi",
+	"05": "Uttarakhand",
+	"06": "Haryana",
+	"07": "Delhi",
+	"08": "Rajasthan",
+	"09": "Uttar Pradesh",
+	"10": "Bihar",
+	"18": "Assam",
+	"19": "West Bengal",
+	"20": "Jharkhand",
+	"21": "Odisha",
+	"22": "Chhattisgarh",
+	"23": "Madhya Pradesh",
+	"24": "Gujarat",
+	"25": "Daman & Diu",
+	"26": "Dadra & Nagar",
+	"27": "Maharashtra",
+	"28": "Andhra Pradesh",
+	"29": "Karnataka",
+	"30": "Goa",
+	"32": "Kerala",
+	"33": "Tamil Nadu",
+	"36": "Telangana",
+	"37": "Andhra Pradesh",
+}
+
+
+def _territory_from_gstin(gstin):
+	"""Return Territory name derived from GSTIN 2-digit state code, or None."""
+	if not gstin or len(gstin) < 2:
+		return None
+	code = gstin[:2].strip()
+	return _GSTIN_CODE_TO_TERRITORY.get(code)
+
+
+def _sync_territory_from_gstin(doc):
+	"""Set territory from GSTIN state code.
+
+	Runs after _sync_territory_from_billing_state so GSTIN (government-issued,
+	authoritative) can override a manually typed billing state that may be wrong.
+	Only updates when GSTIN yields a territory that differs from current value.
+	"""
+	gstin = (doc.get("gstin") or "").strip()
+	if not gstin:
+		return
+	territory = _territory_from_gstin(gstin)
+	if not territory:
+		return
+	# Verify territory exists in this installation before setting
+	if not frappe.db.exists("Territory", territory):
+		return
+	if territory != doc.territory:
+		doc.territory = territory
+
+
+@frappe.whitelist()
+def backfill_territory_from_gstin():
+	"""Bulk-fix: set territory from GSTIN 2-digit state code for all customers
+	where the derived territory differs from current. Sales Manager / System Manager only."""
+	from instabiz.overrides.permissions import _PRIVILEGED_ROLES
+	if not (_PRIVILEGED_ROLES & set(frappe.get_roles())):
+		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+
+	customers = frappe.db.sql(
+		"SELECT name, territory, gstin FROM `tabCustomer`"
+		" WHERE gstin IS NOT NULL AND gstin != ''",
+		as_dict=True,
+	)
+
+	updated = []
+	skipped_no_map = []
+	skipped_no_territory = []
+
+	for c in customers:
+		territory = _territory_from_gstin(c.gstin)
+		if not territory:
+			skipped_no_map.append({"customer": c.name, "gstin": c.gstin})
+			continue
+		if not frappe.db.exists("Territory", territory):
+			skipped_no_territory.append({"customer": c.name, "gstin": c.gstin, "territory": territory})
+			continue
+		if territory == c.territory:
+			continue
+		frappe.db.set_value("Customer", c.name, "territory", territory, update_modified=False)
+		updated.append({"customer": c.name, "old": c.territory, "new": territory, "gstin": c.gstin})
+
+	frappe.db.commit()
+	return {
+		"updated": len(updated),
+		"skipped_no_map": len(skipped_no_map),
+		"skipped_no_territory": len(skipped_no_territory),
+		"details": updated,
+	}
 
 
 @frappe.whitelist()

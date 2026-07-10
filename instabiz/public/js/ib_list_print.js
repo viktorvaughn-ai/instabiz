@@ -502,3 +502,41 @@ function ib_setup_gl_print(listview) {
         _ib_lp_print_list(listview, "GL Entry");
     });
 }
+
+// ── Outstanding report: Print Reminder button ─────────────────────────────────
+// Hooks into "Sales Invoice - Outstanding Amount by party" Report Builder report.
+// Adds a Customer filter widget and a "Print Reminder" toolbar button.
+// Select a customer, run the report, then click Print Reminder to generate the letter.
+frappe.query_reports["Sales Invoice - Outstanding Amount by party"] = {
+    filters: [
+        {
+            fieldname: "customer",
+            label:     __("Customer"),
+            fieldtype: "Link",
+            options:   "Customer",
+            reqd:      0,
+        },
+    ],
+
+    onload: function(report) {
+        report.page.add_inner_button(__("Print Reminder"), () => {
+            const customer = report.get_filter_value("customer");
+            if (!customer) {
+                frappe.msgprint({
+                    title: __("Customer Required"),
+                    message: __("Select a Customer in the filter above, then click Print Reminder."),
+                    indicator: "orange",
+                });
+                return;
+            }
+            frappe.show_alert({ message: __("Generating reminder letter…"), indicator: "blue" });
+            frappe.call({
+                method: "instabiz.overrides.list_print.get_customer_outstanding_letter",
+                args: { customer },
+                callback(r) {
+                    if (r.message) _ib_lp_open(r.message);
+                },
+            });
+        });
+    },
+};

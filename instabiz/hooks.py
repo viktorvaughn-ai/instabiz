@@ -41,6 +41,10 @@ scheduler_events = {
         "instabiz.overrides.whatsapp.run_wa_dormant_blast",
         # Daily production snapshot — reserved for future DPR caching
         "instabiz.overrides.production.run_daily_production_snapshot",
+        # AI agents — auto_quote, demand_forecast, smart_reorder, collections, istix_enforcer, buying_dna
+        "instabiz.overrides.ai_agents.run_daily_agents",
+        # Monthly payroll draft creation — fires daily but only acts on the 7th
+        "instabiz.overrides.payroll.run_monthly_payroll_draft",
     ],
 }
 
@@ -148,6 +152,9 @@ override_doctype_class = {
 # REMOVED: recalculate_* hooks — already handled inside the override classes
 # above. Keeping them here caused double execution on every validate.
 doc_events = {
+    "Quotation": {
+        "on_submit": "instabiz.overrides.whatsapp.on_quotation_submit",
+    },
     "User": {
         "after_insert": [
             "instabiz.overrides.user.create_sales_person_for_user",
@@ -195,9 +202,11 @@ doc_events = {
         "on_cancel": "instabiz.overrides.stock_events.publish_stock_update",
     },
     "Sales Invoice": {
+        "on_update": "instabiz.overrides.si_drive_sync.sync_si_documents_to_drive",
         "on_submit": [
-            "instabiz.overrides.einvoice.run_einvoice_on_submit",
             "instabiz.overrides.customer.update_customer_outstanding_on_si",
+            "instabiz.overrides.si_drive_sync.sync_si_documents_to_drive",
+            "instabiz.overrides.einvoice.run_einvoice_on_submit",
         ],
         "on_cancel": "instabiz.overrides.customer.update_customer_outstanding_on_si",
         "on_trash":  "instabiz.overrides.customer.update_customer_outstanding_on_si",
@@ -214,6 +223,16 @@ doc_events = {
     "Stock Reconciliation": {
         "on_submit": "instabiz.overrides.stock_events.publish_stock_update",
         "on_cancel": "instabiz.overrides.stock_events.publish_stock_update",
+    },
+    "IB Work Order": {
+        "on_update": [
+            "instabiz.overrides.n8n_hooks.on_work_order_update",
+            "instabiz.overrides.production.on_work_order_update_notify",
+        ],
+    },
+    "IB Order Sheet": {
+        "after_insert": "instabiz.overrides.n8n_hooks.on_order_sheet_created",
+        "on_update":    "instabiz.overrides.n8n_hooks.on_order_sheet_updated",
     },
 }
 
@@ -262,6 +281,10 @@ override_whitelisted_methods = {
     # Lead → Customer (carry territory, pincode, sales person)
     "erpnext.crm.doctype.lead.lead.make_customer":
         "instabiz.overrides.lead.custom_make_customer",
+
+    # Workspace shortcut role filtering
+    "frappe.desk.desktop.get_desktop_page":
+        "instabiz.overrides.workspace_filter.get_desktop_page",
 }
 
 # ── Frontend assets ───────────────────────────────────────────────────────────
@@ -277,11 +300,14 @@ app_include_js  = [
     "/assets/instabiz/js/list_utils.js",            # shared list view helpers (status multiselect, extract filter values)
     "/assets/instabiz/js/comment_popover.js",       # inline comment popover on list rows
     "/assets/instabiz/js/whatsapp_dialog.js",       # global WA send dialog (ib_show_wa_dialog)
-    "/assets/instabiz/js/ib_list_print.js",        # shared list view print utility
+    "/assets/instabiz/js/ib_list_print.js",         # shared list view print utility
+    "/assets/instabiz/js/ib_dash_utils.js",         # dashboard shared: countUp loader, skeleton helpers, fmt
+    "/assets/instabiz/js/so_production_panel.js",  # SO form: production stage + dispatch status panel
     # "/assets/instabiz/js/broadcast.js",            # global broadcast modal subscriber — DISABLED
     # ib_stock_dashboard.js is loaded by Frappe's page engine (not global)
     # "/assets/instabiz/js/quotation_list.js",        # Quotation list view
     # "/assets/instabiz/js/sales_order_list.js",      # Sales Order list view
+    "/assets/instabiz/js/app_redirect.js"
 ]
 
 # ── DocType-specific list JS (appended AFTER the app's own list JS) ───────────
@@ -316,4 +342,6 @@ doctype_js = {
     "Purchase Receipt":        "public/js/ib_purchase_common.js",
     "Purchase Invoice":        "public/js/ib_purchase_common.js",
     "IB WA Session":           "public/js/ib_wa_session.js",
+    "IB Credit Note":          "public/js/ib_credit_note.js",
+    "IB Debit Note":           "public/js/ib_debit_note.js",
 }

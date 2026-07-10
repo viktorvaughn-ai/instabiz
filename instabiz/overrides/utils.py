@@ -1,6 +1,7 @@
 """instabiz.overrides.utils"""
 import frappe
 from frappe import _
+from frappe.utils import flt
 
 
 # ── Location → company billing address + GSTIN ───────────────────────────────
@@ -265,15 +266,15 @@ def recalculate_items(doc):
     for item in doc.get("items") or []:
         # Row already priced in the source document — preserve qty, recalc amount only
         if item.get("against_sales_order") or item.get("delivery_note"):
-            item.amount = round((item.get("qty") or 0) * (item.get("rate") or 0), 2)
+            item.amount = round(flt(item.get("qty")) * flt(item.get("rate")), 2)
             continue
 
         uom        = (item.get("uom") or "").strip()
-        width_mm   = item.get("width_mm") or 0
-        length_mtr = item.get("length_mtr") or 0
-        qty_pkg    = item.get("qty_pkg") or 0
-        total_pkg  = item.get("total_pkg") or 0
-        rate       = item.get("rate") or 0
+        width_mm   = flt(item.get("width_mm"))
+        length_mtr = flt(item.get("length_mtr"))
+        qty_pkg    = flt(item.get("qty_pkg"))
+        total_pkg  = flt(item.get("total_pkg"))
+        rate       = flt(item.get("rate"))
 
         if uom == "SQMT":
             if width_mm and length_mtr and qty_pkg and total_pkg:
@@ -282,7 +283,7 @@ def recalculate_items(doc):
             if qty_pkg and total_pkg:
                 item.qty = qty_pkg * total_pkg
 
-        item.amount = round((item.get("qty") or 0) * rate, 2)
+        item.amount = round(flt(item.get("qty")) * rate, 2)
 
 
 def recalculate_purchase_items(doc):
@@ -433,6 +434,9 @@ def _check_floor_price(doc):
 	from frappe.utils import flt
 	from instabiz.overrides.permissions import _is_privileged
 
+	if doc.get("currency") and doc.get("currency") != "INR":
+		return  # rate is in foreign currency; cannot compare to INR valuation_rate
+
 	violations = []
 	for row in doc.get("items") or []:
 		if not row.item_code or not flt(row.rate):
@@ -457,7 +461,7 @@ def _check_floor_price(doc):
 		return
 
 	msg = _("Floor price breach:") + "<br>" + "<br>".join(violations)
-	if _is_privileged():
+	if _is_privileged(frappe.session.user):
 		frappe.msgprint(msg, title=_("Floor Price Warning"), indicator="orange")
 	else:
 		frappe.throw(msg, title=_("Floor Price Breach"))
@@ -496,7 +500,7 @@ def _check_customer_item_spec(doc):
 		spec = frappe.db.get_value(
 			"IB Customer Item Spec",
 			{"customer": customer, "item_code": row.item_code},
-			["custom_width_mm", "custom_thickness", "custom_adhesion_n25mm", "custom_core_mm"],
+			["custom_width_mm", "custom_thickness"],
 			as_dict=True,
 		)
 		if not spec:

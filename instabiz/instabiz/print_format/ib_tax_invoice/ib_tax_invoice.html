@@ -370,38 +370,96 @@
       {% for t in doc.taxes %}
         {% set ns_doc.doc_gst = ns_doc.doc_gst + (t.rate or 0) %}
       {% endfor %}
+            {# ROLL UOM rows → consolidated per SKU; all other UOMs → individual rows #}
+      {% set ns_ci = namespace(seen=[], sl=0) %}
       {% for row in doc.items %}
-      {% set ns_t = namespace(gst=0) %}
-      {% if row.item_tax_rate %}
-        {% for _acct, _r in json.loads(row.item_tax_rate).items() %}
-          {% set ns_t.gst = ns_t.gst + _r %}
-        {% endfor %}
-      {% endif %}
-      {% if ns_t.gst == 0 %}{% set ns_t.gst = ns_doc.doc_gst %}{% endif %}
-      <tr>
-        <td class="b ta-c">{{ loop.index }}</td>
-        <td class="b">
-          <strong>{{ row.item_name or row.item_code }}</strong>
+      {% if row.uom == 'ROLL' and row.item_code in ns_ci.seen %}
+      {# skip — this ROLL SKU already rendered #}
+      {% else %}
+        {% set ns_ci.sl = ns_ci.sl + 1 %}
+        {% set ns_t = namespace(gst=0) %}
+        {% if row.item_tax_rate %}
+          {% for _acct, _r in json.loads(row.item_tax_rate).items() %}
+            {% set ns_t.gst = ns_t.gst + _r %}
+          {% endfor %}
+        {% endif %}
+        {% if ns_t.gst == 0 %}{% set ns_t.gst = ns_doc.doc_gst %}{% endif %}
+        {% if row.uom == 'ROLL' %}
+          {% set _ = ns_ci.seen.append(row.item_code) %}
+          {% set ns_g = namespace(qty=0.0, amount=0.0, sqmt=0.0) %}
+          {% set ns_dims = namespace(v=[]) %}
+          {% set _cmark = frappe.db.get_value("Item", row.item_code, "custom_carton_marking") or "" %}
+          {% for r2 in doc.items %}
+            {% if r2.item_code == row.item_code and r2.uom == 'ROLL' %}
+              {% set ns_g.qty = ns_g.qty + (r2.qty or 0) %}
+              {% set ns_g.amount = ns_g.amount + (r2.amount or 0) %}
+              {% set ns_d = namespace(v="") %}
+              {% if r2.width_mm and r2.length_mtr %}
+                {% set _rsqmt = (r2.width_mm|float / 1000.0) * (r2.length_mtr|float) * (r2.qty|float) %}
+                {% set ns_g.sqmt = ns_g.sqmt + _rsqmt %}
+                {% set ns_d.v = (r2.width_mm|int)|string + "×" + (r2.length_mtr|int)|string %}
+                {% set ns_d.v = ns_d.v + " (" + "%.2f"|format(_rsqmt) + " SQMT)" %}
+              {% endif %}
+              {% if r2.custom_thickness %}
+                {% set ns_d.v = (ns_d.v + ", " + r2.custom_thickness) if ns_d.v else r2.custom_thickness %}
+              {% endif %}
+              {% if r2.color %}
+                {% set ns_d.v = (ns_d.v + ", " + r2.color) if ns_d.v else r2.color %}
+              {% endif %}
+              {% if ns_d.v | trim %}{% set _ = ns_dims.v.append(ns_d.v | trim) %}{% endif %}
+            {% endif %}
+          {% endfor %}
+          {% set _eff_rate = (ns_g.amount / ns_g.qty) if ns_g.qty > 0 else (row.rate or 0) %}
+        <tr>
+          <td class="b ta-c">{{ ns_ci.sl }}</td>
+          <td class="b">
+            <strong>{{ row.item_name or row.item_code }}</strong>
+            {% set ns_s = namespace(v=row.item_code or "") %}
+            {% if _cmark %}{% set ns_s.v = (ns_s.v + " " + _cmark) if ns_s.v else _cmark %}{% endif %}
+            {% if ns_s.v %}
+            <br><span class="italic">{{ ns_s.v | trim }}</span>
+            {% endif %}
+            {% for dim in ns_dims.v %}
+            <br><span class="italic" style="font-size:9px;color:#555">{{ dim }}</span>
+            {% endfor %}
+          </td>
+          <td class="b ta-c">{{ row.gst_hsn_code or "" }}</td>
+          <td class="b ta-c">{{ "%g" | format(ns_t.gst) }} %</td>
+          <td class="b ta-r">
+            {{ fm(ns_g.qty) }} {{ row.uom }}
+            {% if ns_g.sqmt > 0 %}<br><span style="font-size:9px;color:#444">{{ "%.2f"|format(ns_g.sqmt) }} SQMT</span>{% endif %}
+          </td>
+          <td class="b ta-r">{{ fm(_eff_rate) }}</td>
+          <td class="b ta-c">{{ row.uom }}</td>
+          <td class="b ta-r">{{ fm(ns_g.amount) }}</td>
+        </tr>
+        {% else %}
           {% set ns_s = namespace(v="") %}
           {% if row.item_code %}{% set ns_s.v = row.item_code %}{% endif %}
           {% if row.custom_thickness %}{% set ns_s.v = ns_s.v + " " + row.custom_thickness %}{% endif %}
           {% if row.width_mm and row.length_mtr %}
             {% set ns_s.v = ns_s.v + " " + (row.width_mm|int)|string + "*" + (row.length_mtr|int)|string %}
           {% endif %}
-          {% set _cmark = frappe.db.get_value("Item", row.item_code, "custom_carton_marking") or "" %}
-          {% if _cmark %}{% set ns_s.v = ns_s.v + " " + _cmark %}{% endif %}
+          {% set _cmark2 = frappe.db.get_value("Item", row.item_code, "custom_carton_marking") or "" %}
+          {% if _cmark2 %}{% set ns_s.v = ns_s.v + " " + _cmark2 %}{% endif %}
           {% if row.color %}{% set ns_s.v = ns_s.v + " " + row.color %}{% endif %}
-          {% if ns_s.v %}
-          <br><span class="italic">{{ ns_s.v | trim }}</span>
-          {% endif %}
-        </td>
-        <td class="b ta-c">{{ row.gst_hsn_code or "" }}</td>
-        <td class="b ta-c">{{ "%g" | format(ns_t.gst) }} %</td>
-        <td class="b ta-r">{{ fm(row.qty) }} {{ row.uom }}</td>
-        <td class="b ta-r">{{ fm(row.rate) }}</td>
-        <td class="b ta-c">{{ row.uom }}</td>
-        <td class="b ta-r">{{ fm(row.amount) }}</td>
-      </tr>
+        <tr>
+          <td class="b ta-c">{{ ns_ci.sl }}</td>
+          <td class="b">
+            <strong>{{ row.item_name or row.item_code }}</strong>
+            {% if ns_s.v %}
+            <br><span class="italic">{{ ns_s.v | trim }}</span>
+            {% endif %}
+          </td>
+          <td class="b ta-c">{{ row.gst_hsn_code or "" }}</td>
+          <td class="b ta-c">{{ "%g" | format(ns_t.gst) }} %</td>
+          <td class="b ta-r">{{ fm(row.qty) }} {{ row.uom }}</td>
+          <td class="b ta-r">{{ fm(row.rate) }}</td>
+          <td class="b ta-c">{{ row.uom }}</td>
+          <td class="b ta-r">{{ fm(row.amount) }}</td>
+        </tr>
+        {% endif %}
+      {% endif %}
       {% endfor %}
 
       {# Subtotal #}
@@ -637,33 +695,44 @@
         </tr>
         {% endfor %}
       {% else %}
-        {# Fallback — reconstruct from SI items #}
+        {# Fallback — reconstruct from SI items (consolidated by SKU) #}
         {% set ns_doc2 = namespace(doc_gst=0) %}
         {% for t in doc.taxes %}
           {% set ns_doc2.doc_gst = ns_doc2.doc_gst + (t.rate or 0) %}
         {% endfor %}
+        {% set ns_ci2 = namespace(seen=[]) %}
         {% for row in doc.items %}
-        {% set ns_t2 = namespace(gst=0, cgst=0, sgst=0, igst=0) %}
-        {% if row.item_tax_rate %}
-          {% for _acct, _r in json.loads(row.item_tax_rate).items() %}
-            {% set ns_t2.gst = ns_t2.gst + _r %}
-            {% if "cgst" in _acct.lower() %}{% set ns_t2.cgst = _r %}{% endif %}
-            {% if "sgst" in _acct.lower() %}{% set ns_t2.sgst = _r %}{% endif %}
-            {% if "igst" in _acct.lower() %}{% set ns_t2.igst = _r %}{% endif %}
+        {% if row.item_code not in ns_ci2.seen %}
+          {% set _ = ns_ci2.seen.append(row.item_code) %}
+          {% set ns_t2 = namespace(gst=0, cgst=0, sgst=0, igst=0) %}
+          {% if row.item_tax_rate %}
+            {% for _acct, _r in json.loads(row.item_tax_rate).items() %}
+              {% set ns_t2.gst = ns_t2.gst + _r %}
+              {% if "cgst" in _acct.lower() %}{% set ns_t2.cgst = _r %}{% endif %}
+              {% if "sgst" in _acct.lower() %}{% set ns_t2.sgst = _r %}{% endif %}
+              {% if "igst" in _acct.lower() %}{% set ns_t2.igst = _r %}{% endif %}
+            {% endfor %}
+          {% endif %}
+          {% if ns_t2.gst == 0 %}{% set ns_t2.gst = ns_doc2.doc_gst %}{% endif %}
+          {% set ns_g2 = namespace(qty=0.0, amount=0.0) %}
+          {% for r2 in doc.items %}
+            {% if r2.item_code == row.item_code %}
+              {% set ns_g2.qty = ns_g2.qty + (r2.qty or 0) %}
+              {% set ns_g2.amount = ns_g2.amount + (r2.amount or 0) %}
+            {% endif %}
           {% endfor %}
-        {% endif %}
-        {% if ns_t2.gst == 0 %}{% set ns_t2.gst = ns_doc2.doc_gst %}{% endif %}
         <tr>
           <td class="b ta-c">{{ row.gst_hsn_code or "" }}</td>
           <td class="b">{{ row.item_name or row.item_code }}</td>
-          <td class="b ta-r">{{ fm(row.qty) }} {{ row.uom }}</td>
-          <td class="b ta-r">{{ fm(row.amount) }}</td>
+          <td class="b ta-r">{{ fm(ns_g2.qty) }} {{ row.uom }}</td>
+          <td class="b ta-r">{{ fm(ns_g2.amount) }}</td>
           <td class="b ta-c">
             {% if ns_t2.cgst %}{{ ns_t2.cgst }}+{{ ns_t2.sgst }}
             {% elif ns_t2.igst %}{{ ns_t2.igst }}
             {% else %}{{ ns_t2.gst }}{% endif %}
           </td>
         </tr>
+        {% endif %}
         {% endfor %}
       {% endif %}
     </tbody>
