@@ -1764,11 +1764,11 @@ const KB_SECTIONS = [
 					"Go to <b>Workspace → AI Agents → AI Inbox</b>.",
 					"Default view: Status = Pending. Filter by <b>agent code</b> to focus (e.g. 'auto_quote', 'collections', 'hr_leave_pending').",
 					"Each action card shows: <b>agent badge</b> (color-coded), <b>title</b>, <b>LLM or deterministic summary</b>, <b>reference link</b> (Lead, WO, Employee, Invoice), <b>draft JSON preview</b>.",
-					"Click <b>Approve</b>: executes the action (creates document, sends bell, sends WhatsApp — depends on action_type).",
+					"Click <b>Approve</b>: executes the action (creates document, sends bell — depends on action_type).",
 					"Click <b>Reject</b>: dismisses without executing. Both record user + timestamp.",
 					"Status flow: pending → approved / rejected. Approved cards show what was created/sent.",
 				],
-				tip: "Filter agent=collections to review dunning WhatsApp messages before they send. Filter agent=auto_quote to batch-approve or reject lead quotation suggestions.",
+				tip: "Filter agent=collections to review dunning messages before they're marked handled. Filter agent=auto_quote to batch-approve or reject lead quotation suggestions.",
 			},
 			{
 				num: "AI.2", title: "Running Agents Manually and On-Demand",
@@ -1797,12 +1797,12 @@ const KB_SECTIONS = [
 			{
 				num: "AI.S1", title: "Sales Agents — 6 Agents",
 				desc: "6 agents cover the full revenue and inventory cycle: lead-to-quote conversion, demand forecasting, smart reordering, collections dunning, work order escalation, and customer follow-ups.",
-				tags: "sales agents auto_quote demand_forecast smart_reorder collections istix_enforcer buying_dna daily lead quotation material request whatsapp followup",
+				tags: "sales agents auto_quote demand_forecast smart_reorder collections istix_enforcer buying_dna daily lead quotation material request followup",
 				steps: [
 					"<b>auto_quote</b> — Leads with status Open/Interested/Replied + lead_score > 30 + product interest set → drafts a Quotation. On Approve: creates Draft Quotation linked to the Lead.",
 					"<b>demand_forecast</b> — Analyzes 12 weeks of Sales Invoice items → 4-week demand forecast for top 30 SKUs. On Approve: logs informational forecast card (no document created).",
 					"<b>smart_reorder</b> — Items at or below reorder level in bin → drafts a Material Request per item. On Approve: creates Draft Material Request.",
-					"<b>collections</b> — Sales Invoices overdue >30 days → Claude writes India-context dunning WhatsApp message per customer. On Approve: sends WhatsApp via the assigned rep's session.",
+					"<b>collections</b> — Sales Invoices overdue >30 days → Claude writes an India-context dunning message per customer. On Approve: marked handled (no send channel configured).",
 					"<b>istix_enforcer</b> — IB Work Orders stalled In Progress >24 hours → escalates to Manufacturing Manager. On Approve: sends bell notification with WO name, stage, and hours stalled.",
 					"<b>buying_dna</b> — Customers overdue for a follow-up call based on monthly order pattern → creates ToDo for the sales rep. On Approve: creates ToDo with customer name and last order date.",
 				],
@@ -1858,7 +1858,7 @@ const KB_SECTIONS = [
 	{
 		id: "broadcast", cat: "comms",
 		icon: '<iconify-icon icon="lucide:bell" width="17" height="17"></iconify-icon>', color: "#e0f0ff", iconColor: "#1a60b0",
-		title: "Broadcast and WhatsApp",
+		title: "Broadcast and Team Chat",
 		roles: _SALES,
 		items: [
 			{
@@ -1873,47 +1873,8 @@ const KB_SECTIONS = [
 				],
 			},
 			{
-				num: "83", title: "Sending WhatsApp Message from Document",
-				desc: "Open any sales document, click WhatsApp button, select template, preview message, optionally attach PDF, then Send.",
-				tags: "whatsapp wa message send template",
-				steps: [
-					"Open any sales document (SO, SI, DN).",
-					"Click the <b>WhatsApp</b> button.",
-					"Select a Template (configured in IB WA Template).",
-					"Preview the message — variables auto-filled.",
-					"Optionally attach PDF (Packing List for DN, Tax Invoice for SI).",
-					"Click Send.",
-				],
-			},
-			{
-				num: "WA.1", title: "Setting Up a WhatsApp Session",
-				desc: "IB WA Session, New, set Session ID and Phone, click Generate QR, scan with WhatsApp phone. Status changes to Connected.",
-				link: "/app/ib-wa-session", linkLabel: "WA Sessions",
-				tags: "wa whatsapp session qr setup connect",
-			},
-			{
-				num: "WA.2", title: "Send Outstanding Statement via WhatsApp",
-				desc: "Sends the customer's full list of unpaid invoices (due date, amount, overdue flag) as a WhatsApp text message directly from the Customer form.",
-				tags: "outstanding statement wa whatsapp invoice unpaid due overdue balance customer",
-				steps: [
-					"Open any <b>Customer</b> form.",
-					"Click <b>WhatsApp → Send Outstanding Statement</b>.",
-					"Confirm the prompt — message is built and sent immediately.",
-					"Message lists up to 30 outstanding Sales Invoices with invoice number, due date, amount, and ⚠️ flag for overdue.",
-					"Total outstanding is shown at the bottom of the message.",
-					"Send status is logged in <b>IB WA Log</b>.",
-				],
-				note: "Requires the customer to have a mobile number (Primary Contact or mobile_no field) and the user to have a connected IB WA Session. Does not attach a PDF — text only.",
-				tip: "Use this before a customer visit or payment follow-up call so the customer already has their dues on WhatsApp.",
-			},
-			{
-				num: "83b", title: "Automated Dormant Customer Blast",
-				desc: "Daily scheduler sends a WhatsApp re-engagement message to customers with no Sales Order in 30+ days via the assigned rep's session. Deduplicated (1 per customer per 30 days).",
-				tags: "dormant blast auto wa customer 30 days",
-			},
-			{
 				num: "RAVEN-1", title: "Raven — Internal Team Chat",
-				desc: "Raven is the internal team chat app for Instabiz staff — separate from the customer-facing WhatsApp integration above. Direct messages, channels, and file sharing between colleagues.",
+				desc: "Raven is the internal team chat app for Instabiz staff. Direct messages, channels, and file sharing between colleagues.",
 				link: "/raven", linkLabel: "Open Raven",
 				tags: "raven chat internal messaging dm channel team communication",
 				steps: [
@@ -2006,13 +1967,14 @@ const KB_SECTIONS = [
 				link: "/app/ib-production-stages", linkLabel: "Open Pipeline",
 				tags: "stages item group routing plastic pvc cloth foam aerosol sealant bopp paper reflective skips coating rewinding cutting packing",
 				steps: [
-					"<b>PLASTIC / BOPP / PAPER / REFLECTIVE (all 7 stages):</b> Coating → Slitting → Rewinding → Cutting → Packing → Ready to Deliver → Delivered.",
-					"<b>PVC / CLOTH / FOAM (skip Coating + Rewinding, 5 stages):</b> Slitting → Cutting → Packing → Ready to Deliver → Delivered.",
-					"<b>AEROSOL / SEALANT (2 active stages only):</b> Packing → Ready to Deliver → Delivered.",
-					"<b>Default (unknown item group, 3 stages):</b> Cutting → Packing → Ready to Deliver.",
+					"<b>PLASTIC (6 stages):</b> Coating → Slitting → Rewinding → Cutting → Packing → Ready to Deliver.",
+					"<b>PAPER / REFLECTIVE (5 stages — no Rewinding):</b> Coating → Slitting → Cutting → Packing → Ready to Deliver.",
+					"<b>PVC / CLOTH / FOAM / FOAM - PE / FOIL (4 stages — skip Coating + Rewinding):</b> Slitting → Cutting → Packing → Ready to Deliver.",
+					"<b>AEROSOL-* (5 types) / SEALANT-* (2 types) / ADHESIVE-HOTMELT (2 stages only):</b> Packing → Ready to Deliver.",
+					"<b>Default (unmapped item group, 3 stages):</b> Cutting → Packing → Ready to Deliver.",
 					"Stage routing auto-applies when WOs are created. Manual override: use the Product-wise matrix + icon to add a WO at any stage.",
 				],
-				note: "Stages that don't apply to an item group are simply skipped — no WOs are created for them. The pipeline kanban only shows WOs that exist.",
+				note: "No item group route ever includes \"Delivered\" — every route ends at Ready to Deliver, so a Work Order is never auto-created at the Delivered stage (it can only be reached by manually dragging a WO there in the Pipeline tab). Stages that don't apply to an item group are simply skipped — no WOs are created for them. Also: item_group \"BOPP\" is NOT in the routing map despite being a real item_group used elsewhere in the app (e.g. batch tracking) — BOPP items silently fall back to the 3-stage default route (Cutting → Packing → RTD) rather than a coating/slitting route. Flagged as an unconfirmed gap, not fixed in code — check with Factory Management whether BOPP needs its own route.",
 			},
 			{
 				num: "PROD-2", title: "The 7 Stages — What Each One Does",
@@ -2025,7 +1987,7 @@ const KB_SECTIONS = [
 					"<b>4. Cutting</b> — Logs cut to final product length. Entry fields: cut_length, pieces_per_log.",
 					"<b>5. Packing</b> — Finished goods packed and QC checked. Entry fields: packing_type (Carton/Shrink Wrap/Poly Bag/Loose), pieces_per_carton, cartons_packed, qc_status (Pass/Fail/Pending).",
 					"<b>6. Ready to Deliver (RTD)</b> — Goods confirmed ready. Sales person receives a bell notification when all items for an order reach this stage.",
-					"<b>7. Delivered</b> — Goods dispatched against Delivery Note. Sales creates DN from the SO; this stage is automatically reached.",
+					"<b>7. Delivered</b> — Goods dispatched against Delivery Note. Exists in the stage model (colors, Pipeline kanban column) but no item-group route auto-creates a Work Order here — see PROD-1. Reachable only by manually dragging a WO to this column in the Pipeline tab; dispatch itself is still tracked independently via the Delivery Note / SO dispatch badge, not by this stage.",
 				],
 			},
 			{
@@ -2192,6 +2154,7 @@ const KB_SECTIONS = [
 					"<b>Bundle table rows:</b> WO name, Sales Order, Customer, target qty, Priority badge, batch_group label.",
 					"<b>Batch Assign button</b> (top-right of card): opens dialog — select Machine (suggested machine pre-filled), optional Batch Group label. Click Assign. All WOs in the bundle get assigned to that machine simultaneously.",
 					"Batch Group label tags all WOs in the bundle for easy filtering later.",
+					"Each bundle card is <b>collapsed by default</b> — click the header (chevron icon, item code, stage) to expand and see the WO table. Click again to collapse. The Batch Assign button works without expanding the card.",
 				],
 				tip: "Use Job Bundles when multiple customers ordered the same item — run one machine continuously and assign all at once.",
 			},
@@ -2245,21 +2208,21 @@ const KB_SECTIONS = [
 				tip: "Use Daily mode for shift handover reviews. Use Weekly mode for manager-level production trend reviews.",
 			},
 			{
-				num: "PROD-16", title: "Auto Order Sheet Scheduler — Priority Derivation",
-				desc: "Daily midnight scheduler scans all submitted Sales Orders without an Order Sheet and auto-creates them. Priority set automatically based on delivery date urgency.",
-				tags: "auto scheduler order sheet midnight daily priority urgent high normal low delivery date automatic create",
+				num: "PROD-16", title: "Auto Order Sheet Creation — Fires on SO Submit",
+				desc: "Order Sheets are auto-created the moment a Sales Order is submitted, not on a nightly delay. Priority set automatically based on delivery date urgency.",
+				tags: "auto order sheet on submit immediate priority urgent high normal low delivery date automatic create scheduler",
 				steps: [
-					"Runs automatically every night (scheduled via Frappe scheduler: run_daily_production_snapshot).",
-					"Finds submitted SOs with no linked IB Order Sheet.",
-					"Creates Order Sheet for each. Sets priority by days until delivery_date from SO:",
+					"Changed 2026-07-21: previously a midnight scheduler (run_daily_production_snapshot) scanned for SOs without an Order Sheet once a day, bounded to a rolling 30-day window. That job has been removed — there is no longer a nightly scheduler for this.",
+					"Now: Sales Order on_submit fires instabiz.overrides.production.on_so_submit_create_order_sheet, which enqueues a background job (after commit — doesn't slow down or risk the SO submit itself) that creates the Order Sheet within moments of submission.",
+					"Sets priority by days until delivery_date from the SO:",
 					"  → ≤ 2 days: <b>Urgent</b>",
 					"  → ≤ 5 days: <b>High</b>",
 					"  → ≤ 10 days: <b>Normal</b>",
 					"  → > 10 days (or no delivery date): <b>Low</b>",
-					"WOs are auto-created per stage per item based on item group routing.",
-					"n8n webhook fires for each newly created Order Sheet.",
+					"WOs are auto-created per stage per item based on item group routing — same as before, unchanged.",
+					"n8n webhook fires for each newly created Order Sheet (background job — see PROD-20 for current n8n status).",
 				],
-				note: "The scheduler is a safety net — manual creation from the SO or Order-wise tab is preferred when production needs to start immediately.",
+				note: "No more 30-day backlog gap for NEW SOs going forward — every submitted SO gets an Order Sheet within moments, always, regardless of how old the deployment is. Manual creation from the SO or Order-wise tab still exists as a fallback (e.g. if the background job errors — check Error Log for 'Production Auto-Create (on-submit)'). Pre-existing old SOs that predate this change and never got an Order Sheet are NOT retroactively picked up by this — that's a one-time backfill question, not something this trigger solves.",
 			},
 			{
 				num: "PROD-17", title: "RTD Bell Notification to Sales Person",
@@ -2308,9 +2271,10 @@ const KB_SECTIONS = [
 			{
 				num: "PROD-20", title: "n8n Webhook Integration — Production Triggers",
 				desc: "n8n runs locally on the same server as Frappe (http://localhost:5678, PM2-managed). Frappe fires webhooks to n8n on key production events; n8n workflows can call back into Frappe's REST API to act on the data.",
-				tags: "n8n webhook integration work order order sheet update creation workflow trigger production automation config",
+				tags: "n8n webhook integration work order order sheet update creation workflow trigger production automation config offline not running status",
 				steps: [
-					"<b>Config keys (sites/frontend/site_config.json):</b> <code>n8n_webhook_url</code> — n8n's Webhook node production URL, e.g. <code>http://localhost:5678/webhook/&lt;path&gt;</code>. Blank = webhooks silently skip (fire-and-forget, 5s timeout, logs to Error Log on failure).",
+					"<b>Current status (checked 2026-07-15) — n8n is NOT running.</b> No process found (pm2/ps show nothing on port 5678). Its own workflow database shows both saved workflows set to inactive, with 4182 historical executions from 2026-07-01 to 2026-07-09 (nothing since) at a 90%+ failure rate (3763 errored, 5 crashed, only 414 succeeded) — it was tested, mostly failed, and abandoned. Treat everything below as how to build/revive the integration, not a description of something currently working.",
+					"<b>Config keys (sites/frontend/site_config.json):</b> <code>n8n_webhook_url</code> — n8n's Webhook node production URL, e.g. <code>http://localhost:5678/webhook/&lt;path&gt;</code>. Blank = webhooks silently skip.",
 					"<b>Events fired</b> (instabiz/overrides/n8n_hooks.py, wired via doc_events in hooks.py): <code>work_order_started</code>, <code>work_order_stage_completed</code>, <code>work_order_rtd</code>, <code>work_order_updated</code> (all from IB Work Order on_update) and <code>order_sheet_created</code> / <code>order_sheet_completed</code> (from IB Order Sheet).",
 					"<b>Payload shape:</b> <code>{ event, payload: {...doc fields...}, site }</code> — sent via <code>notify_n8n(event, payload)</code> in ai_agents.py.",
 					"<b>Build a workflow in n8n:</b> add a <b>Webhook</b> node (POST, responseMode = <i>responseNode</i> if you add an explicit Respond node), branch on <code>$json.body.event</code>, call back into Frappe with an <b>HTTP Request</b> node.",
@@ -2319,7 +2283,7 @@ const KB_SECTIONS = [
 					"Activate the workflow (POST <code>/api/v1/workflows/{id}/activate</code> via n8n's REST API, or the UI toggle) — inactive workflows will 404 on their production webhook path.",
 					"Test end-to-end: trigger a real doc save (e.g. update an IB Work Order's status) and check n8n's execution list, or use the n8n Console page (see PROD-22) which surfaces recent executions and webhook errors inline.",
 				],
-				note: "Webhook POSTs are fire-and-forget from Frappe's side (5s timeout) — a slow or down n8n never blocks the save. Keep n8n workflow logic itself fast; long-running processing should hand off to a queue/sub-workflow rather than blocking the webhook response.",
+				note: "Webhook POSTs are backgrounded from Frappe's side (fixed 2026-07-15: was a synchronous inline requests.post with a 5s timeout on every single WO status change — every Start/Complete/Hold/Next-Stage click paid up to 5 dead seconds whenever n8n wasn't reachable, confirmed that's been happening this whole time. notify_n8n() in ai_agents.py now does frappe.enqueue(..., queue='short', enqueue_after_commit=True) instead of calling requests.post directly — the actual HTTP call runs in a background worker via a new _post_to_n8n() function, so a slow or down n8n can never block a user action again, confirmed live: call now returns in ~0.007s instead of ~5s).",
 			},
 			{
 				num: "PROD-21", title: "End-to-End Production Workflow",
@@ -2352,7 +2316,7 @@ const KB_SECTIONS = [
 					"Click an execution to drill into full input/output data per node (useful for debugging a failed callback).",
 					"If the console shows \"API key invalid or not set\": add/update <code>n8n_api_key</code> in site_config.json, then <code>bench --site frontend clear-cache</code> — no restart needed, config is read live per request.",
 				],
-				note: "n8n_api_key (console monitoring) and the per-user api_key/api_secret used for callback auth (PROD-20) are two separate credentials serving two different directions of the integration — don't confuse them.",
+				note: "n8n_api_key (console monitoring) and the per-user api_key/api_secret used for callback auth (PROD-20) are two separate credentials serving two different directions of the integration — don't confuse them. As of 2026-07-15 this console will correctly show n8n as offline — the process isn't running (see PROD-20) — that's accurate, not a console bug.",
 			},
 			{
 				num: "PROD-23", title: "Automation Testing Guide — Wiring an Agent Action Through n8n",
@@ -2364,9 +2328,16 @@ const KB_SECTIONS = [
 					"<b>Auth:</b> <code>run_agent</code> / <code>approve_action</code> / <code>get_ai_actions</code> all require one of System Manager, Sales Manager, Accounts Manager, HR Manager, Purchase Manager, or Manufacturing Manager on the calling user (see <code>_ALL_MANAGER_ROLES</code> in ai_agents.py) — the plain read-only service user from PROD-20 is not enough for this chain.",
 					"<b>Always test against a disposable record</b>, never live data: e.g. for <code>istix_enforcer</code> (stalled Work Order escalation), insert a throwaway IB Work Order with <code>status='In Progress'</code> and <code>started_at</code> backdated 9+ hours so it trips the &gt;=8h stalled condition, run the chain, confirm the Notification Log fired, then delete the dummy Work Order, its IB AI Action row, and the Notification Log row it produced. <code>IB Agent Run Log</code> rows from the test run are harmless history and don't need cleanup.",
 					"Build the n8n side as: <b>Webhook</b> node (manual test trigger, POST) → <b>HTTP Request</b> (run_agent) → <b>HTTP Request</b> (get_ai_actions) → <b>Code</b> node to pick the matching action → <b>HTTP Request</b> (approve_action) → <b>HTTP Request</b> (verify). All HTTP Request nodes use the same HTTP Header Auth credential described in PROD-20.",
-					"This same pattern generalizes to any agent: swap <code>agent_code</code> and the verification query for the agent's actual side-effect (smart_reorder → check Material Request created; collections → check WhatsApp log; prod_notify_ready → check Notification Log for the sales person).",
+					"This same pattern generalizes to any agent: swap <code>agent_code</code> and the verification query for the agent's actual side-effect (smart_reorder → check Material Request created; collections → check IB AI Action status; prod_notify_ready → check Notification Log for the sales person).",
 				],
 				note: "Claude-dependent agents (auto_quote, collections, demand_forecast, etc.) still run and queue actions even with no Anthropic credit balance — llm.py falls back to a deterministic message when the Claude call fails, so the test chain works whether or not the API key has credit.",
+			},
+			{
+				num: "PROD-24", title: "Production Pipeline — Full Technical Breakdown (PDF)",
+				desc: "Downloadable technical reference covering the full data model (Order Sheet / Order Sheet Item / Work Order / Machine), all 7 stages, stage routing per item group, the nightly auto-scheduler and its 30-day backlog caveat, load-balanced machine assignment, Work Order status lifecycle and locking, Order Sheet roll-up logic, and RTD notification — plus a known-gaps section (Production Entry unused, Seat Map inactive, live adoption status).",
+				link: "/files/production_pipeline_breakdown.pdf", linkLabel: "Download PDF",
+				tags: "production pipeline technical breakdown pdf reference document download data model stages automation architecture",
+				note: "Generated by apps/instabiz/scripts/generate_production_pipeline_doc.py — rerun that script and re-copy to sites/frontend/public/files/ if the pipeline logic changes and this doc needs updating.",
 			},
 		],
 	},
@@ -2462,9 +2433,9 @@ const KB_SECTIONS = [
 			},
 			{
 				num: "13", title: "Dormant Customer Detection",
-				desc: "Daily scheduler: customers with no submitted Sales Order in 60+ days get a ToDo assigned to their sales rep, plus a bell notification with a WhatsApp wa.me deep-link for quick contact. One alert per customer (deduplicated via [ib-dormant-reminder] marker in the ToDo description).",
-				tags: "dormant customer 60 days no order alert todo whatsapp wa link re-engage",
-				note: "The dormant threshold matches IB Assignment Config's dormant_threshold_days setting. The alert includes a wa.me link so the rep can message the customer directly with one click.",
+				desc: "Daily scheduler: customers with no submitted Sales Order in 60+ days get a ToDo assigned to their sales rep, plus a bell notification for quick follow-up. One alert per customer (deduplicated via [ib-dormant-reminder] marker in the ToDo description).",
+				tags: "dormant customer 60 days no order alert todo re-engage",
+				note: "The dormant threshold matches IB Assignment Config's dormant_threshold_days setting.",
 			},
 			{
 				num: "21", title: "Fulfillment SLA Alert (48-Hour)",
@@ -2570,6 +2541,74 @@ const KB_SECTIONS = [
 					"Use this for weekly review meetings — single page covering all dimensions.",
 				],
 				tip: "All dashboards auto-refresh every 5 minutes when open. KPI numbers animate with count-up effect on load. Skeleton cards appear while loading.",
+			},
+		],
+	},
+	{
+		id: "faq", cat: "faq",
+		icon: '<iconify-icon icon="lucide:help-circle" width="17" height="17"></iconify-icon>', color: "#f3e8ff", iconColor: "#7c3aed",
+		title: "Frequently Asked Questions",
+		roles: _ALL,
+		items: [
+			{
+				num: "FAQ-1", title: "Why was I marked Absent even though I clocked in?",
+				desc: "Two different root causes, both fixed 2026-07-15 — but check which one applies to you.",
+				tags: "faq absent attendance clocked in punched default shift checkin factory office sales wrong",
+				steps: [
+					"<b>Office/Sales staff:</b> if your Employee record had no <code>default_shift</code> set, your real terminal punches couldn't be matched to a shift, so HRMS never converted them to a Present record — the nightly auto-absent job then marked you Absent despite clocking in. Backfilled for the affected employees; the auto-absent job was also hardened to never mark anyone Absent if a real check-in exists that day, regardless of shift matching.",
+					"<b>Factory staff:</b> a separate issue — nobody has been feeding real punches into either capture path (Attendance Terminal or Biometric Import) for Factory department, so HRMS's own Factory Shift auto-attendance job was marking everyone Absent by default with zero real data behind it. That auto-marking has been switched off; Factory attendance now stays blank instead of wrong until Attendance Terminal or Biometric Import is actually used daily (see FAQ-10).",
+				],
+				note: "If you're still seeing wrong Absent records from before 2026-07-15, those historical records were not automatically corrected — ask HR to review, since fixing them touches payroll-adjacent submitted documents.",
+			},
+			{
+				num: "FAQ-2", title: "Where did the Seat Map / Live Floor tabs in Production Stages go?",
+				desc: "Both were built and then removed the same day at the requester's own follow-up request.",
+				tags: "faq seat map live floor removed missing tab gone production stages",
+				steps: [
+					"Seat Map showed cutting/slitting machine width occupancy as a movie-seat-style grid.",
+					"Live Floor showed real-time occupancy across all 7 stages.",
+					"Both were reviewed and explicitly removed from the page. The backend endpoints they used still exist in production.py (get_cutting_slot_map, get_cutting_fit_suggestions, get_live_floor_status) but are unwired — cheap to bring back if needed.",
+				],
+			},
+			{
+				num: "FAQ-3", title: "Is the n8n automation actually running?",
+				desc: "No. Checked live 2026-07-15: the n8n process isn't running, and even when it was, its own workflows were inactive with a 90%+ historical failure rate.",
+				tags: "faq n8n working running automation broken status offline console",
+				link: "/app/ib-n8n-console", linkLabel: "n8n Console",
+				steps: [
+					"n8n Console (see PROD-22) will correctly show it offline — that's accurate, not a bug.",
+					"Frappe still fires the webhook events (PROD-20) but they now run in the background and can't slow down your clicks anymore, even though nothing is listening on the other end yet.",
+					"If you need this working, someone needs to actually start the n8n process and rebuild/activate a real workflow — the plumbing on the Frappe side is ready.",
+				],
+			},
+			{
+				num: "FAQ-4", title: "Why don't I see a shortcut I expect in my workspace?",
+				desc: "Most workspace shortcuts are restricted to specific roles (restrict_to_role) so people only see what they can actually act on.",
+				tags: "faq missing shortcut workspace role permission not visible",
+				steps: [
+					"If you have read-only access to something, the shortcut may be intentionally hidden from your role to keep the workspace uncluttered — ask a manager/System Manager to check via the doctype's Role Permissions Manager.",
+					"If you believe you should have edit access and don't, that's a permission request, not a bug — raise it with System Manager.",
+				],
+			},
+			{
+				num: "FAQ-5", title: "How does a new Sales Order automatically become production work?",
+				desc: "A nightly scheduler (midnight) scans submitted SOs with no Order Sheet yet and creates one automatically — see PROD-16 for full detail.",
+				tags: "faq new sales order automatic production job scheduler midnight",
+				steps: [
+					"You don't have to do anything — it runs every night.",
+					"If you need production to start immediately rather than waiting for the nightly run, create the Order Sheet manually from the SO or the Order-wise tab (PROD-3).",
+				],
+			},
+			{
+				num: "FAQ-6", title: "Why does the Debit Note shortcut look like it's not working for me?",
+				desc: "Known gap: Accounts User does not currently have permission on IB Debit Note (only Purchase User, Purchase Manager, Accounts Manager, System Manager do), but the shortcut is visible to all Finance workspace roles.",
+				tags: "faq debit note accounts user permission dead click not working",
+				note: "This is a real, currently unresolved permission gap, not something wrong with your account. Ask System Manager if Accounts User should get access.",
+			},
+			{
+				num: "FAQ-7", title: "The Instabiz CRM workspace I used to see is gone",
+				desc: "That was an undocumented duplicate of the native ERPNext CRM workspace (renamed but never properly hidden) — it duplicated Lead/Quotation/Sales Order/Customer/Opportunity shortcuts already covered better by the main Instabiz workspace. Hidden intentionally 2026-07-15.",
+				tags: "faq crm workspace missing gone duplicate hidden",
 			},
 		],
 	},
@@ -2692,7 +2731,7 @@ const TYPO_MAP = {
 	inbox: "ai inbox approve reject pending",
 	autoquote: "auto quote agent lead suggestion",
 	reorder: "smart reorder material request low stock",
-	dunning: "collections agent overdue invoice whatsapp",
+	dunning: "collections agent overdue invoice",
 };
 
 
@@ -2709,7 +2748,6 @@ const SYNONYMS = {
 	stock: ["inventory", "warehouse", "qty", "bin"],
 	lead: ["prospect", "crm"],
 	report: ["analytics", "dashboard", "kpi"],
-	whatsapp: ["wa", "message", "broadcast"],
 	"customer board": ["kanban", "daily plan", "assignment"],
 	"sample request": ["sample", "trial", "demo"],
 	"sales team": ["round robin", "assignment team", "territory team"],
@@ -2734,6 +2772,8 @@ const SYNONYMS = {
 	"smart reorder": ["smart_reorder", "reorder agent", "material request agent"],
 	"buying dna": ["buying_dna", "customer followup", "repeat customer"],
 	"wastage": ["waste", "wastage pct", "waste norm"],
+	"n8n": ["automation", "webhook", "workflow builder"],
+	"seat map": ["live floor", "machine visualization", "roll slot map"],
 };
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
@@ -2791,7 +2831,7 @@ const CAT_LABELS = {
 	all: "All", sales: "Sales", finance: "Finance", crm: "CRM",
 	gst: "GST", reports: "Reports", stock: "Stock",
 	hr: "HR", ai: "AI", production: "Production", comms: "Comms",
-	dashboard: "Dashboards",
+	dashboard: "Dashboards", faq: "FAQ",
 };
 
 function _render_cats($w, visible) {

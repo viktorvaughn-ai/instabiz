@@ -369,20 +369,26 @@ class IBProductionDashboard {
 					</tr>`;
 			}).join("");
 
+			const itemCount = (os.items || []).length;
+			const collapsedByDefault = itemCount > 2;
+
 			return `
 				<div class="ib-pd-plan-card">
-					<div class="ib-pd-plan-header">
+					<div class="ib-pd-plan-header ib-pd-plan-toggle" data-os="${os.name}" style="cursor:pointer">
+						<iconify-icon icon="lucide:chevron-right" width="13" height="13" class="ib-pd-plan-chevron"
+							style="flex-shrink:0;transition:transform .15s;${collapsedByDefault ? "" : "transform:rotate(90deg)"}"></iconify-icon>
 						<div class="ib-pd-plan-so">
-							<a href="/app/sales-order/${os.sales_order || ""}" target="_blank">${os.sales_order || os.name}</a>
+							<a href="/app/sales-order/${os.sales_order || ""}" target="_blank" onclick="event.stopPropagation()">${os.sales_order || os.name}</a>
 							— ${os.customer_name || os.customer || ""}
+							<span style="color:var(--text-muted);font-size:11px;font-weight:400">(${itemCount} item${itemCount !== 1 ? "s" : ""})</span>
 						</div>
 						<div class="ib-pd-plan-meta">
 							<span class="ib-pd-priority-badge" style="background:${pColor};font-size:11px;padding:2px 10px">${os.priority}</span>
 							${os.delivery_date ? `<span class="ib-pd-plan-date"><iconify-icon icon="lucide:calendar" width="12" height="12" style="vertical-align:middle;margin-right:3px"></iconify-icon>${frappe.datetime.str_to_user(os.delivery_date)}</span>` : ""}
-							<a href="/app/ib-order-sheet/${os.name}" target="_blank" class="ib-pd-plan-link">${os.name}</a>
+							<a href="/app/ib-order-sheet/${os.name}" target="_blank" class="ib-pd-plan-link" onclick="event.stopPropagation()">${os.name}</a>
 						</div>
 					</div>
-					<table class="ib-pd-table ib-pd-plan-table">
+					<table class="ib-pd-table ib-pd-plan-table" data-os-body="${os.name}" style="${collapsedByDefault ? "display:none" : ""}">
 						<thead>
 							<tr><th>Item</th><th>Qty</th><th>Current Stage</th><th>Stages</th><th>Progress</th></tr>
 						</thead>
@@ -392,6 +398,14 @@ class IBProductionDashboard {
 		}).join("");
 
 		$el.html(rows);
+		$el.off("click", ".ib-pd-plan-toggle").on("click", ".ib-pd-plan-toggle", (e) => {
+			const os = $(e.currentTarget).data("os");
+			const $body = $el.find(`[data-os-body="${os}"]`);
+			const $chevron = $(e.currentTarget).find(".ib-pd-plan-chevron");
+			const opening = $body.css("display") === "none";
+			$body.css("display", opening ? "" : "none");
+			$chevron.css("transform", opening ? "rotate(90deg)" : "");
+		});
 	}
 
 	// ── n8n status bar ────────────────────────────────────────────────────────

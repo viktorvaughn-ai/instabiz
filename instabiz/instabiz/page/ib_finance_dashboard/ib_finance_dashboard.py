@@ -18,6 +18,9 @@ def _get_fy_start(today):
 
 @frappe.whitelist()
 def get_finance_data():
+	# Page nav restricts to these roles but the RPC had no internal check —
+	# any authenticated user could pull company-wide cash/bank/AR/AP/GST data.
+	frappe.only_for(["System Manager", "Accounts Manager", "Accounts User", "Sales Manager"])
 	today = getdate(nowdate())
 	month_start = get_first_day(today)
 	last_start = get_first_day(add_months(today, -1))

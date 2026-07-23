@@ -8,6 +8,9 @@ def get_context(context):
 
 @frappe.whitelist()
 def get_procurement_data():
+	# Page nav restricts to these roles but the RPC had no internal check —
+	# any authenticated user could pull company-wide PO/AP/vendor spend data.
+	frappe.only_for(["System Manager", "Accounts Manager", "Purchase Manager", "Purchase User", "Factory Management"])
 	today = getdate(nowdate())
 	month_start = get_first_day(today)
 	last_start = get_first_day(add_months(today, -1))

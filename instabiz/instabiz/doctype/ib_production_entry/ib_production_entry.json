@@ -53,6 +53,7 @@
   "tension_setting",
   "section_cutting",
   "parent_roll_id_cut",
+  "roll_width_mm",
   "cut_length",
   "pieces_per_log",
   "total_pieces",
@@ -330,6 +331,13 @@
    "fieldname": "parent_roll_id_cut",
    "fieldtype": "Data",
    "label": "Parent Roll ID"
+  },
+  {
+   "fieldname": "roll_width_mm",
+   "fieldtype": "Float",
+   "label": "Roll Width (MM)",
+   "precision": "1",
+   "description": "Width of this log/roll being cut — feeds the machine slot-map view"
   },
   {
    "fieldname": "cut_length",

@@ -28,8 +28,10 @@ function ib_calc_qty(row) {
     const t = flt(row.total_pkg);
 
     if (ib_is_sqmt(row.uom)) {
-        // Only require width and length to attempt a calculation
-        if (!w || !l) return null;
+        // Require all four dimensions, matching utils.py recalculate_items() server-side.
+        // A row with e.g. total_pkg=0 may have a manually-typed qty that must be preserved,
+        // not silently zeroed out when width/length is edited.
+        if (!w || !l || !p || !t) return null;
         // Do NOT pass a second argument to flt() here to preserve .6, .666 etc.
         return flt((w / 1000) * l * p * t);
     }

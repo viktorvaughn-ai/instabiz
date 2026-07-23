@@ -1,14 +1,8 @@
-from urllib.parse import quote
-
 import frappe
 from frappe.utils import add_days, nowdate
 
 DORMANT_DAYS = 60
 _MARKER = "[ib-dormant-reminder]"
-_MESSAGE = (
-	"Hi, we noticed it's been a while since your last order with us. "
-	"We'd love to stay in touch — let us know if there's anything we can help with!"
-)
 
 
 @frappe.whitelist()
@@ -50,13 +44,10 @@ def run_dormant_check():
 			continue
 
 		sales_user = so.custom_sales_person_user
-		phone      = _clean_phone(frappe.db.get_value("Customer", row.customer, "mobile_no"))
-		wa_link    = f"https://wa.me/{phone}?text={quote(_MESSAGE)}" if phone else None
 
 		desc = (
 			f"<b>{row.customer}</b> has not placed an order in over {DORMANT_DAYS} days "
 			f"(last order: {frappe.utils.formatdate(row.last_order_date)}).<br><br>"
-			+ (f'<a href="{wa_link}" target="_blank">Send WhatsApp Message</a><br><br>' if wa_link else "")
 			+ _MARKER
 		)
 
@@ -86,16 +77,3 @@ def run_dormant_check():
 
 	frappe.db.commit()
 	frappe.logger().info(f"[dormant] created {created} follow-up tasks")
-
-
-def _clean_phone(raw):
-	if not raw:
-		return None
-	phone = raw.strip().replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
-	if not phone:
-		return None
-	if phone.startswith("+"):
-		return phone.lstrip("+")
-	if phone.startswith("0"):
-		phone = phone[1:]
-	return "91" + phone  # default India

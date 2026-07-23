@@ -83,7 +83,6 @@ def _check_socketio():
 # even though we call subprocess with an explicit arg list (no shell=True).
 _RESTARTABLE = {
 	"n8n": "n8n",
-	"openwa": "openwa",
 }
 
 
@@ -120,28 +119,6 @@ def _check_n8n():
 		return _ok(status, "n8n", " | ".join(b for b in detail_bits if b), {"pm2_status": pm2, "key": "n8n"})
 	except Exception as e:
 		return _ok("unknown", "n8n", str(e))
-
-
-def _check_whatsapp():
-	base = (frappe.conf.get("openwa_url") or "http://localhost:2785").rstrip("/")
-	status = "offline"
-	detail = base
-	try:
-		import requests
-		requests.get(base, timeout=3)
-		status = "online"
-	except Exception as e:
-		detail = f"{base}: {e}"
-
-	pm2 = _pm2_status("openwa")
-	connected = frappe.db.count("IB WA Session", {"status": "Connected"}) if frappe.db.exists("DocType", "IB WA Session") else 0
-	total_sessions = frappe.db.count("IB WA Session") if frappe.db.exists("DocType", "IB WA Session") else 0
-
-	bits = [detail]
-	if pm2:
-		bits.append(f"pm2: {pm2}")
-	bits.append(f"{connected}/{total_sessions} session(s) connected")
-	return _ok(status, "WhatsApp (OpenWA)", " | ".join(bits), {"pm2_status": pm2, "key": "openwa"})
 
 
 def _check_claude():
@@ -199,7 +176,6 @@ CHECKS = [
 	_check_scheduler,
 	_check_socketio,
 	_check_n8n,
-	_check_whatsapp,
 	_check_claude,
 	_check_gst,
 ]

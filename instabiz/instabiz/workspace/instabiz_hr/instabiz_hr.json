@@ -1,7 +1,7 @@
 {
  "charts": [],
- "content": "[{\"id\":\"hr-h0\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>DASHBOARDS</b></span>\",\"col\":12}},{\"id\":\"hr-dash\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"HR Dashboard\",\"col\":3}},{\"id\":\"hr-h1\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>HR MANAGEMENT</b></span>\",\"col\":12}},{\"id\":\"hr-emp\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Employees\",\"col\":3}},{\"id\":\"hr-att\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Attendance Terminal\",\"col\":3}},{\"id\":\"H9Tz5LnWPQ\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Attendance \",\"col\":3}},{\"id\":\"hr-org\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Org Chart\",\"col\":3}},{\"id\":\"hr-lv\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Leave Applications\",\"col\":3}},{\"id\":\"hr-sal\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Salary Slips\",\"col\":3}},{\"id\":\"hr-ot\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Overtime Requests\",\"col\":3}},{\"id\":\"hr-ffs\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"F&F Settlement\",\"col\":3}},{\"id\":\"hr-h2\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>TOOLS</b></span>\",\"col\":12}},{\"id\":\"hr-bcast\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"WA Broadcast\",\"col\":3}},{\"id\":\"hr-h3\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>REPORTS</b></span>\",\"col\":12}},{\"id\":\"hr-pay\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Payroll Summary\",\"col\":3}},{\"id\":\"hr-h4\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\",\"col\":12}},{\"id\":\"hr-kb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Knowledge Base\",\"col\":3}}]",
- "creation": "2026-06-27 12:00:00",
+ "content": "[{\"id\":\"hr-h0\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>DASHBOARDS</b></span>\",\"col\":12}},{\"id\":\"hr-dash\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"HR Dashboard\",\"col\":3}},{\"id\":\"hr-h1\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>HR MANAGEMENT</b></span>\",\"col\":12}},{\"id\":\"hr-emp\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Employees\",\"col\":3}},{\"id\":\"hr-att\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Attendance Terminal\",\"col\":3}},{\"id\":\"hr-bio\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Biometric Import\",\"col\":3}},{\"id\":\"H9Tz5LnWPQ\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Checkins\",\"col\":3}},{\"id\":\"hr-org\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Org Chart\",\"col\":3}},{\"id\":\"hr-lv\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Leave Applications\",\"col\":3}},{\"id\":\"hr-sal\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Salary Slips\",\"col\":3}},{\"id\":\"hr-ot\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Overtime Requests\",\"col\":3}},{\"id\":\"hr-ffs\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"F&F Settlement\",\"col\":3}},{\"id\":\"hr-h2\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>TOOLS</b></span>\",\"col\":12}},{\"id\":\"hr-bcast\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"WA Broadcast\",\"col\":3}},{\"id\":\"hr-h3\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>REPORTS</b></span>\",\"col\":12}},{\"id\":\"hr-pay\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Payroll Summary\",\"col\":3}},{\"id\":\"hr-h4\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\",\"col\":12}},{\"id\":\"hr-kb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Knowledge Base\",\"col\":3}}]",
+ "creation": "2026-07-15 06:19:48.558407",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz HR",
  "links": [],
- "modified": "2026-07-10 17:54:39.414309",
+ "modified": "2026-07-15 06:30:40.370323",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz HR",
@@ -40,13 +40,20 @@
    "color": "Grey",
    "doc_view": "",
    "label": "Attendance Terminal",
-   "link_to": "Employee Attendance Tool",
-   "type": "DocType"
+   "link_to": "attendance-terminal",
+   "type": "Page"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "",
+   "label": "Biometric Import",
+   "link_to": "ib-biometric-import",
+   "type": "Page"
   },
   {
    "color": "Cyan",
    "doc_view": "List",
-   "label": "Attendance ",
+   "label": "Checkins",
    "link_to": "Employee Checkin",
    "stats_filter": "[]",
    "type": "DocType"

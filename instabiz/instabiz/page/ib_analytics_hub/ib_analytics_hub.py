@@ -8,6 +8,13 @@ def get_context(context):
 
 @frappe.whitelist()
 def get_analytics_data(tab="sales", period="monthly"):
+	# "me" is self-scoped (frappe.session.user) and safe for anyone. Every other
+	# tab returns company-wide sales/finance/hr/production data — the Page itself
+	# restricts navigation to these roles, but the RPC was previously callable
+	# directly by any authenticated user with no internal check (same class of
+	# bug already fixed in ib_hrms_dashboard.get_hrms_data).
+	if tab != "me":
+		frappe.only_for(["System Manager", "Sales Manager", "Accounts Manager", "Factory Management"])
 	today = getdate(nowdate())
 
 	if period == "daily":
@@ -362,21 +369,32 @@ def _my_work_data(user, today, since, date_fmt, group_fmt):
 
 def _my_work_sales(user, today, since, date_fmt, group_fmt, month_start):
 	# ── Core billing metrics ───────────────────────────────────────────────────
+	# TEST-ONLY BASIS CHANGE: rev_mtd/invoice_count read Sales Order instead of
+	# Sales Invoice — billing isn't live in ERP yet, so SI-based revenue always
+	# read 0/wrong. Revert to Sales Invoice once invoicing goes live for real
+	# revenue-realization accounting. "collected" stays Sales Invoice — it's a
+	# real money-received concept with no Sales Order equivalent.
 	billing_row = frappe.db.sql("""
 		SELECT
 			COALESCE(SUM(grand_total), 0)               as rev_mtd,
-			COALESCE(SUM(grand_total - outstanding_amount), 0) as collected,
 			COUNT(*)                                     as invoice_count
-		FROM `tabSales Invoice`
-		WHERE docstatus=1 AND is_return=0
-		AND posting_date BETWEEN %s AND %s
+		FROM `tabSales Order`
+		WHERE docstatus=1
+		AND transaction_date BETWEEN %s AND %s
 		AND custom_sales_person_user = %s
 	""", (month_start, today, user), as_dict=True)[0]
 
 	rev_mtd       = flt(billing_row.rev_mtd)
-	collected      = flt(billing_row.collected)
 	invoice_count  = int(billing_row.invoice_count or 0)
 	avg_invoice    = round(rev_mtd / invoice_count, 2) if invoice_count else 0
+
+	collected = flt(frappe.db.sql("""
+		SELECT COALESCE(SUM(grand_total - outstanding_amount), 0)
+		FROM `tabSales Invoice`
+		WHERE docstatus=1 AND is_return=0
+		AND posting_date BETWEEN %s AND %s
+		AND custom_sales_person_user = %s
+	""", (month_start, today, user))[0][0])
 
 	# ── Orders MTD ─────────────────────────────────────────────────────────────
 	orders_mtd = int(flt(frappe.db.sql("""
@@ -386,8 +404,12 @@ def _my_work_sales(user, today, since, date_fmt, group_fmt, month_start):
 	""", (month_start, today, user))[0][0]))
 
 	# ── Advance collections MTD (PEs linked to this user's SOs) ───────────────
+	# Sum per-reference-row allocated_amount, not the PE parent's paid_amount —
+	# a PE split across multiple SOs would otherwise count its full paid_amount
+	# once per joined reference row (same fan-out fix already applied in
+	# payment_entry.py's _update_so_advance()).
 	advance_collected = flt(frappe.db.sql("""
-		SELECT COALESCE(SUM(pe.paid_amount), 0)
+		SELECT COALESCE(SUM(per.allocated_amount), 0)
 		FROM `tabPayment Entry` pe
 		JOIN `tabPayment Entry Reference` per ON per.parent = pe.name
 		JOIN `tabSales Order` so ON so.name = per.reference_name
@@ -403,7 +425,9 @@ def _my_work_sales(user, today, since, date_fmt, group_fmt, month_start):
 		WHERE sales_user = %s AND month = %s
 	""", (user, str(month_start)), as_dict=True)
 	target = flt(target_row[0]["target_amount"]) if target_row else 0
-	tgt_pct = round(collected / target * 100, 1) if target else None
+	# TEST-ONLY BASIS CHANGE: attainment vs rev_mtd (Sales Order), not collected
+	# (Sales Invoice) — matches the same billing-not-live basis change above.
+	tgt_pct = round(rev_mtd / target * 100, 1) if target else None
 
 	commission, slab_label = 0.0, None
 	try:
@@ -503,7 +527,7 @@ def _my_work_sales(user, today, since, date_fmt, group_fmt, month_start):
 	return {
 		"kpis": [
 			{"label": "Revenue MTD",       "value": rev_mtd,          "type": "currency",
-			 "delta": round(tgt_pct - 100, 1) if tgt_pct else 0},
+			 "delta": round(tgt_pct - 100, 1) if tgt_pct else 0, "delta_label": "vs target"},
 			{"label": "Invoices Created",  "value": invoice_count,    "type": "count",    "delta": 0},
 			{"label": "Advance Collected", "value": advance_collected, "type": "currency", "delta": 0},
 			{"label": "Commission",        "value": commission,        "type": "currency", "delta": 0},

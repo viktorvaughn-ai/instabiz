@@ -48,13 +48,6 @@ frappe.ui.form.on("Customer", {
 			_ib_load_outstanding(frm);
 			_ib_render_outstanding_btn(frm);
 			_ib_render_sales_orders_btn(frm);
-			frm.add_custom_button(__("Send WhatsApp"), () => {
-				ib_show_wa_dialog({
-					customer: frm.doc.name,
-					customer_name: frm.doc.customer_name,
-				});
-			}, IB_ICONS.svg("whatsapp", 16));
-			_ib_render_send_statement_btn(frm);
 		}
 	},
 
@@ -250,31 +243,6 @@ function _ib_render_share_button(frm) {
 	frm.add_custom_button("Manage Sharing", () => {
 		_ib_show_share_dialog(frm.doc.name, frm.doc.customer_name);
 	}, "Assign");
-}
-
-function _ib_render_send_statement_btn(frm) {
-	frm.remove_custom_button("Send Outstanding Statement", "WhatsApp");
-	frm.add_custom_button(__("Send Outstanding Statement"), () => {
-		frappe.confirm(
-			`Send outstanding invoices list to <b>${frappe.utils.escape_html(frm.doc.customer_name)}</b> via WhatsApp?`,
-			() => {
-				frappe.call({
-					method: "instabiz.overrides.whatsapp.send_outstanding_statement",
-					args: { customer: frm.doc.name },
-					freeze: true,
-					freeze_message: "Sending statement…",
-					callback(r) {
-						if (r.message && r.message.status === "ok") {
-							frappe.show_alert({
-								message: `Statement sent — ${r.message.invoices} invoice(s)`,
-								indicator: "green",
-							});
-						}
-					},
-				});
-			}
-		);
-	}, "WhatsApp");
 }
 
 function _ib_show_share_dialog(customer, customer_name) {

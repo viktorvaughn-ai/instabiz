@@ -45,7 +45,7 @@ class IBHrmsDashboard {
 		s.id = "ib-hr-styles";
 		s.textContent = `
 .ib-hr-wrap { padding: 16px; max-width: 1400px; }
-.ib-hr-kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
+.ib-hr-kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 18px; }
 .ib-hr-kpi { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px;
   padding: 14px; border-top: 4px solid; position: relative; overflow: hidden; }
 .ib-hr-kpi--link:hover { background: var(--ib-tint-mid, #f7f7f7); }
@@ -89,7 +89,7 @@ class IBHrmsDashboard {
 .ib-hr-stat-val { font-weight: 600; color: var(--heading-color); }
 .ib-hr-top-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
 .ib-hr-ts { font-size: 11px; color: var(--text-muted); margin-left: auto; }
-@media(max-width:900px){ .ib-hr-kpi-row{grid-template-columns:1fr 1fr;} .ib-hr-statutory{grid-template-columns:1fr;} }
+@media(max-width:900px){ .ib-hr-kpi-row{grid-template-columns:repeat(3,1fr);} .ib-hr-statutory{grid-template-columns:1fr;} }
 @media(max-width:540px){ .ib-hr-kpi-row{grid-template-columns:1fr;} }
 		`;
 		document.head.appendChild(s);
@@ -177,7 +177,11 @@ class IBHrmsDashboard {
 			},
 			{
 				label: "Present Today", val: `${d.present_today} (${attend_pct}%)`, rawNum: null, color: "#10b981",
-				click() { frappe.route_options = { attendance_date: today, status: "Present", docstatus: 1 }; frappe.set_route("List", "Attendance Terminal"); },
+				click() { frappe.route_options = { attendance_date: today, status: "Present", docstatus: 1 }; frappe.set_route("List", "Attendance"); },
+			},
+			{
+				label: "Absent Today", val: d.absent_today, rawNum: d.absent_today, color: "#ef4444",
+				click() { frappe.route_options = { attendance_date: today, status: "Absent", docstatus: 1 }; frappe.set_route("List", "Attendance"); },
 			},
 			{
 				label: "Pending Leaves", val: d.pending_leaves, rawNum: d.pending_leaves, color: "#f59e0b",
@@ -217,6 +221,7 @@ class IBHrmsDashboard {
 	_render_attendance() {
 		const rows = this._data.attendance || [];
 		const dept_data = this._data.by_dept || [];
+		const designation_data = this._data.by_designation || [];
 		const status_badge = (s) => {
 			const cls = s === "Present" ? "present" : s === "Absent" ? "absent"
 				: s === "Half Day" ? "half" : "leave";
@@ -224,24 +229,28 @@ class IBHrmsDashboard {
 		};
 		const time_fmt = (t) => t ? t.slice(0, 5) : "—";
 
+		const bars = (title, data) => {
+			if (!data.length) return "";
+			const max_count = Math.max(...data.map(d => d.count || 0));
+			return `<div style="margin-bottom:16px">
+				<div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">${title}</div>
+				<div class="ib-hr-dept-bars">
+					${data.map(d => `
+						<div class="ib-hr-bar-row">
+							<div class="ib-hr-bar-lbl">${frappe.utils.escape_html(d.label || "")}</div>
+							<div class="ib-hr-bar-track">
+								<div class="ib-hr-bar-fill" style="width:${max_count ? Math.round(d.count / max_count * 100) : 0}%"></div>
+							</div>
+							<div class="ib-hr-bar-val">${d.count}</div>
+						</div>
+					`).join("")}
+				</div>
+			</div>`;
+		};
+
 		let html = "";
-		// if (dept_data.length) {
-		// 	const max_count = Math.max(...dept_data.map(d => d.count || 0));
-		// 	html += `<div style="margin-bottom:16px">
-		// 		<div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">By Department</div>
-		// 		<div class="ib-hr-dept-bars">
-		// 			${dept_data.map(d => `
-		// 				<div class="ib-hr-bar-row">
-		// 					<div class="ib-hr-bar-lbl">${frappe.utils.escape_html(d.label || "")}</div>
-		// 					<div class="ib-hr-bar-track">
-		// 						<div class="ib-hr-bar-fill" style="width:${max_count ? Math.round(d.count / max_count * 100) : 0}%"></div>
-		// 					</div>
-		// 					<div class="ib-hr-bar-val">${d.count}</div>
-		// 				</div>
-		// 			`).join("")}
-		// 		</div>
-		// 	</div>`;
-		// }
+		html += bars("By Department", dept_data);
+		html += bars("By Job Role", designation_data);
 
 		if (!rows.length) {
 			html += `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">No attendance records this month</div>`;

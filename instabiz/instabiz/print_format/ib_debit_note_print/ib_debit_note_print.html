@@ -4,9 +4,14 @@
 
 {# ── Company ─────────────────────────────────────────────────────────────────── #}
 {% set co = frappe.get_cached_doc("Company", doc.company) %}
-{% set co_addr = frappe.db.get_value("Address",
-    {"link_doctype": "Company", "link_name": doc.company, "gstin": ["!=", ""]},
-    ["address_line1","address_line2","city","state","pincode","gstin"], as_dict=True) %}
+{% set _co_addr_rows = frappe.db.sql("""
+    SELECT a.address_line1, a.address_line2, a.city, a.state, a.pincode, a.gstin
+    FROM `tabAddress` a
+    INNER JOIN `tabDynamic Link` dl ON dl.parent = a.name
+    WHERE dl.link_doctype = 'Company' AND dl.link_name = %s AND a.gstin != ''
+    ORDER BY a.creation ASC LIMIT 1
+""", doc.company, as_dict=True) %}
+{% set co_addr = _co_addr_rows[0] if _co_addr_rows else None %}
 
 {# ── Supplier ─────────────────────────────────────────────────────────────────── #}
 {% set sup = frappe.get_cached_doc("Supplier", doc.supplier) %}

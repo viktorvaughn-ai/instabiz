@@ -6,22 +6,6 @@ from frappe.utils import today, now, add_days
 from instabiz.overrides.sales_target import get_target_map, compute_incentive, _month_first
 
 
-# ── WA Templates ─────────────────────────────────────────────────────────────
-
-@frappe.whitelist()
-def get_wa_templates():
-	rows = frappe.db.sql(
-		"""
-		SELECT template_name, message
-		FROM `tabIB WA Template`
-		WHERE is_active = 1
-		ORDER BY display_order ASC, creation ASC
-		""",
-		as_dict=True,
-	)
-	return [{"name": r.template_name, "message": r.message} for r in rows]
-
-
 # ── Config ────────────────────────────────────────────────────────────────────
 
 @frappe.whitelist()

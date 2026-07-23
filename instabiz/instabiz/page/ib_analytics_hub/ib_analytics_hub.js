@@ -530,7 +530,7 @@ class IBAnalyticsHub {
 			if (!k.delta) return "";
 			const cls = k.delta > 0 ? "pos" : k.delta < 0 ? "neg" : "neu";
 			const sign = k.delta > 0 ? "▲" : "▼";
-			return `<div class="ib-hub-kpi-delta ${cls}">${sign} ${Math.abs(k.delta)}% vs last period</div>`;
+			return `<div class="ib-hub-kpi-delta ${cls}">${sign} ${Math.abs(k.delta)}% ${k.delta_label || "vs last period"}</div>`;
 		};
 
 		const $kpis = this.$wrap.find("#ib-hub-kpis");
@@ -682,7 +682,7 @@ class IBAnalyticsHub {
 			const total = rows.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
 			this.$wrap.find("#ib-hub-table").html(`
 				<table class="ib-hub-table">
-					<thead><tr><th>Item Group</th><th>Revenue</th><th>Share</th></tr></thead>
+					<thead><tr><th>Item Group</th><th>Revenue</th><th>Share</th><th></th></tr></thead>
 					<tbody>${rows.map(r => `
 						<tr>
 							<td>${frappe.utils.escape_html(r.label || "")}</td>
@@ -693,16 +693,21 @@ class IBAnalyticsHub {
 									${total ? Math.round(parseFloat(r.amount || 0) / total * 100) : 0}%
 								</span>
 							</td>
+							<td class="ib-hub-itemgroup-link" data-group="${frappe.utils.escape_html(r.label || "")}" style="cursor:pointer;font-size:11px;color:var(--ib-primary)">Items →</td>
 						</tr>
 					`).join("")}</tbody>
 				</table>
 			`);
+			this.$wrap.find(".ib-hub-itemgroup-link").off("click").on("click", (e) => {
+				frappe.route_options = { item_group: $(e.currentTarget).data("group") };
+				frappe.set_route("List", "Item");
+			});
 		} else if (this._active_tab === "inventory" && (d.recent || []).length) {
 			this.$wrap.find("#ib-hub-table-card").show();
 			this.$wrap.find("#ib-hub-table-title").text("Recent Stock Movements");
 			this.$wrap.find("#ib-hub-table").html(`
 				<table class="ib-hub-table">
-					<thead><tr><th>Item</th><th>Warehouse</th><th>Qty After</th><th>Type</th><th>Date</th></tr></thead>
+					<thead><tr><th>Item</th><th>Warehouse</th><th>Qty After</th><th>Type</th><th>Date</th><th></th></tr></thead>
 					<tbody>${(d.recent || []).map(r => `
 						<tr>
 							<td style="font-weight:500">${frappe.utils.escape_html(r.item_code || "")}</td>
@@ -710,6 +715,7 @@ class IBAnalyticsHub {
 							<td style="text-align:right">${Number(r.qty || 0).toFixed(2)}</td>
 							<td>${frappe.utils.escape_html(r.voucher_type || "")}</td>
 							<td>${frappe.datetime.str_to_user(r.posting_date) || r.posting_date}</td>
+							<td><a href="/app/item/${encodeURIComponent(r.item_code || "")}" style="font-size:11px;color:var(--ib-primary)">View →</a></td>
 						</tr>
 					`).join("")}</tbody>
 				</table>
@@ -878,6 +884,7 @@ class IBAnalyticsHub {
 					<th style="text-align:right">Collected</th>
 					<th style="text-align:right">Outstanding</th>
 					<th style="text-align:right">Collection %</th>
+					<th></th>
 				</tr></thead>
 				<tbody>${rows.map(r => {
 					const pct = parseFloat(r.collection_pct || 0);
@@ -895,6 +902,7 @@ class IBAnalyticsHub {
 								${pct}%
 							</span>
 						</td>
+						<td class="ib-hub-outstanding-link" data-customer="${frappe.utils.escape_html(r.customer || "")}" style="cursor:pointer;font-size:11px;color:var(--ib-primary)">Invoices →</td>
 					</tr>`;
 				}).join("")}</tbody>
 			</table>`;
@@ -1093,6 +1101,10 @@ class IBAnalyticsHub {
 		}
 
 		$el.html(html);
+		$el.off("click", ".ib-hub-outstanding-link").on("click", ".ib-hub-outstanding-link", (e) => {
+			frappe.route_options = { customer_name: $(e.currentTarget).data("customer"), outstanding_amount: [">", 0] };
+			frappe.set_route("List", "Sales Invoice");
+		});
 	}
 
 	// ── CSV Export ────────────────────────────────────────────────────────────

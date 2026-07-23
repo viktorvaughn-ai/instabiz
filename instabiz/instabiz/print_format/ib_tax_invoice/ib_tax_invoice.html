@@ -113,7 +113,10 @@
     (doc.customer, doc.name)) %}
 {% set prev_bal = prev_rows[0][0]|float if prev_rows else 0 %}
 {% set bill_amt = (doc.rounded_total or doc.grand_total or 0)|float %}
-{% set net_bal  = prev_bal + bill_amt %}
+{# Net Balance = prev balance + what's still outstanding on THIS invoice, not its
+   full billed value — using bill_amt here would overstate the customer's true
+   dues on any reprint after a partial payment has been reconciled against it. #}
+{% set net_bal  = prev_bal + (doc.outstanding_amount or 0)|float %}
 
 {# ── Tax breakdown for EWB fallback ──────────────────────────────────────────── #}
 {% set ns_tax = namespace(cgst=0.0, sgst=0.0, igst=0.0) %}

@@ -37,10 +37,6 @@ scheduler_events = {
         "instabiz.overrides.overdue_alert.run_overdue_alert",
         # Alert Accounts/Sales when PDC cheque date is 3 days away
         "instabiz.overrides.pdc_alert.run_pdc_alert",
-        # Send WA re-engagement to customers with no SO in 30+ days
-        "instabiz.overrides.whatsapp.run_wa_dormant_blast",
-        # Daily production snapshot — reserved for future DPR caching
-        "instabiz.overrides.production.run_daily_production_snapshot",
         # AI agents — auto_quote, demand_forecast, smart_reorder, collections, istix_enforcer, buying_dna
         "instabiz.overrides.ai_agents.run_daily_agents",
         # Monthly payroll draft creation — fires daily but only acts on the 7th
@@ -122,7 +118,9 @@ fixtures = [
     "Custom Field",
     {
         "dt": "Property Setter",
-        "filters": [["doc_type", "in", ["Quotation", "Sales Order", "Lead", "Delivery Note", "Customer"]]]
+        "filters": [["doc_type", "in", ["Quotation", "Sales Order", "Lead", "Delivery Note", "Customer",
+                                          "IB Credit Note", "IB Debit Note", "Purchase Invoice",
+                                          "Purchase Order", "Purchase Receipt", "Sales Invoice"]]]
     },
     {
         "dt": "Purchase Taxes and Charges Template",
@@ -152,9 +150,6 @@ override_doctype_class = {
 # REMOVED: recalculate_* hooks — already handled inside the override classes
 # above. Keeping them here caused double execution on every validate.
 doc_events = {
-    "Quotation": {
-        "on_submit": "instabiz.overrides.whatsapp.on_quotation_submit",
-    },
     "User": {
         "after_insert": [
             "instabiz.overrides.user.create_sales_person_for_user",
@@ -190,6 +185,7 @@ doc_events = {
         "on_submit": [
             "instabiz.overrides.stock_events.publish_stock_update",
             "instabiz.overrides.customer_assignment.mark_assignment_done_on_so",
+            "instabiz.overrides.production.on_so_submit_create_order_sheet",
         ],
         "on_cancel": "instabiz.overrides.stock_events.publish_stock_update",
     },
@@ -299,7 +295,6 @@ app_include_js  = [
     "/assets/instabiz/js/form.js",                  # form handlers (depends on recalc.js)
     "/assets/instabiz/js/list_utils.js",            # shared list view helpers (status multiselect, extract filter values)
     "/assets/instabiz/js/comment_popover.js",       # inline comment popover on list rows
-    "/assets/instabiz/js/whatsapp_dialog.js",       # global WA send dialog (ib_show_wa_dialog)
     "/assets/instabiz/js/ib_list_print.js",         # shared list view print utility
     "/assets/instabiz/js/ib_dash_utils.js",         # dashboard shared: countUp loader, skeleton helpers, fmt
     "/assets/instabiz/js/so_production_panel.js",  # SO form: production stage + dispatch status panel
@@ -341,7 +336,6 @@ doctype_js = {
     "Purchase Order":          "public/js/ib_purchase_common.js",
     "Purchase Receipt":        "public/js/ib_purchase_common.js",
     "Purchase Invoice":        "public/js/ib_purchase_common.js",
-    "IB WA Session":           "public/js/ib_wa_session.js",
     "IB Credit Note":          "public/js/ib_credit_note.js",
     "IB Debit Note":           "public/js/ib_debit_note.js",
 }

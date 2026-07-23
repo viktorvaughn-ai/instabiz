@@ -16,6 +16,10 @@
   "capacity_uom",
   "wastage_norm_pct",
   "status",
+  "spatial_section",
+  "machine_width_mm",
+  "col_break_spatial",
+  "knife_positions",
   "notes"
  ],
  "fields": [
@@ -77,6 +81,29 @@
    "label": "Status",
    "options": "Active\nInactive\nUnder Maintenance",
    "default": "Active"
+  },
+  {
+   "fieldname": "spatial_section",
+   "fieldtype": "Section Break",
+   "label": "Spatial Capacity",
+   "description": "Only relevant for Slitting/Cutting machines — used for width-aware job bundling and the roll slot-map view."
+  },
+  {
+   "fieldname": "machine_width_mm",
+   "fieldtype": "Float",
+   "label": "Machine Width (MM)",
+   "precision": "1",
+   "description": "Maximum deckle/working width this machine can process in one pass"
+  },
+  {
+   "fieldname": "col_break_spatial",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "knife_positions",
+   "fieldtype": "Int",
+   "label": "Knife Positions",
+   "description": "Number of simultaneous slit/cut positions available"
   },
   {
    "fieldname": "notes",

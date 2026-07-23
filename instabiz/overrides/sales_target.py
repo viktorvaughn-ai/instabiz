@@ -25,18 +25,20 @@ def _month_days(d=None):
 
 
 def _get_actuals(sales_user, month_first, return_count=False):
-	"""Sum of submitted SI grand_total for the user in the given month.
-	Uses Sales Invoice posting_date — revenue is realized when invoice is raised, not when SO is placed.
-	Excludes returns (is_return=1). Falls back to custom_sales_person display name for legacy docs.
+	"""Sum of submitted SO grand_total for the user in the given month.
+	TEST-ONLY BASIS CHANGE: reads Sales Order (transaction_date) instead of Sales
+	Invoice (posting_date) — billing isn't live in ERP yet, so SI-based actuals
+	always read 0/wrong. Revert to Sales Invoice once invoicing goes live for real
+	revenue-realization accounting. Falls back to custom_sales_person display name
+	for legacy docs.
 	"""
 	month_last = _month_last(month_first)
 	full_name = frappe.db.get_value("User", sales_user, "full_name") or ""
 	result = frappe.db.sql(
 		"""
 		SELECT COALESCE(SUM(grand_total), 0) AS total, COUNT(*) AS cnt
-		FROM `tabSales Invoice`
+		FROM `tabSales Order`
 		WHERE docstatus = 1
-		  AND is_return = 0
 		  AND (
 		      TRIM(custom_sales_person_user) = %(user)s
 		      OR (
@@ -45,7 +47,7 @@ def _get_actuals(sales_user, month_first, return_count=False):
 		          AND TRIM(custom_sales_person) = %(full_name)s
 		      )
 		  )
-		  AND posting_date BETWEEN %(from_date)s AND %(to_date)s
+		  AND transaction_date BETWEEN %(from_date)s AND %(to_date)s
 		""",
 		{
 			"user": sales_user,

@@ -51,21 +51,6 @@ IB_DOCTYPES.forEach(function (doctype) {
                 if (frm.page.btn_secondary) frm.page.btn_secondary.hide();
             }
 
-            // Send WhatsApp button — visible on all doc states when a customer exists
-            // Quotation uses party_name (not customer) when quotation_to === "Customer"
-            const _wa_customer = frm.doc.customer
-                || (frm.doc.quotation_to === "Customer" ? frm.doc.party_name : null);
-            if (_wa_customer) {
-                frm.add_custom_button(__("WhatsApp"), () => {
-                    ib_show_wa_dialog({
-                        customer: _wa_customer,
-                        customer_name: frm.doc.customer_name || _wa_customer,
-                        ref_doctype: doctype,
-                        ref_docname: frm.doc.name,
-                    });
-                }, IB_ICONS.svg("whatsapp", 16));
-            }
-
             // SI and DN: no reopen or amend — cancelled docs must be re-raised fresh
             if ((doctype === "Sales Invoice" || doctype === "Delivery Note") && frm.doc.docstatus === 2) {
                 // defer past Frappe's own button setup
@@ -290,25 +275,6 @@ frappe.ui.form.on("Quotation Item", {
     custom_valuation_rate(frm, cdt, cdn) {
         _ib_update_margin(frm, cdt, cdn);
     },
-});
-
-// ── Sales Invoice: dedicated WhatsApp share for e-invoice PDF ─────────────────
-frappe.ui.form.on("Sales Invoice", {
-	refresh(frm) {
-		if (!frm.doc.customer) return;
-		// Dedicated "Share Invoice" WA button — always visible, sends IB GST Tax Invoice PDF
-		frm.add_custom_button(__("Share Invoice"), () => {
-			const phone = frappe.db.get_value("Customer", frm.doc.customer, "mobile_no");
-			const name = frm.doc.customer_name || frm.doc.customer;
-			// Direct WhatsApp with PDF — reuse existing dialog with attach pre-checked
-			ib_show_wa_dialog({
-				customer: frm.doc.customer,
-				customer_name: name,
-				ref_doctype: "Sales Invoice",
-				ref_docname: frm.doc.name,
-			});
-		}, __("WhatsApp"));
-	},
 });
 
 // ── Quotation: Sale Type & Currency → clear taxes; currency → convert rates ───

@@ -14,18 +14,21 @@ def get_dashboard_data():
 	last_month_end = get_last_day(add_months(today, -1))
 
 	# ── Revenue MTD ──────────────────────────────────────────────────────────
+	# TEST-ONLY BASIS CHANGE: Sales Order instead of Sales Invoice — billing
+	# isn't live in ERP yet, so SI-based revenue always read 0/wrong. Revert to
+	# Sales Invoice once invoicing goes live for real revenue-realization accounting.
 	rev_mtd = flt(frappe.db.sql("""
 		SELECT COALESCE(SUM(grand_total), 0)
-		FROM `tabSales Invoice`
-		WHERE docstatus=1 AND is_return=0
-		AND posting_date BETWEEN %s AND %s
+		FROM `tabSales Order`
+		WHERE docstatus=1
+		AND transaction_date BETWEEN %s AND %s
 	""", (month_start, today))[0][0])
 
 	rev_last = flt(frappe.db.sql("""
 		SELECT COALESCE(SUM(grand_total), 0)
-		FROM `tabSales Invoice`
-		WHERE docstatus=1 AND is_return=0
-		AND posting_date BETWEEN %s AND %s
+		FROM `tabSales Order`
+		WHERE docstatus=1
+		AND transaction_date BETWEEN %s AND %s
 	""", (last_month_start, last_month_end))[0][0])
 
 	rev_delta = round(((rev_mtd - rev_last) / rev_last * 100), 1) if rev_last else 0
@@ -55,11 +58,18 @@ def get_dashboard_data():
 		WHERE docstatus=0
 	""")[0][0])
 
-	# ── Low stock (bins where actual_qty <= 0) ───────────────────────────────
+	# ── Low / zero stock (actual_qty at or below the item's reorder level) ──
+	# Same definition as reorder_alert.py — was previously narrowed to
+	# actual_qty<=0 AND reserved_qty>0, which excluded plain zero-stock
+	# items with no open reservation and any genuinely-low (but positive)
+	# stock, contradicting the "Low / Zero Stock" label.
 	try:
 		low_stock = flt(frappe.db.sql("""
-			SELECT COUNT(DISTINCT item_code) FROM `tabBin`
-			WHERE actual_qty <= 0 AND reserved_qty > 0
+			SELECT COUNT(DISTINCT b.item_code) FROM `tabBin` b
+			INNER JOIN `tabItem Reorder` r
+				ON r.parent = b.item_code AND r.warehouse = b.warehouse
+			WHERE r.warehouse_reorder_level > 0
+			  AND b.actual_qty <= r.warehouse_reorder_level
 		""")[0][0])
 	except Exception:
 		low_stock = 0

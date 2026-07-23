@@ -74,6 +74,7 @@ AGENT_MODULES = {
 	"finance_bank_recon": "Finance",
 	"ops_po_overdue": "Operations", "ops_delivery_risk": "Operations",
 	"ops_stock_aging": "Operations",
+	"raven_sales_bot": "Sales",
 }
 
 _ALL_MANAGER_ROLES = [
@@ -1542,21 +1543,6 @@ def _apply_dynamic(action_doc, draft):
 		result = frappe.get_attr(fn_path)(**fn_args)
 		return str(result) if result is not None else "Function executed"
 
-	if t == "send_whatsapp":
-		phone_field = config.get("phone_field", "mobile_no")
-		msg_field = config.get("message_field", "message")
-		phone = draft.get(phone_field, "")
-		msg = draft.get(msg_field, "")
-		if phone and msg:
-			try:
-				from instabiz.overrides.whatsapp import _send_raw
-				_send_raw(phone, msg)
-				return f"WhatsApp sent to {phone}"
-			except Exception as e:
-				frappe.log_error("IB Dynamic Agent WA", str(e))
-				return f"WA send failed: {e}"
-		return "No phone or message in draft"
-
 	return f"Action type '{t}' has no handler — add one to _apply() or _apply_dynamic()"
 
 
@@ -1617,16 +1603,6 @@ def _apply(action_doc):
 		return f"Material Request {mr.name} created (draft)"
 
 	if t == "collection_message":
-		msg = draft.get("message", "")
-		phone = draft.get("phone", "")
-		if phone and frappe.db.exists("Sales Invoice", draft.get("invoice")):
-			try:
-				from instabiz.overrides.whatsapp import _send_raw
-				_send_raw(phone, msg)
-				return f"WhatsApp sent to {phone}"
-			except Exception as e:
-				frappe.log_error("IB AI Agents: WA send", str(e))
-				return f"Message logged (WA send failed: {e})"
 		return "Message approved (logged)"
 
 	if t == "escalate_work_order":
@@ -2011,6 +1987,56 @@ def get_ai_actions(status="pending", agent=None, module=None, start=0, page_leng
 
 
 @frappe.whitelist()
+def raven_draft_quotation(lead, item_code=None, rate=None, note=None):
+	"""Called by the Raven sales-bot's Custom Function (not Create Document) —
+	drafts a pending IB AI Action instead of creating a real Quotation directly,
+	reusing the exact same human-in-the-loop approval path as the auto_quote
+	scheduled agent (action_type='create_quotation', applied by _apply() only
+	when a manager clicks Approve in AI Inbox)."""
+	if not frappe.db.exists("Lead", lead):
+		return {"ok": False, "message": f"Lead {lead} not found — no action taken."}
+
+	lead_doc = frappe.db.get_value(
+		"Lead", lead,
+		["company_name", "custom_product_of_interest", "territory", "email_id", "custom_lead_score"],
+		as_dict=True,
+	) or {}
+
+	item_name = None
+	resolved_rate = rate
+	if item_code:
+		item_row = frappe.db.get_value("Item", item_code, ["item_name", "standard_rate"], as_dict=True)
+		if item_row:
+			item_name = item_row.item_name
+			if resolved_rate is None:
+				resolved_rate = item_row.standard_rate
+
+	draft = {
+		"lead": lead,
+		"customer": lead_doc.get("company_name"),
+		"item": item_name,
+		"item_code": item_code,
+		"rate": resolved_rate,
+		"territory": lead_doc.get("territory"),
+		"email": lead_doc.get("email_id"),
+	}
+	company = lead_doc.get("company_name") or lead
+	action_name = _queue(
+		"raven_sales_bot", "create_quotation",
+		f"Quote: {company}",
+		note or "Drafted via Raven sales-bot chat request.",
+		draft, "Lead", lead, ai_generated=True,
+	)
+	if not action_name:
+		return {"ok": False, "message": "A quotation draft for this lead was already queued today — check AI Inbox."}
+	return {
+		"ok": True,
+		"message": f"Draft quotation for {company} queued as {action_name} — a manager needs to approve it in AI Inbox before it becomes a real Quotation.",
+		"action_name": action_name,
+	}
+
+
+@frappe.whitelist()
 def approve_action(name):
 	frappe.only_for(_ALL_MANAGER_ROLES)
 	doc = frappe.get_doc("IB AI Action", name)
@@ -2136,15 +2162,31 @@ def toggle_agent_active(agent_code, is_active):
 # ── n8n webhook trigger ───────────────────────────────────────────────────────
 
 def notify_n8n(event: str, payload: dict):
-	"""Fire-and-forget POST to n8n webhook. Called from doc_events."""
+	"""Enqueue a background POST to n8n webhook — never blocks the calling
+	request. Called from doc_events (was previously a synchronous requests.post
+	with a 5s timeout inline in the request thread — every WO status change
+	paid up to 5 dead seconds whenever n8n wasn't reachable, confirmed 2026-07-15
+	that it hasn't been running at all)."""
 	n8n_url = frappe.conf.get("n8n_webhook_url")
 	if not n8n_url:
 		return
+	frappe.enqueue(
+		"instabiz.overrides.ai_agents._post_to_n8n",
+		queue="short",
+		enqueue_after_commit=True,
+		event=event,
+		payload=payload,
+		n8n_url=n8n_url,
+		site=frappe.local.site,
+	)
+
+
+def _post_to_n8n(event, payload, n8n_url, site):
 	try:
 		import requests
 		requests.post(
 			n8n_url,
-			json={"event": event, "payload": payload, "site": frappe.local.site},
+			json={"event": event, "payload": payload, "site": site},
 			timeout=5,
 		)
 	except Exception as e:

@@ -8,6 +8,7 @@ def get_context(context):
 
 @frappe.whitelist()
 def get_hrms_data(month=None):
+	frappe.only_for(["HR Manager", "HR User", "Factory Management", "System Manager"])
 	today = getdate(nowdate())
 	month_date = getdate(month) if month else today
 	month_start = get_first_day(month_date)
@@ -121,6 +122,16 @@ def get_hrms_data(month=None):
 	except Exception:
 		by_dept = []
 
+	# ── Designation (job role) headcount ─────────────────────────────────────
+	try:
+		by_designation = frappe.db.sql("""
+			SELECT designation as label, COUNT(*) as count
+			FROM `tabEmployee` WHERE status='Active' AND designation IS NOT NULL
+			GROUP BY designation ORDER BY count DESC
+		""", as_dict=True)
+	except Exception:
+		by_designation = []
+
 	return {
 		"total_emp": int(total_emp),
 		"present_today": int(present_today),
@@ -134,6 +145,7 @@ def get_hrms_data(month=None):
 		"leaves": leave_list,
 		"salary_slips": salary_slips,
 		"by_dept": by_dept,
+		"by_designation": by_designation,
 	}
 
 

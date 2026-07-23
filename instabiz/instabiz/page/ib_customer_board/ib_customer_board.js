@@ -20,7 +20,7 @@ const IB_CB_COLOR_SUCCESS = "#22c55e"; // green — positive/new highlight
 const IB_CB_COLOR_SUCCESS_RGB = "34,197,94";
 const IB_CB_COLOR_DANGER  = "#ef4444"; // red — skipped/urgent highlight
 const IB_CB_COLOR_DANGER_RGB  = "239,68,68";
-const IB_CB_COLOR_WA      = "#25d366"; // WhatsApp brand green
+const IB_CB_COLOR_ACTIVITY = "#25d366"; // activity-logged highlight
 const IB_CB_COLOR_WARNING = "#f59e0b"; // amber — mid-progress bar
 
 class IBCustomerBoard {
@@ -31,7 +31,6 @@ class IBCustomerBoard {
 		this._selected_date = frappe.datetime.get_today();
 		this._tomorrow_date = null;
 		this._undo_timer = null;
-		this._wa_templates = [];
 		this._sortables = [];
 		this._highlight_customer = null;
 		this._highlight_color = IB_CB_COLOR_SUCCESS;
@@ -58,14 +57,6 @@ class IBCustomerBoard {
 			s.onload = resolve;
 			document.head.appendChild(s);
 		});
-		this._templates_ready = frappe.call({
-			method: "instabiz.overrides.customer_assignment.get_wa_templates",
-		}).then((r) => {
-			if (r.message && r.message.length) {
-				this._wa_templates = r.message.map((t) => t.message);
-			}
-		});
-
 		this._build_toolbar();
 		this._build_skeleton();
 		this.refresh();
@@ -429,11 +420,6 @@ class IBCustomerBoard {
 			   </div>`
 			: "";
 
-		const wa_btn = phone ? `
-			<button class="ib-cb-pill ib-cb-pill--wa ib-cb-btn-wa" title="WhatsApp ${frappe.utils.escape_html(phone)}">
-				${IB_ICONS.svg("whatsapp", 14)}
-			</button>` : "";
-
 		let inner_html = "";
 
 		if (ctx === "pool") {
@@ -474,7 +460,6 @@ class IBCustomerBoard {
 				<div class="ib-cb-card-actions">
 					${today_btn}
 					${tmrw_btn}
-					${wa_btn}
 					${share_btn}
 					${unshare_btn}
 				</div>
@@ -521,7 +506,6 @@ class IBCustomerBoard {
 							${IB_ICONS.svg("file", 10)} Quote
 						</button>
 						${claim_btn}
-						${wa_btn}
 					</div>`;
 			}
 
@@ -616,15 +600,6 @@ class IBCustomerBoard {
 						});
 					}
 				);
-			});
-		}
-
-		if (ctx === "pool" || ctx === "today") {
-			$card.find(".ib-cb-btn-wa").on("click", () => {
-				ib_show_wa_dialog({
-					customer: r.customer,
-					customer_name: r.customer_name || r.customer,
-				});
 			});
 		}
 
@@ -959,7 +934,7 @@ class IBCustomerBoard {
 										frappe.show_alert({ message: "Activity logged", indicator: "green" });
 										self._flush_pending();
 										self._highlight_customer = customer;
-										self._highlight_color = IB_CB_COLOR_WA;
+										self._highlight_color = IB_CB_COLOR_ACTIVITY;
 										self.refresh();
 									}
 								},
@@ -1143,34 +1118,6 @@ class IBCustomerBoard {
 				});
 			},
 		});
-	}
-
-	// ── WA ────────────────────────────────────────────────────────────────────
-
-	_wa_phone(raw) {
-		const digits = raw.replace(/\D/g, "");
-		return digits.startsWith("91") && digits.length >= 12 ? `+${digits}` : `+91${digits}`;
-	}
-
-	_wa_url(raw, r) {
-		const num = this._wa_phone(raw).replace("+", "");
-		const templates = this._wa_templates.length ? this._wa_templates : [
-			`Hi {customer}, this is *{name}* from *Instabiz Solutions India PVT LTD*. We supply premium adhesive tapes and spray paints at competitive prices. Would love to connect!`,
-		];
-		const key = "ib_wa_tmpl_idx";
-		const idx = parseInt(localStorage.getItem(key) || "0", 10) % templates.length;
-		localStorage.setItem(key, (idx + 1) % templates.length);
-		const sender = frappe.boot.user_info?.[frappe.session.user]?.fullname
-			|| frappe.boot.full_name
-			|| frappe.session.user;
-		const last_order = r.last_so_date ? frappe.datetime.str_to_user(r.last_so_date) : "";
-		const msg = templates[idx]
-			.replace(/\{name\}/g, sender)
-			.replace(/\{customer\}/g, r.customer_name || r.customer || "")
-			.replace(/\{territory\}/g, r.territory || "")
-			.replace(/\{contact\}/g, r.custom_contact_person_name || "")
-			.replace(/\{last_order\}/g, last_order);
-		return `https://web.whatsapp.com/send/?phone=${num}&text=${encodeURIComponent(msg)}&type=phone_number&app_absent=0`;
 	}
 
 }

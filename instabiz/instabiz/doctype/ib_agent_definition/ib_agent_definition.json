@@ -168,7 +168,7 @@
    "fieldtype": "Select",
    "label": "Action Type",
    "reqd": 1,
-   "options": "acknowledge\nsend_notification\ncreate_doc\nupdate_doc\nsubmit_doc\nrun_function\nsend_whatsapp",
+   "options": "acknowledge\nsend_notification\ncreate_doc\nupdate_doc\nsubmit_doc\nrun_function",
    "default": "acknowledge",
    "in_list_view": 1
   },
@@ -177,7 +177,7 @@
    "fieldtype": "Code",
    "label": "Action Config (JSON)",
    "options": "JSON",
-   "description": "send_notification: {\"for_role\":\"HR Manager\",\"subject_template\":\"...\",\"message_field\":\"msg\"}\ncreate_doc: {\"doctype\":\"...\",\"field_map\":{\"target\":\"source\"}}\nupdate_doc: {\"field\":\"status\",\"value\":\"Done\"}\nrun_function: {\"function\":\"instabiz.overrides.xxx.fn\"}\nsend_whatsapp: {\"phone_field\":\"mobile_no\",\"message_field\":\"msg\"}"
+   "description": "send_notification: {\"for_role\":\"HR Manager\",\"subject_template\":\"...\",\"message_field\":\"msg\"}\ncreate_doc: {\"doctype\":\"...\",\"field_map\":{\"target\":\"source\"}}\nupdate_doc: {\"field\":\"status\",\"value\":\"Done\"}\nrun_function: {\"function\":\"instabiz.overrides.xxx.fn\"}"
   },
   {
    "fieldname": "section_ai",

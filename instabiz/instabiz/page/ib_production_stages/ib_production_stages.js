@@ -68,6 +68,8 @@ const STAGE_FIELDS = {
 		},
 	],
 	cutting: [
+		{ fieldname: "parent_roll_id_cut", label: "Parent Roll ID", fieldtype: "Data" },
+		{ fieldname: "roll_width_mm", label: "Roll Width (mm)", fieldtype: "Float" },
 		{ fieldname: "cut_length", label: "Cut Length (m)", fieldtype: "Float" },
 		{ fieldname: "pieces_per_log", label: "Pieces per Log", fieldtype: "Int" },
 	],
@@ -1846,9 +1848,12 @@ class IBProductionStages {
 				background:var(--card-bg);border:1px solid var(--border-color);
 				border-radius:8px;margin-bottom:14px;overflow:hidden;
 				border-left:4px solid ${stageColor}">
-				<div style="padding:10px 14px;background:var(--subtle-fg,#f8fafc);
-					border-bottom:1px solid var(--border-color);
+				<div class="ib-ps-bundle-header" data-bundle="${frappe.utils.escape_html(bundleKey)}" style="padding:10px 14px;background:var(--subtle-fg,#f8fafc);
+					border-bottom:1px solid var(--border-color);cursor:pointer;
 					display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+					<iconify-icon icon="lucide:chevron-right" width="14" height="14"
+						class="ib-ps-bundle-chevron" data-bundle="${frappe.utils.escape_html(bundleKey)}"
+						style="flex-shrink:0;transition:transform .15s"></iconify-icon>
 					<iconify-icon icon="lucide:layers" width="14" height="14"
 						style="color:${stageColor};flex-shrink:0"></iconify-icon>
 					<strong style="font-size:13px;color:${stageColor}">
@@ -1883,7 +1888,7 @@ class IBProductionStages {
 						</button>
 					</div>
 				</div>
-				<div style="overflow-x:auto">
+				<div class="ib-ps-bundle-body" data-bundle="${frappe.utils.escape_html(bundleKey)}" style="display:none;overflow-x:auto">
 					<table style="width:100%;border-collapse:collapse">
 						<thead><tr style="border-bottom:1px solid var(--border-color)">
 							<th style="padding:5px 8px;text-align:left;font-size:10px;font-weight:700;
@@ -1923,14 +1928,25 @@ class IBProductionStages {
 				${pager}
 			</div>`);
 		$c.off("click", ".ib-ps-bundle-assign-btn");
+		$c.off("click", ".ib-ps-bundle-header");
 
 		$c.on("click", ".ib-ps-bundle-assign-btn", (e) => {
+			e.stopPropagation();
 			const $btn   = $(e.currentTarget);
 			// jQuery auto-parses data-* that look like JSON, so handle both array and string
 			const raw    = $btn.data("wos");
 			const woList = Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []);
 			const sugg   = $btn.data("machine") || "";
 			this._show_batch_assign_dialog(woList, sugg, $btn);
+		});
+
+		$c.on("click", ".ib-ps-bundle-header", (e) => {
+			const key = $(e.currentTarget).data("bundle");
+			const $body = $c.find(`.ib-ps-bundle-body[data-bundle="${key}"]`);
+			const $chevron = $c.find(`.ib-ps-bundle-chevron[data-bundle="${key}"]`);
+			const opening = $body.css("display") === "none";
+			$body.css("display", opening ? "" : "none");
+			$chevron.css("transform", opening ? "rotate(90deg)" : "");
 		});
 
 		$c.off("click", ".ib-ps-bundle-prev").on("click", ".ib-ps-bundle-prev", () => {
