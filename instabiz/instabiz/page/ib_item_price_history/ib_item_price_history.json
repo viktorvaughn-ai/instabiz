@@ -1,0 +1,20 @@
+{
+ "creation": "2026-07-24 00:00:00.000000",
+ "doctype": "Page",
+ "module": "Instabiz",
+ "name": "ib-item-price-history",
+ "page_name": "ib-item-price-history",
+ "roles": [
+  {
+   "role": "Sales User"
+  },
+  {
+   "role": "Sales Manager"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
+ "standard": "Yes",
+ "title": "Item Price History"
+}

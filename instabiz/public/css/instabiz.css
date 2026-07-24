@@ -3013,3 +3013,17 @@ iconify-icon { display: inline-flex; align-items: center; }
 .ib-pl-root,
 .ib-sd-page { animation: ib-page-in 200ms ease both; }
 
+/* ── Item Price History page ── */
+.ib-iph-wrap { padding: 15px; }
+.ib-iph-cards {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(120px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.ib-iph-card { padding: 12px 14px; }
+.ib-iph-card-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; }
+.ib-iph-card-value { font-size: 18px; font-weight: 600; margin-top: 4px; }
+.ib-iph-table-wrap { padding: 0; }
+.ib-iph-table { margin-bottom: 0; }
+
