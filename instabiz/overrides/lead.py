@@ -5,6 +5,7 @@ import urllib.request
 import json as _json
 
 from instabiz.overrides.permissions import _is_privileged
+from instabiz.overrides.utils import territory_from_gstin as _territory_from_gstin
 
 # ── Lead scoring ──────────────────────────────────────────────────────────────
 _TEMP_SCORE  = {"Hot": 60, "Warm": 30, "Cold": 0}
@@ -81,39 +82,8 @@ def check_duplicate_lead(doc, method=None):
         )
 
 
-# GST state code (first 2 digits of GSTIN) → ERPNext Territory name
-_GSTIN_STATE_MAP = {
-    "01": "Jammu and Kashmir",  "02": "Himachal Pradesh",
-    "03": "Punjab",              "04": "Chandigarh",
-    "05": "Uttarakhand",         "06": "Haryana",
-    "07": "Delhi",               "08": "Rajasthan",
-    "09": "Uttar Pradesh",       "10": "Bihar",
-    "11": "Sikkim",              "12": "Arunachal Pradesh",
-    "13": "Nagaland",            "14": "Manipur",
-    "15": "Mizoram",             "16": "Tripura",
-    "17": "Meghalaya",           "18": "Assam",
-    "19": "West Bengal",         "20": "Jharkhand",
-    "21": "Odisha",              "22": "Chhattisgarh",
-    "23": "Madhya Pradesh",      "24": "Gujarat",
-    "25": "Daman and Diu",       "26": "Dadra and Nagar Haveli",
-    "27": "Maharashtra",         "28": "Andhra Pradesh",
-    "29": "Karnataka",           "30": "Goa",
-    "31": "Lakshadweep",         "32": "Kerala",
-    "33": "Tamil Nadu",          "34": "Puducherry",
-    "35": "Andaman and Nicobar Islands", "36": "Telangana",
-    "37": "Andhra Pradesh",      "38": "Ladakh",
-}
-
-
-def _territory_from_gstin(gstin: str):
-    """Return Frappe Territory name from GSTIN state code, or None."""
-    gstin = (gstin or "").strip()
-    if len(gstin) < 2:
-        return None
-    state_name = _GSTIN_STATE_MAP.get(gstin[:2])
-    if not state_name:
-        return None
-    return frappe.db.get_value("Territory", state_name) or None
+# GST state code → Territory derivation lives in instabiz.overrides.utils now
+# (shared with ib_transport.py) — imported at top of file as _territory_from_gstin.
 
 
 def _territory_from_pincode(pincode: str):

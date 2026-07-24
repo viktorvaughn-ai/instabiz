@@ -281,6 +281,10 @@ def get_transport_gstin(transport_name):
 	"""
 	Return the GST transporter ID for an IB Transport entry.
 	Priority: IB Transport.custom_transport_gst → local DB name match → GST public API name search.
+	A GSTIN newly resolved via the fallback searches is saved back onto the IB
+	Transport record (via doc.save(), not db.set_value, so its own before_save
+	hook also derives custom_transport_state) — future e-way bills for the same
+	transporter skip the search entirely.
 	"""
 	if not transport_name:
 		return ""
@@ -291,11 +295,18 @@ def get_transport_gstin(transport_name):
 
 	# Local DB fallback: address or supplier records with a similar name
 	gstin = _search_gstin_local(transport_name)
-	if gstin:
-		return gstin
+	if not gstin:
+		# GST public API fallback: search by trade name
+		gstin = _search_gstin_by_name(transport_name)
 
-	# GST public API fallback: search by trade name
-	gstin = _search_gstin_by_name(transport_name)
+	if gstin and frappe.db.exists("IB Transport", transport_name):
+		try:
+			transport_doc = frappe.get_doc("IB Transport", transport_name)
+			transport_doc.custom_transport_gst = gstin
+			transport_doc.save(ignore_permissions=True)
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), "IB Transport GSTIN capture failed")
+
 	return gstin or ""
 
 
