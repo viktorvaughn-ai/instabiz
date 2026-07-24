@@ -10,6 +10,8 @@ _EXCEL_PATH = os.path.join(
 )
 
 _PRICE_FIELDS = {"face_price", "last_price", "slab1", "slab2", "slab3", "slab4", "slab5"}
+_JUMBO_PRICE_FIELDS = {"face_price", "last_price"}
+_CUTPACK_PRICE_FIELDS = {"slab1", "slab2", "slab3", "slab4", "slab5"}
 
 
 @frappe.whitelist()
@@ -144,9 +146,21 @@ def save_rate_card_entry(name, data):
 		"width_mm", "length_m", "unit", "effective_date", "packing_standard",
 		"face_price", "last_price", "slab1", "slab2", "slab3", "slab4", "slab5",
 	}
+	peer_fields = _CUTPACK_PRICE_FIELDS if doc.product_type == "Cut Pack" else _JUMBO_PRICE_FIELDS
+	old_prices = {f: flt(doc.get(f)) for f in peer_fields}
 	for k, v in data.items():
 		if k in allowed:
 			setattr(doc, k, v if v != "" else None)
+	# Floor-price shift: if exactly one price field was explicitly edited this
+	# save, carry the same delta into every other peer price field on the row
+	# (e.g. slab1 90->100 also nudges slab2-5 by +10, keeping relative spacing;
+	# for Jumbo Roll, face_price/last_price shift together the same way).
+	touched = [f for f in peer_fields if f in data and flt(doc.get(f)) != old_prices[f]]
+	if len(touched) == 1:
+		diff = flt(doc.get(touched[0])) - old_prices[touched[0]]
+		if diff:
+			for f in peer_fields - {touched[0]}:
+				setattr(doc, f, old_prices[f] + diff)
 	# keep face/last in sync with slabs for Cut Pack
 	if doc.product_type == "Cut Pack":
 		doc.face_price = doc.slab1 or 0
