@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz",
  "links": [],
- "modified": "2026-07-24 20:42:07.461973",
+ "modified": "2026-07-24 20:46:32.084346",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz",
@@ -252,23 +252,6 @@
    "type": "DocType"
   },
   {
-   "color": "Purple",
-   "doc_view": "List",
-   "label": "Agent Definitions",
-   "link_to": "IB Agent Definition",
-   "restrict_to_role": "System Manager",
-   "stats_filter": "[]",
-   "type": "DocType"
-  },
-  {
-   "color": "Green",
-   "doc_view": "",
-   "label": "n8n Console",
-   "link_to": "ib-n8n-console",
-   "restrict_to_role": "Sales Manager",
-   "type": "Page"
-  },
-  {
    "color": "Blue",
    "doc_view": "",
    "label": "Daily Sales",
@@ -350,12 +333,11 @@
    "type": "Report"
   },
   {
-   "color": "Orange",
+   "color": "Grey",
    "doc_view": "",
-   "label": "Debit Notes",
-   "link_to": "IB Debit Note Register",
-   "report_ref_doctype": "IB Debit Note",
-   "restrict_to_role": "Sales Manager",
+   "label": "Sales Register",
+   "link_to": "Sales Register",
+   "report_ref_doctype": "Sales Invoice",
    "type": "Report"
   },
   {
@@ -365,6 +347,14 @@
    "link_to": "IB Activity Log",
    "report_ref_doctype": "IB Customer Assignment",
    "restrict_to_role": "Sales Manager",
+   "type": "Report"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "",
+   "label": "Item-wise Sales Register",
+   "link_to": "Item-wise Sales Register",
+   "report_ref_doctype": "Sales Invoice",
    "type": "Report"
   },
   {
@@ -397,14 +387,6 @@
    "link_to": "Leave Application",
    "stats_filter": "[]",
    "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "",
-   "label": "System Health",
-   "link_to": "ib-system-health",
-   "restrict_to_role": "System Manager",
-   "type": "Page"
   }
  ],
  "title": "Instabiz"

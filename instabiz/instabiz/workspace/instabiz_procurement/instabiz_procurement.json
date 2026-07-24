@@ -1,0 +1,124 @@
+{
+ "charts": [],
+ "content": "[{\"id\":\"proc-h0\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>DASHBOARDS</b></span>\",\"col\":12}},{\"id\":\"proc-pd\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Procurement Dashboard\",\"col\":3}},{\"id\":\"proc-h1\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>TRANSACTIONS</b></span>\",\"col\":12}},{\"id\":\"proc-po\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Purchase Order\",\"col\":3}},{\"id\":\"proc-pr\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Purchase Receipt\",\"col\":3}},{\"id\":\"proc-pinv\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Purchase Invoice\",\"col\":3}},{\"id\":\"proc-dbn\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Debit Note\",\"col\":3}},{\"id\":\"proc-h2\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>REPORTS</b></span>\",\"col\":12}},{\"id\":\"proc-ap\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"AP Aging\",\"col\":3}},{\"id\":\"proc-pp\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Purchase Pipeline\",\"col\":3}},{\"id\":\"proc-dbnr\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Debit Notes\",\"col\":3}},{\"id\":\"proc-preg\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Purchase Register\",\"col\":3}},{\"id\":\"proc-ipreg\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Item-wise Purchase Register\",\"col\":3}},{\"id\":\"proc-h3\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>HELP & KNOWLEDGE BASE</b></span>\",\"col\":12}},{\"id\":\"proc-kb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Knowledge Base\",\"col\":3}}]",
+ "creation": "2026-07-24 20:46:32.004195",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "hide_custom": 0,
+ "idx": 0,
+ "indicator_color": "blue",
+ "is_hidden": 0,
+ "label": "Instabiz Procurement",
+ "links": [],
+ "modified": "2026-07-24 20:48:05.671542",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "Instabiz Procurement",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [
+  {
+   "role": "Purchase User"
+  },
+  {
+   "role": "Purchase Manager"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
+ "sequence_id": 5.0,
+ "shortcuts": [
+  {
+   "color": "Blue",
+   "doc_view": "",
+   "label": "Procurement Dashboard",
+   "link_to": "ib-procurement-dashboard",
+   "type": "Page"
+  },
+  {
+   "color": "Blue",
+   "doc_view": "List",
+   "label": "Purchase Order",
+   "link_to": "Purchase Order",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "doc_view": "List",
+   "label": "Purchase Receipt",
+   "link_to": "Purchase Receipt",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Blue",
+   "doc_view": "List",
+   "label": "Purchase Invoice",
+   "link_to": "Purchase Invoice",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "List",
+   "label": "Debit Note",
+   "link_to": "IB Debit Note",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "doc_view": "",
+   "label": "AP Aging",
+   "link_to": "IB AP Aging",
+   "report_ref_doctype": "Purchase Invoice",
+   "type": "Report"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "",
+   "label": "Purchase Pipeline",
+   "link_to": "IB Purchase Pipeline",
+   "report_ref_doctype": "Purchase Order",
+   "type": "Report"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "",
+   "label": "Debit Notes",
+   "link_to": "IB Debit Note Register",
+   "report_ref_doctype": "IB Debit Note",
+   "type": "Report"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "",
+   "label": "Purchase Register",
+   "link_to": "Purchase Register",
+   "report_ref_doctype": "Purchase Invoice",
+   "type": "Report"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "",
+   "label": "Item-wise Purchase Register",
+   "link_to": "Item-wise Purchase Register",
+   "report_ref_doctype": "Purchase Invoice",
+   "type": "Report"
+  },
+  {
+   "color": "Purple",
+   "doc_view": "",
+   "label": "Knowledge Base",
+   "link_to": "ib-knowledge-base",
+   "type": "Page"
+  }
+ ],
+ "title": "Instabiz Procurement"
+}

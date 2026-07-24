@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz Finance",
  "links": [],
- "modified": "2026-07-24 20:42:07.882786",
+ "modified": "2026-07-24 20:46:31.849262",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz Finance",
@@ -28,12 +28,6 @@
    "role": "Accounts Manager"
   },
   {
-   "role": "Purchase User"
-  },
-  {
-   "role": "Purchase Manager"
-  },
-  {
    "role": "System Manager"
   }
  ],
@@ -44,13 +38,6 @@
    "doc_view": "",
    "label": "Finance Dashboard",
    "link_to": "ib-finance-dashboard",
-   "type": "Page"
-  },
-  {
-   "color": "Green",
-   "doc_view": "",
-   "label": "Procurement Dashboard",
-   "link_to": "ib-procurement-dashboard",
    "type": "Page"
   },
   {
@@ -70,14 +57,6 @@
    "type": "Page"
   },
   {
-   "color": "Blue",
-   "doc_view": "List",
-   "label": "Purchase Invoice",
-   "link_to": "Purchase Invoice",
-   "stats_filter": "[]",
-   "type": "DocType"
-  },
-  {
    "color": "Green",
    "doc_view": "List",
    "label": "Payment Entry",
@@ -95,35 +74,11 @@
    "type": "DocType"
   },
   {
-   "color": "Blue",
-   "doc_view": "List",
-   "label": "Purchase Order",
-   "link_to": "Purchase Order",
-   "stats_filter": "[]",
-   "type": "DocType"
-  },
-  {
-   "color": "Green",
-   "doc_view": "List",
-   "label": "Purchase Receipt",
-   "link_to": "Purchase Receipt",
-   "stats_filter": "[]",
-   "type": "DocType"
-  },
-  {
    "color": "Red",
    "doc_view": "List",
    "label": "Credit Note",
    "link_to": "IB Credit Note",
    "restrict_to_role": "Accounts Manager",
-   "stats_filter": "[]",
-   "type": "DocType"
-  },
-  {
-   "color": "Orange",
-   "doc_view": "List",
-   "label": "Debit Note",
-   "link_to": "IB Debit Note",
    "stats_filter": "[]",
    "type": "DocType"
   },
@@ -141,14 +96,6 @@
    "label": "AR Aging",
    "link_to": "IB AR Aging",
    "report_ref_doctype": "Sales Invoice",
-   "type": "Report"
-  },
-  {
-   "color": "Green",
-   "doc_view": "",
-   "label": "AP Aging",
-   "link_to": "IB AP Aging",
-   "report_ref_doctype": "Purchase Invoice",
    "type": "Report"
   },
   {
@@ -176,11 +123,11 @@
    "type": "Report"
   },
   {
-   "color": "Orange",
+   "color": "Green",
    "doc_view": "",
-   "label": "Purchase Pipeline",
-   "link_to": "IB Purchase Pipeline",
-   "report_ref_doctype": "Purchase Order",
+   "label": "Party Outstanding Summary",
+   "link_to": "IB Party Outstanding Summary",
+   "report_ref_doctype": "Sales Invoice",
    "type": "Report"
   },
   {
@@ -192,14 +139,6 @@
    "type": "Report"
   },
   {
-   "color": "Orange",
-   "doc_view": "",
-   "label": "Debit Notes",
-   "link_to": "IB Debit Note Register",
-   "report_ref_doctype": "IB Debit Note",
-   "type": "Report"
-  },
-  {
    "color": "Purple",
    "doc_view": "",
    "label": "Knowledge Base",
@@ -208,20 +147,8 @@
   },
   {
    "doc_view": "List",
-   "label": "Chart of Accounts",
-   "link_to": "Account",
-   "type": "DocType"
-  },
-  {
-   "doc_view": "List",
    "label": "Journal Entry",
    "link_to": "Journal Entry",
-   "type": "DocType"
-  },
-  {
-   "doc_view": "List",
-   "label": "Cost Center",
-   "link_to": "Cost Center",
    "type": "DocType"
   },
   {
