@@ -1027,6 +1027,18 @@ const KB_SECTIONS = [
 				note: "If a DN or SI already exists against the SO, cancellation is blocked until those child documents are cancelled first.",
 			},
 			{
+				num: "2.76", title: "Attaching a Document to a Single Line Item",
+				updated: "2026-07-25",
+				desc: "Any item row on a Quotation, Sales Order, Delivery Note, or Sales Invoice can carry its own attachment (artwork proof, packing photo, PO copy) — separate from the document-level Attachments section. Works even after submit.",
+				tags: "attach item row document line grid column artwork proof",
+				steps: [
+					"Open the item's row by clicking the pencil/edit icon at the end of the row (or click the row itself).",
+					"In the expanded row editor, find the <b>Document</b> field and click <b>Attach</b>.",
+					"Upload the file. Save the row.",
+				],
+				tip: "The Document field doesn't show as a column in the collapsed grid by default. To add it: click the gear icon (⚙) at the top-right of the item grid → Configure Columns → + Add / Remove Columns → check <b>Document</b> → Update. This is a per-user preference, so each teammate who wants it visible needs to add it once.",
+			},
+			{
 				num: "2.8", title: "Reopening a Cancelled Document",
 				desc: "Cancelled Quotations and Sales Orders can be reopened. Blocked if a linked DN or SI still exists.",
 				tags: "reopen cancel draft",
@@ -2756,6 +2768,7 @@ const SYNONYMS = {
 	delivery: ["dn", "dispatch", "shipment"],
 	payment: ["pe", "collection", "receipt", "money"],
 	"advance approval": ["advance", "prepayment approval", "idris", "approve advance", "advance pending"],
+	"line item attachment": ["row attachment", "item document", "artwork proof", "configure columns", "grid column"],
 	"credit note": ["cn", "return", "refund"],
 	"e-invoice": ["irn", "gst invoice"],
 	"e-way bill": ["ewb", "eway", "transport"],
