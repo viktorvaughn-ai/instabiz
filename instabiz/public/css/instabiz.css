@@ -3014,16 +3014,135 @@ iconify-icon { display: inline-flex; align-items: center; }
 .ib-sd-page { animation: ib-page-in 200ms ease both; }
 
 /* ── Item Price History page ── */
-.ib-iph-wrap { padding: 15px; }
-.ib-iph-cards {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(120px, 1fr));
-    gap: 12px;
-    margin-bottom: 16px;
+.ib-iph-hide { display: none !important; }
+
+.ib-iph-wrap {
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--margin-md);
 }
-.ib-iph-card { padding: 12px 14px; }
-.ib-iph-card-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; }
-.ib-iph-card-value { font-size: 18px; font-weight: 600; margin-top: 4px; }
+
+.ib-iph-cards {
+    display: flex;
+    gap: var(--margin-md);
+    align-items: stretch;
+    min-height: 88px; /* reserve space before data loads — prevents CLS */
+}
+
+.ib-iph-cards .ib-iph-card { flex: 1; min-width: 0; }
+
+.ib-iph-card {
+    padding: 12px 14px;
+    transition: border-color 0.15s, background 0.15s;
+}
+.ib-iph-card:hover {
+    border-color: rgba(217, 119, 87, 0.5);
+    background: #fffaf7;
+}
+.ib-iph-card--accent .ib-iph-card-value { color: var(--ib-primary); }
+
+.ib-iph-card-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.15;
+    color: var(--heading-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ib-iph-card-label {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin-top: var(--margin-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+    .ib-iph-cards { flex-wrap: wrap; }
+    .ib-iph-cards .ib-iph-card { flex: 1 1 calc(50% - var(--margin-md)); }
+}
+
+/* Loading dots — matches shared IB spinner motif */
+.ib-iph-spinner {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    padding: 12px 0;
+}
+.ib-iph-spinner span {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ib-primary);
+    animation: ib-sd-bounce 1.2s infinite ease-in-out;
+}
+.ib-iph-spinner span:nth-child(1) { animation-delay: 0s;   }
+.ib-iph-spinner span:nth-child(2) { animation-delay: 0.2s; }
+.ib-iph-spinner span:nth-child(3) { animation-delay: 0.4s; }
+
 .ib-iph-table-wrap { padding: 0; }
-.ib-iph-table { margin-bottom: 0; }
+
+.ib-iph-toolbar {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-color);
+}
+.ib-iph-search {
+    max-width: 360px;
+}
+
+.ib-iph-table-scroll { overflow-x: auto; width: 100%; }
+
+.ib-iph-table { margin-bottom: 0; width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.ib-iph-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--subtle-fg);
+    border-bottom: 2px solid var(--border-color);
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+.ib-iph-table tbody tr { border-bottom: 1px solid var(--border-color); transition: background 0.1s; }
+.ib-iph-table tbody tr:last-child { border-bottom: none; }
+.ib-iph-table tbody tr:hover td { background: var(--ib-tint-mid); }
+.ib-iph-table tbody td { padding: 10px 14px; vertical-align: top; color: var(--text-color); }
+
+.ib-iph-row-latest td { font-weight: 600; }
+.ib-iph-row-latest td:first-child { position: relative; }
+.ib-iph-row-latest td:first-child::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--ib-primary);
+}
+
+.ib-iph-empty,
+.ib-iph-select-prompt {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 48px 20px;
+    font-size: var(--text-md);
+}
+
+.ib-iph-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-top: 1px solid var(--border-color);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+.ib-iph-page-btns { display: flex; gap: 6px; }
 

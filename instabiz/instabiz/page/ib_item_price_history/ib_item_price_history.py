@@ -4,7 +4,7 @@ from instabiz.overrides.permissions import _is_privileged
 
 
 @frappe.whitelist()
-def get_item_price_history(item_code, customer=None, limit=50, offset=0):
+def get_item_price_history(item_code, customer=None, from_date=None, to_date=None, limit=20, offset=0):
 	"""Past Sales Order lines for one item, newest first.
 
 	Sourced from Sales Order (not Sales Invoice) — matches the rest of the app's
@@ -25,6 +25,14 @@ def get_item_price_history(item_code, customer=None, limit=50, offset=0):
 	if customer:
 		conditions.append("so.customer = %(customer)s")
 		params["customer"] = customer
+
+	if from_date:
+		conditions.append("so.transaction_date >= %(from_date)s")
+		params["from_date"] = from_date
+
+	if to_date:
+		conditions.append("so.transaction_date <= %(to_date)s")
+		params["to_date"] = to_date
 
 	if not _is_privileged(user):
 		conditions.append("(so.custom_sales_person_user = %(user)s OR so.owner = %(user)s)")
