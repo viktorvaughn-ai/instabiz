@@ -1091,9 +1091,9 @@ const KB_SECTIONS = [
 			},
 			{
 				num: "3.3", title: "Advance Payment Against Sales Order",
-				desc: "Create a Payment Entry manually with Reference DocType set to Sales Order before raising the invoice. The SO shows Advance Received (custom_advance_paid) automatically.",
+				desc: "Create a Payment Entry manually with Reference DocType set to Sales Order before raising the invoice. The SO shows Advance Received (custom_advance_paid) automatically. If the SO is still Draft when the advance lands, it must be approved before the order can be confirmed.",
 				link: "/app/payment-entry", linkLabel: "New Payment Entry",
-				tags: "advance prepayment so reference",
+				tags: "advance prepayment so reference approval approve idris pending confirm",
 				steps: [
 					"Go to <b>Accounts, Payment Entry, New</b>.",
 					"Payment Type = Receive, Party Type = Customer.",
@@ -1101,7 +1101,10 @@ const KB_SECTIONS = [
 					"Enter the Allocated Amount.",
 					"Save and Submit.",
 					"Open the Sales Order — the <b>Advance Received</b> field is now updated.",
+					"If the Sales Order was still Draft, its <b>Advance Approval Status</b> is now set to Pending — it cannot be submitted until approved.",
+					"The designated approver (or System Manager) opens the Sales Order and clicks <b>Advance → Approve</b> (or Reject, with optional remarks). Only then can the order be submitted.",
 				],
+				note: "This gate only applies to advances collected <b>before</b> the Sales Order is submitted. An advance recorded against an already-submitted order is untouched — approval isn't required after the fact.",
 			},
 			{
 				num: "3.4", title: "Attaching a Payment Screenshot",
@@ -2416,7 +2419,7 @@ const KB_SECTIONS = [
 					"The rep's Customer Board page shows a target card with progress for the current month.",
 					"Assignment Admin roster shows a sales target bar per user.",
 				],
-				note: "Sales User can read their own target but cannot create or edit it. Sales Manager and above can create and edit all targets.",
+				note: "Sales User can read their own target but cannot create or edit it. Sales Manager and above can create and edit all targets. <b>Basis (2026-07-25):</b> \"Actual\" on the target card counts submitted <b>Sales Orders</b>, not Sales Invoices — billing isn't live yet. It's counted by the date the order was <b>entered into the system</b> (creation), not the date printed on the order (transaction date) — this matches the Sales Order list view's own default date filter, so the two always agree. A backdated or late-entered order counts toward the month it was typed in.",
 			},
 			{
 				num: "15", title: "Customer Health Score",
@@ -2740,6 +2743,7 @@ const SYNONYMS = {
 	quotation: ["quote", "estimate"],
 	delivery: ["dn", "dispatch", "shipment"],
 	payment: ["pe", "collection", "receipt", "money"],
+	"advance approval": ["advance", "prepayment approval", "idris", "approve advance", "advance pending"],
 	"credit note": ["cn", "return", "refund"],
 	"e-invoice": ["irn", "gst invoice"],
 	"e-way bill": ["ewb", "eway", "transport"],
