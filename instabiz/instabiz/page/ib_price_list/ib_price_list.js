@@ -298,10 +298,14 @@ class IBPriceListPage {
 						Cut Pack <span class="ib-pl-tab-badge" id="badge-cutpack">…</span>
 					</button>
 				</div>
-				<div id="ib-pl-live-wrap" style="padding-bottom:12px">
+				<div id="ib-pl-live-wrap" style="padding-bottom:12px;display:flex;align-items:center;gap:10px">
 					<span class="ib-pl-live ib-pl-live--off" id="ib-pl-live" title="Realtime price update connection status">
 						<span class="ib-pl-live-dot"></span>
 						<span class="ib-pl-live-lbl">Connecting…</span>
+					</span>
+					<span class="ib-refresh-time" id="ib-pl-refresh-time" style="display:none">
+						<iconify-icon icon="lucide:clock" width="12" height="12"></iconify-icon>
+						${__("Updated")} <span id="ib-pl-refresh-time-val"></span>
 					</span>
 				</div>
 			</div>
@@ -435,7 +439,7 @@ class IBRateCardView {
 			<th class="ib-pl-th" style="min-width:72px;text-align:center">Width</th>
 			<th class="ib-pl-th" style="min-width:72px;text-align:center">Length</th>
 			<th class="ib-pl-th ib-pl-th--uom">UOM</th>
-			<th class="ib-pl-th ib-pl-th--rate" style="color:#0284c7">Face Price</th>
+			<th class="ib-pl-th ib-pl-th--rate ib-pl-th--rate-start" style="color:#0284c7">Face Price</th>
 			<th class="ib-pl-th ib-pl-th--rate" style="color:#0d9488">Last Price</th>
 			${action_th}`;
 
@@ -444,7 +448,7 @@ class IBRateCardView {
 			<th class="ib-pl-th ib-pl-th--name">Product Name</th>
 			<th class="ib-pl-th ib-pl-th--spec">Spec</th>
 			<th class="ib-pl-th ib-pl-th--uom">UOM</th>
-			<th class="ib-pl-th ib-pl-th--rate" style="color:#0284c7" title="Highest — small qty">Slab 1</th>
+			<th class="ib-pl-th ib-pl-th--rate ib-pl-th--rate-start" style="color:#0284c7" title="Highest — small qty">Slab 1</th>
 			<th class="ib-pl-th ib-pl-th--rate" style="color:#7c3aed">Slab 2</th>
 			<th class="ib-pl-th ib-pl-th--rate" style="color:#d97757">Slab 3</th>
 			<th class="ib-pl-th ib-pl-th--rate" style="color:#16a34a">Slab 4</th>
@@ -607,6 +611,11 @@ class IBRateCardView {
 				this._all = r.message;
 				this._populate_filters();
 				this._filter();
+				const $ts = $("#ib-pl-refresh-time");
+				if ($ts.length) {
+					const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+					$ts.show().find("#ib-pl-refresh-time-val").text(now);
+				}
 			},
 			error: () => {
 				this.$el.find(".ib-rcv-tbody").empty();
@@ -789,7 +798,7 @@ class IBRateCardView {
 					<td class="ib-pl-td" style="text-align:center">${dim_cell(r.width_mm, "mm")}</td>
 					<td class="ib-pl-td" style="text-align:center">${dim_cell(r.length_m, "m")}</td>
 					${uom_td}
-					<td class="ib-pl-td ib-pl-td--rate">${fmt(r.face_price, "#0284c7")}</td>
+					<td class="ib-pl-td ib-pl-td--rate ib-pl-td--rate-start">${fmt(r.face_price, "#0284c7")}</td>
 					<td class="ib-pl-td ib-pl-td--rate">${fmt(r.last_price, "#0d9488")}</td>
 					${action_td(r.name)}
 				</tr>`;
@@ -801,7 +810,7 @@ class IBRateCardView {
 
 			return `<tr class="ib-pl-row${alt}">
 				${code_td}${name_td}${spec_td}${uom_td}
-				<td class="ib-pl-td ib-pl-td--rate">${fmt(r.slab1, "#0284c7")}</td>
+				<td class="ib-pl-td ib-pl-td--rate ib-pl-td--rate-start">${fmt(r.slab1, "#0284c7")}</td>
 				<td class="ib-pl-td ib-pl-td--rate">${fmt(r.slab2, "#7c3aed")}</td>
 				<td class="ib-pl-td ib-pl-td--rate">${fmt(r.slab3, "#d97757")}</td>
 				<td class="ib-pl-td ib-pl-td--rate">${fmt(r.slab4, "#16a34a")}</td>

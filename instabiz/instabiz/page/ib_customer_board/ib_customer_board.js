@@ -124,6 +124,10 @@ class IBCustomerBoard {
 						<div class="ib-cb-target-source" id="ib-cb-target-source"></div>
 					</div>
 				</div>
+				<span class="ib-refresh-time" id="ib-cb-refresh-time" style="display:none;justify-content:flex-end;margin:-8px 0 8px;width:100%">
+					<iconify-icon icon="lucide:clock" width="12" height="12"></iconify-icon>
+					Updated <span id="ib-cb-refresh-time-val"></span>
+				</span>
 				<div class="ib-cb-columns">
 					<div class="ib-cb-col" id="ib-cb-dormant">
 						<div class="ib-cb-col-header">
@@ -184,6 +188,8 @@ class IBCustomerBoard {
 			callback(r) {
 				$(".ib-cb-board").css("opacity", "");
 				if (r.message) self._render(r.message);
+				const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+				$("#ib-cb-refresh-time").show().find("#ib-cb-refresh-time-val").text(now);
 			},
 			error() {
 				$(".ib-cb-board").css("opacity", "");
@@ -263,7 +269,14 @@ class IBCustomerBoard {
 			const empty_msg = col === "dormant"
 				? "No accounts assigned to you yet"
 				: "No unassigned customers in your territory";
-			$cards.append(`<div class="ib-cb-empty">${empty_msg}</div>`);
+			const empty_sub = col === "dormant"
+				? (this._is_manager
+					? "Assign accounts via Assignment Admin, or claim one from a rep's pool."
+					: "Your Sales Manager assigns accounts — check back soon or ask them directly.")
+				: "";
+			$cards.append(
+				`<div class="ib-cb-empty">${empty_msg}${empty_sub ? `<span class="ib-cb-empty-sub">${empty_sub}</span>` : ""}</div>`
+			);
 		} else {
 			rows.forEach((r) => $cards.append(this._make_card(r, "pool")));
 		}
@@ -356,7 +369,9 @@ class IBCustomerBoard {
 		});
 
 		if (!total) {
-			$cards.append(`<div class="ib-cb-empty">No assignments today</div>`);
+			$cards.append(
+				`<div class="ib-cb-empty">No assignments today<span class="ib-cb-empty-sub">Today's batch is auto-assigned overnight from your My Accounts pool.</span></div>`
+			);
 		} else {
 			// Build cards with opacity:0 so GSAP animates them in without flash
 			const make_hidden = (r, ctx) => {
@@ -383,7 +398,9 @@ class IBCustomerBoard {
 		const $cards = $("#ib-cb-tomorrow-cards").empty();
 		$("#ib-cb-tomorrow-count").text(rows.length);
 		if (!rows.length) {
-			$cards.append(`<div class="ib-cb-empty">No assignments yet — scheduler runs at midnight</div>`);
+			$cards.append(
+				`<div class="ib-cb-empty">No assignments yet<span class="ib-cb-empty-sub">Scheduler runs at midnight to build tomorrow's batch.</span></div>`
+			);
 		} else {
 			[...rows].reverse().forEach((r) => $cards.prepend(this._make_card(r, "tomorrow")));
 		}

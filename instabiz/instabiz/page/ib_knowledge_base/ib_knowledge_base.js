@@ -525,6 +525,16 @@ function _kb_html() {
 }
 .ib-kb-item:hover .ib-kb-item-arrow { opacity: 1; }
 
+/* Last-updated badge under drawer title */
+.ib-kb-updated {
+	font-size: 10.5px;
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	font-weight: 600;
+	margin: -6px 0 10px;
+}
+
 /* Note / Tip boxes */
 .ib-kb-note {
 	background: #fdf9f7;
@@ -1091,6 +1101,7 @@ const KB_SECTIONS = [
 			},
 			{
 				num: "3.3", title: "Advance Payment Against Sales Order",
+				updated: "2026-07-25",
 				desc: "Create a Payment Entry manually with Reference DocType set to Sales Order before raising the invoice. The SO shows Advance Received (custom_advance_paid) automatically. If the SO is still Draft when the advance lands, it must be approved before the order can be confirmed.",
 				link: "/app/payment-entry", linkLabel: "New Payment Entry",
 				tags: "advance prepayment so reference approval approve idris pending confirm",
@@ -2408,6 +2419,7 @@ const KB_SECTIONS = [
 		items: [
 			{
 				num: "14", title: "Setting Monthly Sales Targets",
+				updated: "2026-07-25",
 				desc: "Sales Managers create a monthly revenue target per rep using IB Sales Target (IB-ST-.YYYY.-#####). The rep sees their target card on the Customer Board. Scheduler sends bell alerts at 50% and 75% month elapsed if behind pace, and at month-end if target not met.",
 				link: "/app/ib-sales-target", linkLabel: "Sales Targets",
 				tags: "sales target monthly revenue rep user manager set bell alert pace",
@@ -3010,6 +3022,7 @@ function _open_drawer(sec, item, _index) {
 
 	// Build body HTML
 	let html = `<h2>${_esc(item.title)}</h2>`;
+	if (item.updated) html += `<div class="ib-kb-updated">Updated ${_esc(item.updated)}</div>`;
 	html += `<p class="desc">${_linkify(_esc(item.desc))}</p>`;
 
 	if (item.steps && item.steps.length) {

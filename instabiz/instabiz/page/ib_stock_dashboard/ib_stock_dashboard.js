@@ -437,7 +437,8 @@ class IBStockDashboard {
 			{ id: "specification",   label: __("Specification"), cls: "ib-col-spec"             },
 			{ id: "uom",             label: __("UOM"),           cls: "ib-col-uom"              },
 			{ id: "total_stock",     label: stock_label,         cls: "ib-col-qty ib-col-total" },
-			{ id: "total_available", label: __("Available"),     cls: "ib-col-qty"              },
+			{ id: "total_available", label: __("Available"),     cls: "ib-col-qty",
+			  tip: __("Total Stock minus reserved quantity. Negative means more is committed to open orders than is physically in stock (over-reserved).") },
 		];
 	}
 
@@ -452,7 +453,7 @@ class IBStockDashboard {
 		$thead.html(`<tr>${
 			cols.map(c => `
 				<th class="${c.cls}" data-col="${c.id}">
-					${c.label}<span class="ib-sort-icon"></span>
+					${c.label}${c.tip ? `<span class="ib-sd-th-tip" title="${frappe.utils.escape_html(c.tip)}">?</span>` : ""}<span class="ib-sort-icon"></span>
 				</th>
 			`).join("")
 		}</tr>`);

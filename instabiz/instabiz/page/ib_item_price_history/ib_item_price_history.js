@@ -29,7 +29,7 @@ class IbItemPriceHistory {
 	}
 
 	_setup_filters() {
-		$(this.page.page_form).addClass("ib-page-form");
+		$(this.page.page_form).addClass("ib-page-form ib-iph-filters");
 
 		this.f_item = this.page.add_field({
 			fieldname: "item_code",
@@ -39,6 +39,7 @@ class IbItemPriceHistory {
 			reqd: 1,
 			change: () => this.refresh(),
 		});
+		this.f_item.$wrapper.addClass("ib-iph-filter-primary");
 
 		this.f_customer = this.page.add_field({
 			fieldname: "customer",

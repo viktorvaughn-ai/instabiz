@@ -332,6 +332,19 @@ button[data-label="Submit"] {
 }
 
 
+/* Item Price History — Item is the primary/required filter, rest refine it */
+.ib-iph-filters .ib-iph-filter-primary input.form-control {
+    border-color: rgba(217, 119, 87, 0.55) !important;
+    font-weight: 600 !important;
+    min-width: 220px !important;
+}
+.ib-iph-filters .ib-iph-filter-primary .control-label {
+    color: var(--ib-primary) !important;
+}
+.ib-iph-filters > div:not(.ib-iph-filter-primary) .control-label {
+    opacity: 0.7;
+}
+
 /* Dark theme */
 [data-theme="dark"] .ib-page-form input.form-control,
 [data-theme="dark"] .ib-page-form select.form-control {
@@ -680,6 +693,15 @@ button[data-label="Submit"] {
 .ib-sort-icon {
     font-size: 10px;
     color: var(--ib-primary);
+}
+
+/* Column header info tooltip ("?" badge) */
+.ib-sd-th-tip {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 13px; height: 13px; margin-left: 4px;
+    border-radius: 50%; border: 1px solid var(--text-muted);
+    font-size: 9px; font-weight: 700; color: var(--text-muted);
+    cursor: help; vertical-align: middle;
 }
 
 /* Qty color utilities — used in table and breakdown popover */
@@ -2321,6 +2343,10 @@ mark.ib-search-hl {
     color: var(--text-muted); font-size: 12px;
     text-align: center; padding: 24px 0;
 }
+.ib-cb-empty-sub {
+    display: block; margin-top: 4px;
+    font-size: 11px; color: var(--text-muted); opacity: 0.75;
+}
 
 /* Stat cards above board */
 .ib-cb-stats-row { display: flex; gap: 10px; padding: 0 0 14px; justify-content: flex-end; }
@@ -2432,6 +2458,7 @@ mark.ib-search-hl {
 }
 .ib-pl-th--spec, .ib-pl-td--spec { color: var(--text-muted); font-size: 12px; max-width: 260px; }
 .ib-pl-th--rate, .ib-pl-td--rate { text-align: right; }
+.ib-pl-th--rate-start, .ib-pl-td--rate-start { border-left: 1px solid var(--border-color); background: color-mix(in srgb, var(--ib-primary) 3%, transparent); }
 .ib-pl-th--actions, .ib-pl-td--actions { width: 40px; text-align: center; }
 
 .ib-pl-row { transition: background 0.1s; cursor: pointer; }
