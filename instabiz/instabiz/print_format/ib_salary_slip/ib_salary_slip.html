@@ -1,0 +1,182 @@
+{# ── Company ─────────────────────────────────────────────────────────────────── #}
+{% set co = frappe.get_doc("Company", doc.company) %}
+{% set co_addr = frappe.db.get_value("Address", co.company_address,
+    ["address_line1","address_line2","city","state","pincode"], as_dict=True)
+    if co.company_address else None %}
+
+{# ── Employee extras not stored on the slip itself ─────────────────────────────── #}
+{% set emp = frappe.db.get_value("Employee", doc.employee,
+    ["date_of_joining","provident_fund_account","health_insurance_no","employee_number"], as_dict=True) %}
+
+{% macro fd(d) %}{% if d %}{{ frappe.utils.formatdate(d, "dd-MMM-yyyy") }}{% endif %}{% endmacro %}
+{% macro fm(v) %}{{ frappe.utils.fmt_money(v|float, precision=2, currency=doc.currency) }}{% endmacro %}
+
+<style>
+  body    { font-family: Arial, sans-serif; font-size: 11px; color: #000; margin: 0; }
+  table   { width: 100%; border-collapse: collapse; }
+  td, th  { padding: 4px 6px; vertical-align: top; }
+  strong  { font-weight: bold; }
+
+  .box    { border: 1.5px solid #000; margin-bottom: 2px; }
+  .b      { border: 1px solid #000; }
+  .bb     { border-bottom: 1px solid #000; }
+  .bt     { border-top: 1px solid #000; }
+  .br     { border-right: 1px solid #000; }
+
+  .ta-r   { text-align: right; }
+  .ta-c   { text-align: center; }
+  .lbl    { color: #444; font-size: 10px; }
+
+  .sh     { font-weight: bold; padding: 4px 6px; background: #f2f2f2;
+            border-top: 1px solid #000; border-bottom: 1px solid #000; }
+
+  .cancelled-banner {
+    background: #c00; color: #fff; font-size: 14px; font-weight: bold;
+    text-align: center; padding: 5px 6px; letter-spacing: 2px;
+    border-bottom: 2px solid #900;
+  }
+  .cancelled-watermark {
+    position: fixed; top: 38%; left: 50%; transform: translate(-50%,-50%) rotate(-35deg);
+    font-size: 90px; font-weight: bold; color: rgba(180,0,0,0.12);
+    pointer-events: none; white-space: nowrap; z-index: 999;
+    letter-spacing: 8px;
+  }
+  .net-pay-box {
+    background: #eef7f2; border: 1.5px solid #1a7a4c; padding: 8px;
+    text-align: center; font-size: 15px; font-weight: bold; color: #1a7a4c;
+  }
+</style>
+
+{% if doc.docstatus == 2 %}<div class="cancelled-watermark">CANCELLED</div>{% endif %}
+
+<div class="box">
+
+  {% if doc.docstatus == 2 %}
+  <div class="cancelled-banner">&#9888; THIS SALARY SLIP HAS BEEN CANCELLED &#9888;</div>
+  {% endif %}
+
+  {# Title bar #}
+  <div style="position:relative; text-align:center; padding:4px 6px; border-bottom:1px solid #000">
+    <strong style="font-size:14px">PAYSLIP</strong><br>
+    <span class="lbl">For the period {{ fd(doc.start_date) }} to {{ fd(doc.end_date) }}</span>
+    {% if doc.docstatus == 2 %}<span style="position:absolute; left:6px; top:4px; color:#c00"><strong>CANCELLED</strong></span>{% endif %}
+  </div>
+
+  {# Company header #}
+  <div class="bb" style="padding:6px; text-align:center">
+    {% if co.company_logo %}
+    <img src="{{ co.company_logo }}" style="height:40px; display:block; margin:0 auto 4px">
+    {% endif %}
+    <strong style="font-size:13px">{{ doc.company }}</strong><br>
+    {% if co_addr %}
+      <span class="lbl">
+        {{ co_addr.address_line1 }}{% if co_addr.address_line2 %}, {{ co_addr.address_line2 }}{% endif %}{% if co_addr.city %}, {{ co_addr.city }}{% endif %}{% if co_addr.pincode %} - {{ co_addr.pincode }}{% endif %}
+      </span>
+    {% endif %}
+  </div>
+
+  {# Employee meta grid #}
+  <table class="bb">
+    <tr>
+      <td class="br lbl" style="width:20%">Employee ID</td>
+      <td class="br" style="width:30%"><strong>{{ doc.employee }}</strong></td>
+      <td class="br lbl" style="width:20%">Employee Name</td>
+      <td style="width:30%"><strong>{{ doc.employee_name }}</strong></td>
+    </tr>
+    <tr class="bt">
+      <td class="br lbl">Designation</td>
+      <td class="br">{{ doc.designation or "—" }}</td>
+      <td class="br lbl">Department</td>
+      <td>{{ doc.department or "—" }}</td>
+    </tr>
+    <tr class="bt">
+      <td class="br lbl">Date of Joining</td>
+      <td class="br">{{ fd(emp.date_of_joining) if emp else "—" }}</td>
+      <td class="br lbl">Salary Structure</td>
+      <td>{{ doc.salary_structure or "—" }}</td>
+    </tr>
+    <tr class="bt">
+      <td class="br lbl">Bank Name</td>
+      <td class="br">{{ doc.bank_name or "—" }}</td>
+      <td class="br lbl">Bank A/c No.</td>
+      <td>{{ doc.bank_account_no or "—" }}</td>
+    </tr>
+    <tr class="bt">
+      <td class="br lbl">PF Account No.</td>
+      <td class="br">{{ emp.provident_fund_account if emp and emp.provident_fund_account else "Not Enrolled" }}</td>
+      <td class="br lbl">ESIC No.</td>
+      <td>{{ emp.health_insurance_no if emp and emp.health_insurance_no else "Not Enrolled" }}</td>
+    </tr>
+  </table>
+
+  {# Attendance summary #}
+  <table class="bb">
+    <tr>
+      <td class="br lbl ta-c" style="width:20%">Working Days</td>
+      <td class="br lbl ta-c" style="width:20%">Payment Days</td>
+      <td class="br lbl ta-c" style="width:20%">LOP / Absent</td>
+      <td class="br lbl ta-c" style="width:20%">Leave w/o Pay</td>
+      <td class="lbl ta-c" style="width:20%">Posting Date</td>
+    </tr>
+    <tr class="bt">
+      <td class="br ta-c"><strong>{{ doc.total_working_days }}</strong></td>
+      <td class="br ta-c"><strong>{{ doc.payment_days }}</strong></td>
+      <td class="br ta-c"><strong>{{ doc.absent_days }}</strong></td>
+      <td class="br ta-c"><strong>{{ doc.leave_without_pay }}</strong></td>
+      <td class="ta-c"><strong>{{ fd(doc.posting_date) }}</strong></td>
+    </tr>
+  </table>
+
+  {# Earnings / Deductions side by side #}
+  <table class="bb">
+    <tr>
+      <td class="br" style="width:50%; padding:0; vertical-align:top">
+        <div class="sh">EARNINGS</div>
+        <table>
+          <tr class="bb"><td class="lbl">Component</td><td class="lbl ta-r">Amount</td></tr>
+          {% for row in doc.earnings %}
+          <tr><td>{{ row.salary_component }}</td><td class="ta-r">{{ fm(row.amount) }}</td></tr>
+          {% endfor %}
+          <tr class="bt"><td><strong>Gross Pay</strong></td><td class="ta-r"><strong>{{ fm(doc.gross_pay) }}</strong></td></tr>
+        </table>
+      </td>
+      <td style="width:50%; padding:0; vertical-align:top">
+        <div class="sh">DEDUCTIONS</div>
+        <table>
+          <tr class="bb"><td class="lbl">Component</td><td class="lbl ta-r">Amount</td></tr>
+          {% for row in doc.deductions %}
+          <tr><td>{{ row.salary_component }}</td><td class="ta-r">{{ fm(row.amount) }}</td></tr>
+          {% endfor %}
+          {% if not doc.deductions %}
+          <tr><td colspan="2" class="lbl">No deductions</td></tr>
+          {% endif %}
+          <tr class="bt"><td><strong>Total Deductions</strong></td><td class="ta-r"><strong>{{ fm(doc.total_deduction) }}</strong></td></tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  {# Net pay #}
+  <div class="net-pay-box">
+    NET PAY : {{ fm(doc.rounded_total or doc.net_pay) }}
+  </div>
+  <div class="bb" style="padding:5px 6px; font-style:italic">
+    Amount in words: {{ doc.total_in_words or "" }}
+  </div>
+
+  {# Footer #}
+  <table style="margin-top:18px">
+    <tr>
+      <td style="width:60%" class="lbl">
+        This is a computer-generated payslip and does not require a signature.
+      </td>
+      <td style="width:40%; text-align:right">
+        <br><br>
+        <div class="bt" style="padding-top:4px; display:inline-block; min-width:160px; text-align:center">
+          Authorized Signatory
+        </div>
+      </td>
+    </tr>
+  </table>
+
+</div>
