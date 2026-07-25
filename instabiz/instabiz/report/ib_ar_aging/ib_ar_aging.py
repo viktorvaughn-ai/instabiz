@@ -14,8 +14,8 @@ def execute(filters=None):
 def _columns():
 	return [
 		{"label": _("Customer"),      "fieldname": "customer",     "fieldtype": "Link",     "options": "Customer", "width": 200},
-		{"label": _("Invoice"),       "fieldname": "name",         "fieldtype": "Link",     "options": "Sales Invoice", "width": 160},
-		{"label": _("Invoice Date"),  "fieldname": "posting_date", "fieldtype": "Date",     "width": 110},
+		{"label": _("Order"),         "fieldname": "name",         "fieldtype": "Link",     "options": "Sales Order", "width": 160},
+		{"label": _("Order Date"),    "fieldname": "posting_date", "fieldtype": "Date",     "width": 110},
 		{"label": _("Due Date"),      "fieldname": "due_date",     "fieldtype": "Date",     "width": 100},
 		{"label": _("Age (days)"),    "fieldname": "age_days",     "fieldtype": "Int",      "width": 100},
 		{"label": _("0-30"),          "fieldname": "b0_30",        "fieldtype": "Currency", "width": 120},
@@ -28,30 +28,36 @@ def _columns():
 
 
 def _data(filters):
+	# TEST-ONLY BASIS CHANGE: Sales Order instead of Sales Invoice — billing
+	# isn't live in ERP yet, so SI-based AR always reads empty. Revert to Sales
+	# Invoice once invoicing goes live. "Outstanding" here = full order value
+	# (no payment concept exists pre-invoice); "Due Date" = order's own
+	# transaction_date, there being no invoice due_date to fall back on.
 	today_date = getdate(today())
 	customer   = filters.get("customer")
 	territory  = filters.get("territory")
 	sp_user    = filters.get("sales_person_user")
 
-	cust_cond = "AND si.customer = %(customer)s" if customer else ""
-	terr_cond = "AND si.territory = %(territory)s" if territory else ""
-	sp_cond   = "AND si.custom_sales_person_user = %(sp_user)s" if sp_user else ""
+	cust_cond = "AND so.customer = %(customer)s" if customer else ""
+	terr_cond = "AND so.territory = %(territory)s" if territory else ""
+	sp_cond   = "AND so.custom_sales_person_user = %(sp_user)s" if sp_user else ""
 
 	rows = frappe.db.sql(
 		f"""
 		SELECT
-			si.name,
-			si.customer,
-			si.posting_date,
-			si.due_date,
-			si.outstanding_amount  AS outstanding,
-			si.custom_sales_person AS sales_person,
-			si.custom_sales_person_user
-		FROM `tabSales Invoice` si
-		WHERE si.docstatus = 1
-		AND si.outstanding_amount > 0
+			so.name,
+			so.customer,
+			so.transaction_date AS posting_date,
+			so.transaction_date AS due_date,
+			so.grand_total       AS outstanding,
+			so.custom_sales_person AS sales_person,
+			so.custom_sales_person_user
+		FROM `tabSales Order` so
+		WHERE so.docstatus = 1
+		AND so.grand_total > 0
+		AND so.status NOT IN ('Closed', 'Cancelled')
 		{cust_cond} {terr_cond} {sp_cond}
-		ORDER BY si.due_date ASC
+		ORDER BY so.transaction_date ASC
 		""",
 		{"customer": customer, "territory": territory, "sp_user": sp_user},
 		as_dict=True,

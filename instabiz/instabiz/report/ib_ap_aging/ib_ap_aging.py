@@ -14,8 +14,8 @@ def execute(filters=None):
 def _columns():
 	return [
 		{"label": _("Supplier"),      "fieldname": "supplier",     "fieldtype": "Link",     "options": "Supplier", "width": 200},
-		{"label": _("Invoice"),       "fieldname": "name",         "fieldtype": "Link",     "options": "Purchase Invoice", "width": 160},
-		{"label": _("Invoice Date"),  "fieldname": "posting_date", "fieldtype": "Date",     "width": 110},
+		{"label": _("Order"),         "fieldname": "name",         "fieldtype": "Link",     "options": "Purchase Order", "width": 160},
+		{"label": _("Order Date"),    "fieldname": "posting_date", "fieldtype": "Date",     "width": 110},
 		{"label": _("Due Date"),      "fieldname": "due_date",     "fieldtype": "Date",     "width": 100},
 		{"label": _("Age (days)"),    "fieldname": "age_days",     "fieldtype": "Int",      "width": 100},
 		{"label": _("0-30"),          "fieldname": "b0_30",        "fieldtype": "Currency", "width": 120},
@@ -27,24 +27,30 @@ def _columns():
 
 
 def _data(filters):
+	# TEST-ONLY BASIS CHANGE: Purchase Order instead of Purchase Invoice —
+	# billing isn't live in ERP yet, so PI-based AP always reads empty. Revert
+	# to Purchase Invoice once invoicing goes live. "Outstanding" here = full
+	# order value (no payment concept exists pre-invoice); "Due Date" = order's
+	# own transaction_date, there being no invoice due_date to fall back on.
 	today_date = getdate(today())
 	supplier   = filters.get("supplier")
 
-	supp_cond = "AND pi.supplier = %(supplier)s" if supplier else ""
+	supp_cond = "AND po.supplier = %(supplier)s" if supplier else ""
 
 	rows = frappe.db.sql(
 		f"""
 		SELECT
-			pi.name,
-			pi.supplier,
-			pi.posting_date,
-			pi.due_date,
-			pi.outstanding_amount AS outstanding
-		FROM `tabPurchase Invoice` pi
-		WHERE pi.docstatus = 1
-		AND pi.outstanding_amount > 0
+			po.name,
+			po.supplier,
+			po.transaction_date AS posting_date,
+			po.transaction_date AS due_date,
+			po.grand_total       AS outstanding
+		FROM `tabPurchase Order` po
+		WHERE po.docstatus = 1
+		AND po.grand_total > 0
+		AND po.status NOT IN ('Closed', 'Cancelled')
 		{supp_cond}
-		ORDER BY pi.due_date ASC
+		ORDER BY po.transaction_date ASC
 		""",
 		{"supplier": supplier},
 		as_dict=True,
