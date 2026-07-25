@@ -168,3 +168,19 @@ def _update_so_advance(doc):
 			so_name,
 		)[0][0]
 		frappe.db.set_value("Sales Order", so_name, "custom_advance_paid", flt(total))
+		_maybe_flag_advance_pending(so_name, flt(total))
+
+
+def _maybe_flag_advance_pending(so_name, total_advance):
+	"""First time an advance lands on a still-Draft SO, flag it Pending approval
+	(see advance_approval.py). Only matters pre-confirmation — once the SO is
+	submitted the gate no longer applies, so leave submitted orders untouched."""
+	if total_advance <= 0:
+		return
+	row = frappe.db.get_value(
+		"Sales Order", so_name, ["docstatus", "custom_advance_approval_status"], as_dict=True
+	)
+	if row and row.docstatus == 0 and not row.custom_advance_approval_status:
+		frappe.db.set_value(
+			"Sales Order", so_name, "custom_advance_approval_status", "Pending", update_modified=False
+		)

@@ -21,3 +21,36 @@ frappe.ui.form.on("Quotation", {
 frappe.ui.form.on("Sales Order", {
 	refresh: (frm) => ib_set_item_query(frm, "customer"),
 });
+
+// Advance-payment approval gate: a Draft SO with an unapproved advance can't
+// be confirmed (blocked server-side in advance_approval.py). Approve/Reject
+// buttons only shown to the designated approver.
+const IB_ADVANCE_APPROVER = "idris@instabizsolutions.com";
+
+frappe.ui.form.on("Sales Order", {
+	refresh(frm) {
+		if (frm.doc.docstatus !== 0) return;
+		if (frm.doc.custom_advance_approval_status !== "Pending") return;
+		const can_approve =
+			frappe.session.user === IB_ADVANCE_APPROVER || frappe.user.has_role("System Manager");
+		if (!can_approve) return;
+
+		frm.add_custom_button(__("Approve"), () => ib_decide_advance(frm, "Approved"), __("Advance"));
+		frm.add_custom_button(__("Reject"), () => ib_decide_advance(frm, "Rejected"), __("Advance"));
+	},
+});
+
+function ib_decide_advance(frm, status) {
+	frappe.prompt(
+		[{ fieldname: "remarks", label: __("Remarks"), fieldtype: "Small Text" }],
+		(values) => {
+			frappe.call({
+				method: "instabiz.overrides.advance_approval.set_advance_approval",
+				args: { sales_order: frm.doc.name, status, remarks: values.remarks },
+				callback: () => frm.reload_doc(),
+			});
+		},
+		__(status === "Approved" ? "Approve Advance Payment" : "Reject Advance Payment"),
+		__(status)
+	);
+}

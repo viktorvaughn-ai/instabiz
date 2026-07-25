@@ -21,6 +21,7 @@ from instabiz.overrides.utils import (
     _check_item_lifecycle,
     _check_customer_item_spec,
 )
+from instabiz.overrides.advance_approval import check_advance_approval
 from instabiz.overrides.naming import autoname_sales_order
 from instabiz.overrides.quotation import (
     _set_company_gstin_from_warehouse,
@@ -73,6 +74,7 @@ class CustomSalesOrder(IbStatusMixin, SalesOrder):
     def before_submit(self):
         _check_credit_limit(self)
         _check_overdue_block(self)
+        check_advance_approval(self)
 
 
 # ── Credit limit ──────────────────────────────────────────────────────────────
