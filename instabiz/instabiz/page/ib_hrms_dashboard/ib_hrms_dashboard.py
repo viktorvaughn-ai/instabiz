@@ -7,7 +7,8 @@ def get_context(context):
 
 
 @frappe.whitelist()
-def get_hrms_data(month=None):
+def get_hrms_data(month=None, att_search=None, att_status=None, leave_search=None,
+				   leave_status=None, pay_search=None, pay_status=None):
 	frappe.only_for(["HR Manager", "HR User", "Factory Management", "System Manager"])
 	today = getdate(nowdate())
 	month_date = getdate(month) if month else today
@@ -70,67 +71,73 @@ def get_hrms_data(month=None):
 
 	# ── Attendance for month ──────────────────────────────────────────────────
 	try:
-		attendance_list = frappe.db.sql("""
-			SELECT a.employee, e.employee_name, a.attendance_date,
+		conditions = ["a.attendance_date >= %(month_start)s", "a.docstatus=1"]
+		params = {"month_start": month_start}
+		if att_status:
+			conditions.append("a.status = %(att_status)s")
+			params["att_status"] = att_status
+		if att_search:
+			conditions.append("(e.employee_name LIKE %(att_search)s OR a.employee LIKE %(att_search)s)")
+			params["att_search"] = f"%{att_search}%"
+		attendance_list = frappe.db.sql(f"""
+			SELECT a.employee, e.employee_name, e.department, a.attendance_date,
 				   a.status, a.in_time, a.out_time
 			FROM `tabAttendance` a
 			LEFT JOIN `tabEmployee` e ON e.name=a.employee
-			WHERE a.attendance_date >= %s AND a.docstatus=1
+			WHERE {' AND '.join(conditions)}
 			ORDER BY a.attendance_date DESC, a.employee
-			LIMIT 50
-		""", (month_start,), as_dict=True)
+			LIMIT 200
+		""", params, as_dict=True)
 	except Exception:
 		attendance_list = []
 
 	# ── Leave applications ────────────────────────────────────────────────────
 	try:
-		leave_list = frappe.db.sql("""
+		conditions = ["la.docstatus=1"]
+		params = {}
+		if leave_status:
+			conditions.append("la.status = %(leave_status)s")
+			params["leave_status"] = leave_status
+		else:
+			conditions.append("la.status IN ('Open','Approved','Rejected')")
+		if leave_search:
+			conditions.append("(e.employee_name LIKE %(leave_search)s OR la.employee LIKE %(leave_search)s)")
+			params["leave_search"] = f"%{leave_search}%"
+		leave_list = frappe.db.sql(f"""
 			SELECT la.name, la.employee, e.employee_name,
 				   la.leave_type, la.from_date, la.to_date,
 				   la.total_leave_days, la.status, la.description as reason
 			FROM `tabLeave Application` la
 			LEFT JOIN `tabEmployee` e ON e.name=la.employee
-			WHERE la.docstatus=1 AND la.status IN ('Open','Approved')
+			WHERE {' AND '.join(conditions)}
 			ORDER BY la.from_date DESC
-			LIMIT 30
-		""", as_dict=True)
+			LIMIT 100
+		""", params, as_dict=True)
 	except Exception:
 		leave_list = []
 
 	# ── Salary slips MTD ──────────────────────────────────────────────────────
 	try:
-		salary_slips = frappe.db.sql("""
+		conditions = ["ss.docstatus < 2", "ss.start_date BETWEEN %(month_start)s AND %(month_end)s"]
+		params = {"month_start": month_start, "month_end": month_end}
+		if pay_status:
+			conditions.append("ss.docstatus = %(pay_docstatus)s")
+			params["pay_docstatus"] = 1 if pay_status == "Submitted" else 0
+		if pay_search:
+			conditions.append("(e.employee_name LIKE %(pay_search)s OR ss.employee LIKE %(pay_search)s)")
+			params["pay_search"] = f"%{pay_search}%"
+		salary_slips = frappe.db.sql(f"""
 			SELECT ss.name, ss.employee, e.employee_name,
 				   ss.gross_pay, ss.total_deduction, ss.net_pay, ss.start_date,
 				   CASE ss.docstatus WHEN 1 THEN 'Submitted' ELSE 'Draft' END as slip_status
 			FROM `tabSalary Slip` ss
 			LEFT JOIN `tabEmployee` e ON e.name=ss.employee
-			WHERE ss.docstatus < 2 AND ss.start_date BETWEEN %s AND %s
+			WHERE {' AND '.join(conditions)}
 			ORDER BY ss.net_pay DESC
-			LIMIT 20
-		""", (month_start, month_end), as_dict=True)
+			LIMIT 100
+		""", params, as_dict=True)
 	except Exception:
 		salary_slips = []
-
-	# ── Department headcount ──────────────────────────────────────────────────
-	try:
-		by_dept = frappe.db.sql("""
-			SELECT department as label, COUNT(*) as count
-			FROM `tabEmployee` WHERE status='Active' AND department IS NOT NULL
-			GROUP BY department ORDER BY count DESC
-		""", as_dict=True)
-	except Exception:
-		by_dept = []
-
-	# ── Designation (job role) headcount ─────────────────────────────────────
-	try:
-		by_designation = frappe.db.sql("""
-			SELECT designation as label, COUNT(*) as count
-			FROM `tabEmployee` WHERE status='Active' AND designation IS NOT NULL
-			GROUP BY designation ORDER BY count DESC
-		""", as_dict=True)
-	except Exception:
-		by_designation = []
 
 	return {
 		"total_emp": int(total_emp),
@@ -144,8 +151,6 @@ def get_hrms_data(month=None):
 		"attendance": attendance_list,
 		"leaves": leave_list,
 		"salary_slips": salary_slips,
-		"by_dept": by_dept,
-		"by_designation": by_designation,
 	}
 
 
@@ -231,6 +236,51 @@ def get_payroll_audit(month=None):
 	ok   = sum(1 for r in result if r["status"] == "OK")
 	issues = len(result) - ok
 	return {"rows": result, "ok": ok, "issues": issues, "period": month_start.strftime("%B %Y")}
+
+
+@frappe.whitelist()
+def generate_single_slip(employee, month=None, notify=1):
+	"""Create (or fetch) one employee's Salary Slip for the given month and
+	bell-notify them. Used by the HR Dashboard's per-person payroll action."""
+	frappe.only_for(["HR Manager", "HR User", "System Manager"])
+	today = getdate(nowdate())
+	month_date = getdate(month) if month else today
+	month_start = get_first_day(month_date)
+	month_end = get_last_day(month_date)
+
+	if not frappe.db.exists("Salary Structure Assignment", {"employee": employee, "docstatus": 1}):
+		frappe.throw(f"{employee} has no active Salary Structure Assignment — set a base salary first.")
+
+	existing = frappe.db.get_value("Salary Slip", {"employee": employee, "start_date": month_start})
+	if existing:
+		return {"status": "exists", "slip": existing}
+
+	doc = frappe.get_doc({
+		"doctype": "Salary Slip",
+		"employee": employee,
+		"posting_date": today,
+		"start_date": month_start,
+		"end_date": month_end,
+	})
+	doc.insert(ignore_permissions=True)
+	frappe.db.commit()
+
+	if frappe.utils.cint(notify):
+		user_id = frappe.db.get_value("Employee", employee, "user_id")
+		if user_id:
+			frappe.get_doc({
+				"doctype": "Notification Log",
+				"subject": f"Your salary slip for {month_start.strftime('%B %Y')} is ready",
+				"email_content": f"Salary Slip {doc.name} has been generated — net pay {frappe.utils.fmt_money(doc.net_pay, precision=2)}.",
+				"for_user": user_id,
+				"from_user": frappe.session.user,
+				"type": "Alert",
+				"document_type": "Salary Slip",
+				"document_name": doc.name,
+			}).insert(ignore_permissions=True)
+			frappe.db.commit()
+
+	return {"status": "created", "slip": doc.name, "net_pay": doc.net_pay}
 
 
 @frappe.whitelist()

@@ -33,6 +33,14 @@ class IBHrmsDashboard {
 		this._data        = null;
 		this._fetching    = false;
 		this._auto_refresh = null;
+		this._filters = {
+			att_search: "", att_status: "",
+			leave_search: "", leave_status: "",
+			pay_search: "", pay_status: "",
+		};
+		this._search_debounce = null;
+		this._page = { att: 1, leave: 1, pay: 1 };
+		this._page_size = 20;
 		this._inject_styles();
 		this._build_layout();
 		this._bind_toolbar();
@@ -89,6 +97,15 @@ class IBHrmsDashboard {
 .ib-hr-stat-val { font-weight: 600; color: var(--heading-color); }
 .ib-hr-top-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
 .ib-hr-ts { font-size: 11px; color: var(--text-muted); margin-left: auto; }
+.ib-hr-filter-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.ib-hr-search { flex: 0 1 220px; padding: 5px 10px; border: 1px solid var(--border-color);
+  border-radius: 6px; font-size: 12px; background: var(--input-bg, #fff); color: var(--text-color); }
+.ib-hr-status-select { padding: 5px 8px; border: 1px solid var(--border-color); border-radius: 6px;
+  font-size: 12px; background: var(--input-bg, #fff); color: var(--text-color); }
+.ib-hr-filter-count { font-size: 11px; color: var(--text-muted); margin-left: auto; }
+.ib-hr-pagination { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 12px; }
+.ib-hr-pagination button:disabled { opacity: .4; cursor: default; }
+.ib-hr-page-info { font-size: 11px; color: var(--text-muted); }
 @media(max-width:900px){ .ib-hr-kpi-row{grid-template-columns:repeat(3,1fr);} .ib-hr-statutory{grid-template-columns:1fr;} }
 @media(max-width:540px){ .ib-hr-kpi-row{grid-template-columns:1fr;} }
 		`;
@@ -142,7 +159,7 @@ class IBHrmsDashboard {
 		const req_month = this._month;
 		const opts = ib_guarded_call(this, {
 			method: "instabiz.instabiz.page.ib_hrms_dashboard.ib_hrms_dashboard.get_hrms_data",
-			args: { month: req_month },
+			args: { month: req_month, ...this._filters },
 			callback: (r) => {
 				if (!r.message || this._month !== req_month) return;
 				this._data = r.message;
@@ -218,60 +235,107 @@ class IBHrmsDashboard {
 		}
 	}
 
+	// prefix: "att" | "leave" | "pay"
+	_filter_bar_html(prefix, placeholder, statusOptions, count) {
+		const opts = ["<option value=''>All statuses</option>"]
+			.concat(statusOptions.map(s => `<option value="${s}" ${this._filters[`${prefix}_status`] === s ? "selected" : ""}>${s}</option>`))
+			.join("");
+		return `
+			<div class="ib-hr-filter-bar">
+				<input type="text" class="ib-hr-search" data-prefix="${prefix}" placeholder="${placeholder}" value="${frappe.utils.escape_html(this._filters[`${prefix}_search`] || "")}">
+				<select class="ib-hr-status-select" data-prefix="${prefix}">${opts}</select>
+				<span class="ib-hr-filter-count">${count} record${count === 1 ? "" : "s"}</span>
+			</div>`;
+	}
+
+	_bind_filter_bar(prefix) {
+		const $search = this.$wrap.find(`.ib-hr-search[data-prefix="${prefix}"]`);
+		const $status = this.$wrap.find(`.ib-hr-status-select[data-prefix="${prefix}"]`);
+		$search.on("input", (e) => {
+			const val = $(e.currentTarget).val();
+			clearTimeout(this._search_debounce);
+			this._search_debounce = setTimeout(() => {
+				this._filters[`${prefix}_search`] = val;
+				this._page[prefix] = 1;
+				this.refresh();
+			}, 400);
+		});
+		$status.on("change", (e) => {
+			this._filters[`${prefix}_status`] = $(e.currentTarget).val();
+			this._page[prefix] = 1;
+			this.refresh();
+		});
+		// Preserve focus/cursor across the debounced re-render for the active field
+		if (document.activeElement === $search.get(0)) {
+			const el = $search.get(0);
+			const pos = el.selectionStart;
+			setTimeout(() => { el.focus(); el.setSelectionRange(pos, pos); }, 0);
+		}
+	}
+
+	// Slices `rows` to the current page for `prefix`; returns { page_rows, total_pages }
+	_paginate(rows, prefix) {
+		const total_pages = Math.max(1, Math.ceil(rows.length / this._page_size));
+		if (this._page[prefix] > total_pages) this._page[prefix] = total_pages;
+		const start = (this._page[prefix] - 1) * this._page_size;
+		return { page_rows: rows.slice(start, start + this._page_size), total_pages };
+	}
+
+	_pagination_html(prefix, total_pages) {
+		if (total_pages <= 1) return "";
+		const page = this._page[prefix];
+		return `
+			<div class="ib-hr-pagination">
+				<button class="btn btn-xs btn-default ib-hr-page-prev" data-prefix="${prefix}" ${page <= 1 ? "disabled" : ""}>&larr; Prev</button>
+				<span class="ib-hr-page-info">Page ${page} of ${total_pages}</span>
+				<button class="btn btn-xs btn-default ib-hr-page-next" data-prefix="${prefix}" ${page >= total_pages ? "disabled" : ""}>Next &rarr;</button>
+			</div>`;
+	}
+
+	_bind_pagination(prefix) {
+		this.$wrap.find(`.ib-hr-page-prev[data-prefix="${prefix}"]`).on("click", () => {
+			if (this._page[prefix] > 1) { this._page[prefix]--; this._render_tab(); }
+		});
+		this.$wrap.find(`.ib-hr-page-next[data-prefix="${prefix}"]`).on("click", () => {
+			this._page[prefix]++; this._render_tab();
+		});
+	}
+
 	_render_attendance() {
 		const rows = this._data.attendance || [];
-		const dept_data = this._data.by_dept || [];
-		const designation_data = this._data.by_designation || [];
 		const status_badge = (s) => {
 			const cls = s === "Present" ? "present" : s === "Absent" ? "absent"
 				: s === "Half Day" ? "half" : "leave";
 			return `<span class="ib-hr-status-badge ib-hr-status-${cls}">${s}</span>`;
 		};
-		const time_fmt = (t) => t ? t.slice(0, 5) : "—";
 
-		const bars = (title, data) => {
-			if (!data.length) return "";
-			const max_count = Math.max(...data.map(d => d.count || 0));
-			return `<div style="margin-bottom:16px">
-				<div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">${title}</div>
-				<div class="ib-hr-dept-bars">
-					${data.map(d => `
-						<div class="ib-hr-bar-row">
-							<div class="ib-hr-bar-lbl">${frappe.utils.escape_html(d.label || "")}</div>
-							<div class="ib-hr-bar-track">
-								<div class="ib-hr-bar-fill" style="width:${max_count ? Math.round(d.count / max_count * 100) : 0}%"></div>
-							</div>
-							<div class="ib-hr-bar-val">${d.count}</div>
-						</div>
-					`).join("")}
-				</div>
-			</div>`;
-		};
-
-		let html = "";
-		html += bars("By Department", dept_data);
-		html += bars("By Job Role", designation_data);
+		let html = this._filter_bar_html("att", "Search employee…", ["Present", "Absent", "Half Day", "On Leave"], rows.length);
+		const { page_rows, total_pages } = this._paginate(rows, "att");
 
 		if (!rows.length) {
-			html += `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">No attendance records this month</div>`;
+			html += `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">No matching attendance records</div>`;
 		} else {
 			html += `<table class="ib-hr-table">
-				<thead><tr><th>Employee</th><th>Name</th><th>Date</th><th>Status</th></tr></thead>
-				<tbody>${rows.map(r => `
+				<thead><tr><th>Employee</th><th>Name</th><th>Department</th><th>Date</th><th>Status</th></tr></thead>
+				<tbody>${page_rows.map(r => `
 					<tr>
 						<td><a href="#" class="ib-hr-emp-link" data-emp="${frappe.utils.escape_html(r.employee)}">${frappe.utils.escape_html(r.employee || "")}</a></td>
 						<td>${frappe.utils.escape_html(r.employee_name || "")}</td>
+						<td>${frappe.utils.escape_html(r.department || "—")}</td>
 						<td>${frappe.datetime.str_to_user(r.attendance_date) || r.attendance_date}</td>
 						<td>${status_badge(r.status || "")}</td>
 					</tr>
 				`).join("")}</tbody>
 			</table>`;
+			html += this._pagination_html("att", total_pages);
 		}
 		this.$wrap.find("#ib-hr-content").html(html);
 		this.$wrap.find(".ib-hr-emp-link").on("click", function (e) {
 			e.preventDefault();
 			frappe.set_route("Form", "Employee", $(this).data("emp"));
 		});
+		this._bind_filter_bar("att");
+		this._bind_pagination("att");
 	}
 
 	_render_leaves() {
@@ -282,13 +346,14 @@ class IBHrmsDashboard {
 		};
 		const is_mgr = frappe.user.has_role("HR Manager") || frappe.user.has_role("System Manager");
 
-		let html = "";
+		let html = this._filter_bar_html("leave", "Search employee…", ["Open", "Approved", "Rejected"], rows.length);
+		const { page_rows, total_pages } = this._paginate(rows, "leave");
 		if (!rows.length) {
-			html = `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">No leave applications</div>`;
+			html += `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">No matching leave applications</div>`;
 		} else {
-			html = `<table class="ib-hr-table">
+			html += `<table class="ib-hr-table">
 				<thead><tr><th>Employee</th><th>Leave Type</th><th>From</th><th>To</th><th>Days</th><th>Status</th>${is_mgr ? "<th>Actions</th>" : ""}</tr></thead>
-				<tbody>${rows.map(r => `
+				<tbody>${page_rows.map(r => `
 					<tr data-leave="${frappe.utils.escape_html(r.name)}">
 						<td>${frappe.utils.escape_html(r.employee_name || r.employee || "")}</td>
 						<td>${frappe.utils.escape_html(r.leave_type || "")}</td>
@@ -303,6 +368,7 @@ class IBHrmsDashboard {
 					</tr>
 				`).join("")}</tbody>
 			</table>`;
+			html += this._pagination_html("leave", total_pages);
 		}
 		this.$wrap.find("#ib-hr-content").html(html);
 
@@ -340,6 +406,8 @@ class IBHrmsDashboard {
 				});
 			});
 		}
+		this._bind_filter_bar("leave");
+		this._bind_pagination("leave");
 	}
 
 	_render_payroll() {
@@ -353,29 +421,35 @@ class IBHrmsDashboard {
 
 		const mgr_btns = is_mgr ? `
 			<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-				<button class="btn btn-sm btn-default ib-hr-gen-slips">⚙ Generate Payroll</button>
+				<button class="btn btn-sm btn-default ib-hr-gen-slips">⚙ Generate Payroll (All)</button>
+				<button class="btn btn-sm btn-default ib-hr-gen-single">+ Generate Slip for Employee</button>
 				${drafts.length ? `<button class="btn btn-sm btn-primary ib-hr-submit-all">✓ Submit All Drafts (${drafts.length})</button>` : ""}
 			</div>` : "";
+		const filter_bar = this._filter_bar_html("pay", "Search employee…", ["Draft", "Submitted"], slips.length);
 
 		if (!slips.length) {
 			this.$wrap.find("#ib-hr-content").html(`
+				${mgr_btns}
+				${filter_bar}
 				<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">
-					No salary slips for this month.
-					${is_mgr ? `<br><br><button class="btn btn-sm btn-primary ib-hr-gen-slips">Generate Payroll for this month</button>` : ""}
+					No matching salary slips for this month.
 				</div>`);
 			this._bind_payroll_btns(month_start, drafts.length);
+			this._bind_filter_bar("pay");
 			return;
 		}
 		const draftInfo = drafts.length ? ` &nbsp;·&nbsp; <span style="color:#f59e0b;font-weight:500">${drafts.length} draft${drafts.length > 1 ? "s" : ""} pending submit</span>` : "";
+		const { page_rows, total_pages } = this._paginate(slips, "pay");
 		this.$wrap.find("#ib-hr-content").html(`
 			${mgr_btns}
+			${filter_bar}
 			<div style="margin-bottom:10px;font-size:13px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
 				<span><strong>${submitted.length}</strong> submitted · Net Pay: <strong style="color:var(--ib-primary)">${fmt(total)}</strong>${draftInfo}</span>
 				<a href="#" class="ib-hr-view-all-slips" style="margin-left:auto;font-size:11px;color:var(--ib-primary)">View all in list →</a>
 			</div>
 			<table class="ib-hr-table">
 				<thead><tr><th>Employee</th><th>Name</th><th>Gross Pay</th><th>Deductions</th><th>Net Pay</th><th>Status</th></tr></thead>
-				<tbody>${slips.map(r => `
+				<tbody>${page_rows.map(r => `
 					<tr>
 						<td><a href="#" class="ib-hr-slip-link" data-slip="${frappe.utils.escape_html(r.name)}">${frappe.utils.escape_html(r.employee || "")}</a></td>
 						<td>${frappe.utils.escape_html(r.employee_name || "")}</td>
@@ -386,6 +460,7 @@ class IBHrmsDashboard {
 					</tr>
 				`).join("")}</tbody>
 			</table>
+			${this._pagination_html("pay", total_pages)}
 		`);
 		this.$wrap.find(".ib-hr-slip-link").on("click", function (e) {
 			e.preventDefault();
@@ -397,9 +472,50 @@ class IBHrmsDashboard {
 			frappe.set_route("List", "Salary Slip");
 		});
 		this._bind_payroll_btns(month_start, drafts.length);
+		this._bind_filter_bar("pay");
+		this._bind_pagination("pay");
+	}
+
+	_open_generate_single_dialog(month_start) {
+		const d = new frappe.ui.Dialog({
+			title: __("Generate Salary Slip for Employee"),
+			fields: [
+				{
+					fieldname: "employee", fieldtype: "Link", options: "Employee",
+					label: "Employee", reqd: 1,
+					get_query: () => ({ filters: { status: "Active" } }),
+				},
+				{
+					fieldname: "notify", fieldtype: "Check", label: "Notify employee (bell notification)",
+					default: 1,
+				},
+			],
+			primary_action_label: __("Generate"),
+			primary_action: (values) => {
+				d.disable_primary_action();
+				frappe.call({
+					method: "instabiz.instabiz.page.ib_hrms_dashboard.ib_hrms_dashboard.generate_single_slip",
+					args: { employee: values.employee, month: month_start, notify: values.notify ? 1 : 0 },
+					callback: (r) => {
+						d.enable_primary_action();
+						const res = r.message || {};
+						if (res.status === "exists") {
+							frappe.show_alert({ message: `Slip already exists: ${res.slip}`, indicator: "orange" });
+						} else if (res.status === "created") {
+							frappe.show_alert({ message: `Slip ${res.slip} generated`, indicator: "green" });
+						}
+						d.hide();
+						this.refresh();
+					},
+					error: () => d.enable_primary_action(),
+				});
+			},
+		});
+		d.show();
 	}
 
 	_bind_payroll_btns(month_start, draft_count) {
+		this.$wrap.find(".ib-hr-gen-single").on("click", () => this._open_generate_single_dialog(month_start));
 		this.$wrap.find(".ib-hr-gen-slips").on("click", () => {
 			frappe.confirm(`Generate salary slips for ${month_start.slice(0, 7)}?`, () => {
 				frappe.show_alert({ message: "Generating payroll…", indicator: "blue" });
