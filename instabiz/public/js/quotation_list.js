@@ -49,10 +49,13 @@ frappe.listview_settings["Quotation"] = {
     onload(listview) {
         ib_setup_list_print(listview, "Quotation");
         ib_hide_sidebar();
+        // Sales Person before Status: matches the row's own field order (Customer,
+        // Amount, Sales Person, Status, ID) — see list_utils.js _ib_chain_anchor,
+        // which threads filters in call order.
+        ib_setup_list_sales_user_filter(listview, "Quotation");
         ib_setup_status_multiselect(listview, "Quotation", [
             "Pending", "Confirmed", "Cancelled", "Draft",
         ]);
-        ib_setup_list_sales_user_filter(listview, "Quotation");
         ib_setup_list_date_filter(listview, "Quotation", "creation", ["transaction_date"]);
         ib_setup_list_team_filter(listview, "Quotation");
         const _orig_render_list = listview.render_list.bind(listview);

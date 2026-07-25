@@ -46,10 +46,13 @@ frappe.listview_settings["Sales Order"] = {
     onload(listview) {
         ib_setup_list_print(listview, "Sales Order");
         ib_hide_sidebar();
+        // Sales Person before Status: matches the row's own field order (Customer,
+        // Amount, Sales Person, Status, Delivery Date, ID) — see list_utils.js
+        // _ib_chain_anchor, which threads filters in call order.
+        ib_setup_list_sales_user_filter(listview, "Sales Order");
         ib_setup_status_multiselect(listview, "Sales Order", [
             "Draft", "Pending", "Dispatched", "Confirmed", "Cancelled",
         ]);
-        ib_setup_so_sales_user_filter(listview);
         ib_setup_list_date_filter(listview, "Sales Order", "creation", ["transaction_date", "delivery_date"]);
         ib_setup_list_team_filter(listview, "Sales Order");
         ib_setup_so_total_bar(listview);
@@ -78,59 +81,6 @@ frappe.listview_settings["Sales Order"] = {
         });
     },
 };
-
-// ── SO List: sales person user (Link → User) filter ──────────────────────────
-
-function ib_setup_so_sales_user_filter(listview) {
-    const cssClass = "ib-so-sales-user-filter";
-    $(`.${cssClass}`).remove();
-
-    const $wrapper = $(
-        `<div class="form-group frappe-control input-max-width ${cssClass}" ` +
-        `data-fieldtype="Link" data-fieldname="custom_sales_person_user"></div>`
-    );
-    $wrapper.css({ flex: "0 0 160px", maxWidth: "160px" });
-
-    const statusWrap = $(".ib-sales-order-status-multi-filter");
-    if (statusWrap.length) {
-        $wrapper.insertAfter(statusWrap);
-    } else {
-        $wrapper.appendTo(listview.page.page_form);
-    }
-
-    const control = frappe.ui.form.make_control({
-        df: {
-            label: "",
-            fieldtype: "Link",
-            options: "User",
-            placeholder: __("Sales Person"),
-            onchange() {
-                const val = control.get_value();
-                listview.filter_area.remove("custom_sales_person_user");
-                if (val) {
-                    listview.filter_area.add([
-                        ["Sales Order", "custom_sales_person_user", "=", val],
-                    ]);
-                }
-                listview.refresh();
-            },
-        },
-        parent: $wrapper,
-        only_input: true,
-        render_input: 1,
-    });
-    control.$wrapper.removeClass("form-group");
-    control.$wrapper.css("margin-bottom", 0);
-
-    const $clearBtn = listview.filter_area && listview.filter_area.filter_x_button;
-    if ($clearBtn && $clearBtn.length) {
-        $clearBtn
-            .off("click.ib_so_sales_user_clear")
-            .on("click.ib_so_sales_user_clear", () => control.set_value(""));
-    }
-}
-
-// ── SO List: transaction_date range filter ────────────────────────────────────
 
 // ── SO List: sticky selection total bar ──────────────────────────────────────
 

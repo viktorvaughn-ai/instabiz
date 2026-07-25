@@ -210,24 +210,24 @@ class IBCustomerBoard {
 		$("#ib-cb-target-pct").text(pct + "%");
 		$("#ib-cb-target-bar-fill").css({ width: pct + "%", background: bar_color });
 		const cnt = t.order_count || 0;
-		const src_text = cnt === 1 ? "1 invoice" : `${cnt} invoices`;
-		// Month date range for SI filter deep-link
+		const src_text = cnt === 1 ? "1 sales order" : `${cnt} sales orders`;
+		// Month date range for SO filter deep-link (must match _get_actuals basis: creation,
+		// per user decision 2026-07-25 — same field the SO list view defaults to)
 		const _mp = (t.month || "").split("-").map(Number);
 		const _last_day = _mp.length === 3 ? new Date(_mp[0], _mp[1], 0).getDate() : 28;
 		const month_end = t.month ? `${t.month.slice(0, 7)}-${String(_last_day).padStart(2, "0")}` : "";
 		const view_user = frappe.session.user;
 		$("#ib-cb-target-source").html(
-			`From <a class="ib-cb-inv-link" href="#" title="View these invoices">${src_text}</a> · ${frappe.utils.escape_html(month_label)}`
+			`From <a class="ib-cb-inv-link" href="#" title="View these sales orders">${src_text}</a> · ${frappe.utils.escape_html(month_label)}`
 		);
 		$("#ib-cb-target-source .ib-cb-inv-link").off("click").on("click", function (e) {
 			e.preventDefault();
 			frappe.route_options = {
 				docstatus: 1,
-				is_return: 0,
 				custom_sales_person_user: view_user,
-				posting_date: ["between", [t.month, month_end]],
+				creation: ["between", [t.month, month_end]],
 			};
-			frappe.set_route("List", "Sales Invoice");
+			frappe.set_route("List", "Sales Order");
 		});
 		$("#ib-cb-target-card").show();
 	}

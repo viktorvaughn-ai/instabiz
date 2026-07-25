@@ -25,18 +25,22 @@ def _month_days(d=None):
 
 
 def _get_actuals(sales_user, month_first, return_count=False):
-	"""Sum of submitted SO grand_total for the user in the given month.
-	TEST-ONLY BASIS CHANGE: reads Sales Order (transaction_date) instead of Sales
+	"""Sum of submitted SO rounded_total for the user in the given month.
+	TEST-ONLY BASIS CHANGE: reads Sales Order (creation date) instead of Sales
 	Invoice (posting_date) — billing isn't live in ERP yet, so SI-based actuals
 	always read 0/wrong. Revert to Sales Invoice once invoicing goes live for real
 	revenue-realization accounting. Falls back to custom_sales_person display name
-	for legacy docs.
+	for legacy docs. Uses rounded_total (not grand_total) to match the SO list
+	view's sticky total bar (sales_order_list.js ib_update_so_total_bar).
+	Basis is `creation` (not `transaction_date`) per user decision 2026-07-25 —
+	matches the SO list view's default date filter field, so board and list
+	agree even when an order's transaction_date is backdated to a prior month.
 	"""
 	month_last = _month_last(month_first)
 	full_name = frappe.db.get_value("User", sales_user, "full_name") or ""
 	result = frappe.db.sql(
 		"""
-		SELECT COALESCE(SUM(grand_total), 0) AS total, COUNT(*) AS cnt
+		SELECT COALESCE(SUM(rounded_total), 0) AS total, COUNT(*) AS cnt
 		FROM `tabSales Order`
 		WHERE docstatus = 1
 		  AND (
@@ -47,7 +51,7 @@ def _get_actuals(sales_user, month_first, return_count=False):
 		          AND TRIM(custom_sales_person) = %(full_name)s
 		      )
 		  )
-		  AND transaction_date BETWEEN %(from_date)s AND %(to_date)s
+		  AND DATE(creation) BETWEEN %(from_date)s AND %(to_date)s
 		""",
 		{
 			"user": sales_user,
@@ -87,7 +91,7 @@ def get_my_target(month=None):
 		"actual": actual,
 		"pct": min(pct, 100),
 		"has_target": bool(doc),
-		"order_count": invoice_count,  # key kept for JS compat; now counts invoices
+		"order_count": invoice_count,  # counts Sales Orders (SO-basis actuals, see _get_actuals)
 	}
 
 

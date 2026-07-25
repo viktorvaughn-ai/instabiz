@@ -45,6 +45,25 @@ function _ib_remove_filters(listview, fieldname) {
     }
 }
 
+// Chains custom filter controls together in call order, so whatever sequence
+// onload() calls the ib_setup_* functions in is exactly the resulting left-to-
+// right DOM order — no more fragile per-function class-name lookups (a stale
+// lookup here is what caused Sales Order's filter row to render Status/Date/
+// Team/SalesPerson instead of the intended order).
+function _ib_chain_anchor(listview, $wrapper, fallbackAnchor) {
+    const chain = listview._ib_filter_chain;
+    if (chain && chain.length && chain.closest("body").length) {
+        $wrapper.insertAfter(chain);
+    } else if (fallbackAnchor && fallbackAnchor.length) {
+        $wrapper.insertAfter(fallbackAnchor);
+    } else if (listview.filter_area && listview.filter_area.standard_filters_wrapper) {
+        $wrapper.appendTo(listview.filter_area.standard_filters_wrapper);
+    } else {
+        $wrapper.appendTo(listview.page.page_form);
+    }
+    listview._ib_filter_chain = $wrapper;
+}
+
 function ib_extract_filter_values(value) {
     if (Array.isArray(value)) return value.filter(Boolean);
     if (typeof value === "string") {
@@ -76,13 +95,7 @@ function ib_setup_status_multiselect(listview, doctype, statuses) {
         `<div class="form-group frappe-control input-max-width col-md-2 ${cssClass}" ` +
         `data-fieldtype="MultiSelectList" data-fieldname="status_multi"></div>`
     );
-    if (existingField && existingField.$wrapper && existingField.$wrapper.length) {
-        $wrapper.insertAfter(existingField.$wrapper);
-    } else if (listview.filter_area && listview.filter_area.standard_filters_wrapper) {
-        $wrapper.appendTo(listview.filter_area.standard_filters_wrapper);
-    } else {
-        $wrapper.appendTo(listview.page.page_form);
-    }
+    _ib_chain_anchor(listview, $wrapper, existingField && existingField.$wrapper);
     $wrapper.css({ flex: "0 0 140px", maxWidth: "140px" });
 
     const control = frappe.ui.form.make_control({
@@ -142,12 +155,7 @@ function ib_setup_list_sales_user_filter(listview, doctype, placeholder) {
     );
     $wrapper.css({ flex: "0 0 160px", maxWidth: "160px" });
 
-    const statusWrap = $(`.ib-${slug}-status-multi-filter`);
-    if (statusWrap.length) {
-        $wrapper.insertAfter(statusWrap);
-    } else {
-        $wrapper.appendTo(listview.page.page_form);
-    }
+    _ib_chain_anchor(listview, $wrapper);
 
     const control = frappe.ui.form.make_control({
         df: {
@@ -256,15 +264,7 @@ function ib_setup_list_date_filter(listview, doctype, dateField, nativeFieldsToH
     );
     $wrapper.css({ flex: "0 0 210px", maxWidth: "210px" });
 
-    const userWrap   = $(`.ib-${slug}-sales-user-filter`);
-    const statusWrap = $(`.ib-${slug}-status-multi-filter`);
-    if (userWrap.length) {
-        $wrapper.insertAfter(userWrap);
-    } else if (statusWrap.length) {
-        $wrapper.insertAfter(statusWrap);
-    } else {
-        $wrapper.appendTo(listview.page.page_form);
-    }
+    _ib_chain_anchor(listview, $wrapper);
 
     const control = frappe.ui.form.make_control({
         df: {
@@ -275,9 +275,13 @@ function ib_setup_list_date_filter(listview, doctype, dateField, nativeFieldsToH
                 const val = control.get_value();
                 _ib_remove_filters(listview, dateField);
                 if (val && val[0] && val[1]) {
+                    // "Between" (not >=/<=) so Frappe extends the end date to
+                    // 23:59:59.999999 for datetime fields like `creation` — a
+                    // raw "<=" truncates to midnight and silently drops every
+                    // doc created later that day (see get_between_date_filter
+                    // in frappe/model/db_query.py).
                     listview.filter_area.add([
-                        [doctype, dateField, ">=", val[0]],
-                        [doctype, dateField, "<=", val[1]],
+                        [doctype, dateField, "Between", [val[0], val[1]]],
                     ]);
                 }
                 listview.refresh();
@@ -312,19 +316,7 @@ function ib_setup_list_team_filter(listview, doctype) {
     );
     $wrapper.css({ flex: "0 0 160px", maxWidth: "160px" });
 
-    // Insert after date filter (slug-based or SO legacy), else user filter, else status, else append
-    const dateWrap   = $(`.ib-${slug}-date-range-filter, .ib-so-date-range-filter`);
-    const userWrap   = $(`.ib-${slug}-sales-user-filter, .ib-so-sales-user-filter`);
-    const statusWrap = $(`.ib-${slug}-status-multi-filter`);
-    if (dateWrap.length) {
-        $wrapper.insertAfter(dateWrap.last());
-    } else if (userWrap.length) {
-        $wrapper.insertAfter(userWrap.last());
-    } else if (statusWrap.length) {
-        $wrapper.insertAfter(statusWrap);
-    } else {
-        $wrapper.appendTo(listview.page.page_form);
-    }
+    _ib_chain_anchor(listview, $wrapper);
 
     const control = frappe.ui.form.make_control({
         df: {
