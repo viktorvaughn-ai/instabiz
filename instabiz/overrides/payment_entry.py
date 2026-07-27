@@ -169,6 +169,13 @@ def _update_so_advance(doc):
 		)[0][0]
 		frappe.db.set_value("Sales Order", so_name, "custom_advance_paid", flt(total))
 		_maybe_flag_advance_pending(so_name, flt(total))
+		# Dev-mode customer outstanding (Customer.custom_outstanding_amount) is
+		# grand_total - custom_advance_paid — an advance landing changes it
+		# just as much as the SO submit/cancel events that already refresh it.
+		customer = frappe.db.get_value("Sales Order", so_name, "customer")
+		if customer:
+			from instabiz.overrides.customer import refresh_customer_outstanding
+			refresh_customer_outstanding(customer)
 
 
 def _maybe_flag_advance_pending(so_name, total_advance):

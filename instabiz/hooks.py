@@ -186,8 +186,12 @@ doc_events = {
             "instabiz.overrides.stock_events.publish_stock_update",
             "instabiz.overrides.customer_assignment.mark_assignment_done_on_so",
             "instabiz.overrides.production.on_so_submit_create_order_sheet",
+            "instabiz.overrides.customer.update_customer_outstanding_on_si",
         ],
-        "on_cancel": "instabiz.overrides.stock_events.publish_stock_update",
+        "on_cancel": [
+            "instabiz.overrides.stock_events.publish_stock_update",
+            "instabiz.overrides.customer.update_customer_outstanding_on_si",
+        ],
     },
     "Delivery Note": {
         "on_submit": [

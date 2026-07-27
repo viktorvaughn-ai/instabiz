@@ -3,6 +3,8 @@ import frappe
 from frappe import _
 from frappe.utils import today, getdate, date_diff, flt
 
+from instabiz.overrides.billing_mode import is_dev_billing_mode, sales_doctype, sales_outstanding_expr
+
 
 def execute(filters=None):
 	filters = filters or {}
@@ -12,10 +14,13 @@ def execute(filters=None):
 
 
 def _columns():
+	doc_label = _("Order") if is_dev_billing_mode() else _("Invoice")
+	doc_options = sales_doctype()
+	date_label = _("Order Date") if is_dev_billing_mode() else _("Invoice Date")
 	return [
 		{"label": _("Customer"),      "fieldname": "customer",     "fieldtype": "Link",     "options": "Customer", "width": 200},
-		{"label": _("Order"),         "fieldname": "name",         "fieldtype": "Link",     "options": "Sales Order", "width": 160},
-		{"label": _("Order Date"),    "fieldname": "posting_date", "fieldtype": "Date",     "width": 110},
+		{"label": doc_label,          "fieldname": "name",         "fieldtype": "Link",     "options": doc_options, "width": 160},
+		{"label": date_label,         "fieldname": "posting_date", "fieldtype": "Date",     "width": 110},
 		{"label": _("Due Date"),      "fieldname": "due_date",     "fieldtype": "Date",     "width": 100},
 		{"label": _("Age (days)"),    "fieldname": "age_days",     "fieldtype": "Int",      "width": 100},
 		{"label": _("0-30"),          "fieldname": "b0_30",        "fieldtype": "Currency", "width": 120},
@@ -28,36 +33,49 @@ def _columns():
 
 
 def _data(filters):
-	# TEST-ONLY BASIS CHANGE: Sales Order instead of Sales Invoice — billing
-	# isn't live in ERP yet, so SI-based AR always reads empty. Revert to Sales
-	# Invoice once invoicing goes live. "Outstanding" here = full order value
-	# (no payment concept exists pre-invoice); "Due Date" = order's own
-	# transaction_date, there being no invoice due_date to fall back on.
+	# Basis controlled by instabiz.overrides.billing_mode — dev mode reads
+	# Sales Order (billing isn't live in ERP yet, so SI-based AR always reads
+	# empty); prod mode reads real Sales Invoice outstanding_amount/due_date.
+	# In dev mode: "Outstanding" = grand_total minus whatever advance has
+	# actually been paid (custom_advance_paid) — not the full order value,
+	# since a partially/fully-advance-paid order shouldn't count as fully due.
+	# "Due Date" falls back to the order's own transaction_date pre-invoice.
 	today_date = getdate(today())
 	customer   = filters.get("customer")
 	territory  = filters.get("territory")
 	sp_user    = filters.get("sales_person_user")
+	dev_mode   = is_dev_billing_mode()
+	doctype    = sales_doctype()
 
-	cust_cond = "AND so.customer = %(customer)s" if customer else ""
-	terr_cond = "AND so.territory = %(territory)s" if territory else ""
-	sp_cond   = "AND so.custom_sales_person_user = %(sp_user)s" if sp_user else ""
+	if dev_mode:
+		date_field  = "transaction_date"
+		amount_expr = sales_outstanding_expr("t")
+		status_cond = "AND t.status NOT IN ('Closed', 'Cancelled')"
+	else:
+		date_field  = "posting_date"
+		amount_expr = sales_outstanding_expr("t")
+		status_cond = "AND t.outstanding_amount > 0"
+
+	cust_cond = "AND t.customer = %(customer)s" if customer else ""
+	terr_cond = "AND t.territory = %(territory)s" if territory else ""
+	sp_cond   = "AND t.custom_sales_person_user = %(sp_user)s" if sp_user else ""
 
 	rows = frappe.db.sql(
 		f"""
 		SELECT
-			so.name,
-			so.customer,
-			so.transaction_date AS posting_date,
-			so.transaction_date AS due_date,
-			so.grand_total       AS outstanding,
-			so.custom_sales_person AS sales_person,
-			so.custom_sales_person_user
-		FROM `tabSales Order` so
-		WHERE so.docstatus = 1
-		AND so.grand_total > 0
-		AND so.status NOT IN ('Closed', 'Cancelled')
+			t.name,
+			t.customer,
+			t.{date_field} AS posting_date,
+			t.{date_field} AS due_date,
+			{amount_expr}  AS outstanding,
+			t.custom_sales_person AS sales_person,
+			t.custom_sales_person_user
+		FROM `tab{doctype}` t
+		WHERE t.docstatus = 1
+		AND t.grand_total > 0
+		{status_cond}
 		{cust_cond} {terr_cond} {sp_cond}
-		ORDER BY so.transaction_date ASC
+		ORDER BY t.{date_field} ASC
 		""",
 		{"customer": customer, "territory": territory, "sp_user": sp_user},
 		as_dict=True,
@@ -68,6 +86,8 @@ def _data(filters):
 		age = date_diff(today_date, getdate(r.due_date)) if r.due_date else 0
 		age = max(age, 0)
 		amt = flt(r.outstanding)
+		if amt <= 0:
+			continue
 		data.append({
 			"customer":     r.customer,
 			"name":         r.name,

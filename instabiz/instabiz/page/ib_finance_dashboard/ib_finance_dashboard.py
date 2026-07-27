@@ -1,6 +1,11 @@
 import frappe
 from frappe.utils import nowdate, getdate, get_first_day, get_last_day, add_months, flt
 
+from instabiz.overrides.billing_mode import (
+	is_dev_billing_mode, sales_doctype, purchase_doctype,
+	sales_outstanding_expr, purchase_outstanding_expr,
+)
+
 
 def get_context(context):
 	context.no_cache = 1
@@ -27,45 +32,60 @@ def get_finance_data():
 	last_end = get_last_day(add_months(today, -1))
 	fy_start = _get_fy_start(today)
 
+	# Basis controlled by instabiz.overrides.billing_mode — this whole
+	# dashboard was previously 100% hardcoded to Sales/Purchase Invoice and
+	# read zero everywhere, since real invoicing isn't live yet (unlike
+	# sales_target.py/AR-AP Aging/Business Pulse, which had each been
+	# separately, inconsistently patched to Sales/Purchase Order already).
+	dev_mode    = is_dev_billing_mode()
+	sales_dt    = sales_doctype()
+	purch_dt    = purchase_doctype()
+	sales_date  = "transaction_date" if dev_mode else "posting_date"
+	purch_date  = "transaction_date" if dev_mode else "posting_date"
+	sales_cond  = "AND t.status NOT IN ('Closed', 'Cancelled')" if dev_mode else "AND t.is_return=0"
+	purch_cond  = "AND t.status NOT IN ('Closed', 'Cancelled')" if dev_mode else "AND t.is_return=0"
+	ar_expr     = sales_outstanding_expr("t")
+	ap_expr     = purchase_outstanding_expr("t")
+
 	# ── Revenue ──────────────────────────────────────────────────────────────
-	rev_mtd = flt(frappe.db.sql("""
-		SELECT COALESCE(SUM(grand_total),0) FROM `tabSales Invoice`
-		WHERE docstatus=1 AND is_return=0 AND posting_date BETWEEN %s AND %s
+	rev_mtd = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM(grand_total),0) FROM `tab{sales_dt}` t
+		WHERE docstatus=1 {sales_cond} AND {sales_date} BETWEEN %s AND %s
 	""", (month_start, today))[0][0])
 
-	rev_last = flt(frappe.db.sql("""
-		SELECT COALESCE(SUM(grand_total),0) FROM `tabSales Invoice`
-		WHERE docstatus=1 AND is_return=0 AND posting_date BETWEEN %s AND %s
+	rev_last = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM(grand_total),0) FROM `tab{sales_dt}` t
+		WHERE docstatus=1 {sales_cond} AND {sales_date} BETWEEN %s AND %s
 	""", (last_start, last_end))[0][0])
 
-	rev_ytd = flt(frappe.db.sql("""
-		SELECT COALESCE(SUM(grand_total),0) FROM `tabSales Invoice`
-		WHERE docstatus=1 AND is_return=0 AND posting_date BETWEEN %s AND %s
+	rev_ytd = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM(grand_total),0) FROM `tab{sales_dt}` t
+		WHERE docstatus=1 {sales_cond} AND {sales_date} BETWEEN %s AND %s
 	""", (fy_start, today))[0][0])
 
-	# ── Expenses (Purchase Invoices) ─────────────────────────────────────────
-	exp_mtd = flt(frappe.db.sql("""
-		SELECT COALESCE(SUM(grand_total),0) FROM `tabPurchase Invoice`
-		WHERE docstatus=1 AND is_return=0 AND posting_date BETWEEN %s AND %s
+	# ── Expenses (Purchase Invoices / Purchase Orders) ───────────────────────
+	exp_mtd = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM(grand_total),0) FROM `tab{purch_dt}` t
+		WHERE docstatus=1 {purch_cond} AND {purch_date} BETWEEN %s AND %s
 	""", (month_start, today))[0][0])
 
-	exp_last = flt(frappe.db.sql("""
-		SELECT COALESCE(SUM(grand_total),0) FROM `tabPurchase Invoice`
-		WHERE docstatus=1 AND is_return=0 AND posting_date BETWEEN %s AND %s
+	exp_last = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM(grand_total),0) FROM `tab{purch_dt}` t
+		WHERE docstatus=1 {purch_cond} AND {purch_date} BETWEEN %s AND %s
 	""", (last_start, last_end))[0][0])
 
 	# ── Outstanding AR / AP ───────────────────────────────────────────────────
-	ar = flt(frappe.db.sql("""
-		SELECT COALESCE(SUM(outstanding_amount),0) FROM `tabSales Invoice`
-		WHERE docstatus=1 AND outstanding_amount > 0
+	ar = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM({ar_expr}),0) FROM `tab{sales_dt}` t
+		WHERE docstatus=1 {sales_cond}
 	""")[0][0])
 
-	ap = flt(frappe.db.sql("""
-		SELECT COALESCE(SUM(outstanding_amount),0) FROM `tabPurchase Invoice`
-		WHERE docstatus=1 AND outstanding_amount > 0
+	ap = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM({ap_expr}),0) FROM `tab{purch_dt}` t
+		WHERE docstatus=1 {purch_cond}
 	""")[0][0])
 
-	# ── Cash & Bank balances ──────────────────────────────────────────────────
+	# ── Cash & Bank balances (real GL entries — unaffected by billing mode) ──
 	company = frappe.db.get_default("company") or frappe.db.sql(
 		"SELECT name FROM `tabCompany` LIMIT 1"
 	)[0][0]
@@ -83,45 +103,48 @@ def get_finance_data():
 	total_cash_bank = sum(flt(r.balance) for r in cash_bank)
 
 	# ── GST summary ───────────────────────────────────────────────────────────
-	gst_collected = flt(frappe.db.sql("""
-		SELECT COALESCE(SUM(t.tax_amount),0)
-		FROM `tabSales Taxes and Charges` t
-		JOIN `tabSales Invoice` si ON si.name = t.parent
-		WHERE si.docstatus=1 AND si.posting_date BETWEEN %s AND %s
-		AND (t.account_head LIKE '%%GST%%' OR t.account_head LIKE '%%gst%%'
-			OR t.account_head LIKE '%%CGST%%' OR t.account_head LIKE '%%IGST%%'
-			OR t.account_head LIKE '%%SGST%%')
-	""", (month_start, today))[0][0])
+	# Sales/Purchase Taxes and Charges are shared child tables already present
+	# on Quotation/SO/DN/SI and PO/PR/PI alike, so the same join works in
+	# either billing mode — only the parent doctype/date field changes.
+	gst_collected = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM(tx.tax_amount),0)
+		FROM `tabSales Taxes and Charges` tx
+		JOIN `tab{sales_dt}` t ON t.name = tx.parent AND tx.parenttype = %s
+		WHERE t.docstatus=1 AND t.{sales_date} BETWEEN %s AND %s
+		AND (tx.account_head LIKE '%%GST%%' OR tx.account_head LIKE '%%gst%%'
+			OR tx.account_head LIKE '%%CGST%%' OR tx.account_head LIKE '%%IGST%%'
+			OR tx.account_head LIKE '%%SGST%%')
+	""", (sales_dt, month_start, today))[0][0])
 
-	gst_paid = flt(frappe.db.sql("""
-		SELECT COALESCE(SUM(t.tax_amount),0)
-		FROM `tabPurchase Taxes and Charges` t
-		JOIN `tabPurchase Invoice` pi ON pi.name = t.parent
-		WHERE pi.docstatus=1 AND pi.posting_date BETWEEN %s AND %s
-		AND (t.account_head LIKE '%%GST%%' OR t.account_head LIKE '%%gst%%'
-			OR t.account_head LIKE '%%CGST%%' OR t.account_head LIKE '%%IGST%%'
-			OR t.account_head LIKE '%%SGST%%')
-	""", (month_start, today))[0][0])
+	gst_paid = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM(tx.tax_amount),0)
+		FROM `tabPurchase Taxes and Charges` tx
+		JOIN `tab{purch_dt}` t ON t.name = tx.parent AND tx.parenttype = %s
+		WHERE t.docstatus=1 AND t.{purch_date} BETWEEN %s AND %s
+		AND (tx.account_head LIKE '%%GST%%' OR tx.account_head LIKE '%%gst%%'
+			OR tx.account_head LIKE '%%CGST%%' OR tx.account_head LIKE '%%IGST%%'
+			OR tx.account_head LIKE '%%SGST%%')
+	""", (purch_dt, month_start, today))[0][0])
 
 	gst_net = gst_collected - gst_paid
 
 	# ── Monthly P&L trend (6 months) ─────────────────────────────────────────
-	pl_trend = frappe.db.sql("""
-		SELECT DATE_FORMAT(posting_date,'%%b %%Y') as label,
-			   DATE_FORMAT(posting_date,'%%Y-%%m') as ym,
+	pl_trend = frappe.db.sql(f"""
+		SELECT DATE_FORMAT({sales_date},'%%b %%Y') as label,
+			   DATE_FORMAT({sales_date},'%%Y-%%m') as ym,
 			   COALESCE(SUM(grand_total),0) as revenue
-		FROM `tabSales Invoice`
-		WHERE docstatus=1 AND is_return=0
-		AND posting_date >= DATE_SUB(%s, INTERVAL 6 MONTH)
+		FROM `tab{sales_dt}` t
+		WHERE docstatus=1 {sales_cond}
+		AND {sales_date} >= DATE_SUB(%s, INTERVAL 6 MONTH)
 		GROUP BY ym, label ORDER BY ym
 	""", (today,), as_dict=True)
 
-	exp_trend = frappe.db.sql("""
-		SELECT DATE_FORMAT(posting_date,'%%Y-%%m') as ym,
+	exp_trend = frappe.db.sql(f"""
+		SELECT DATE_FORMAT({purch_date},'%%Y-%%m') as ym,
 			   COALESCE(SUM(grand_total),0) as expenses
-		FROM `tabPurchase Invoice`
-		WHERE docstatus=1 AND is_return=0
-		AND posting_date >= DATE_SUB(%s, INTERVAL 6 MONTH)
+		FROM `tab{purch_dt}` t
+		WHERE docstatus=1 {purch_cond}
+		AND {purch_date} >= DATE_SUB(%s, INTERVAL 6 MONTH)
 		GROUP BY ym ORDER BY ym
 	""", (today,), as_dict=True)
 
@@ -131,26 +154,29 @@ def get_finance_data():
 		r.profit = flt(r.revenue) - r.expenses
 
 	# ── Overdue AR ────────────────────────────────────────────────────────────
-	overdue = frappe.db.sql("""
-		SELECT name, customer_name, posting_date, due_date,
-			   outstanding_amount, grand_total,
-			   DATEDIFF(%s, due_date) as days_overdue
-		FROM `tabSales Invoice`
-		WHERE docstatus=1 AND outstanding_amount > 0
-		AND due_date < %s
+	# Dev mode has no real due_date pre-invoice — falls back to the order's
+	# own date, same as AR Aging report.
+	overdue = frappe.db.sql(f"""
+		SELECT name, customer_name, {sales_date} as posting_date,
+			   {sales_date} as due_date, {ar_expr} as outstanding_amount, grand_total,
+			   DATEDIFF(%s, {sales_date}) as days_overdue
+		FROM `tab{sales_dt}` t
+		WHERE docstatus=1 {sales_cond}
+		AND {sales_date} < %s
+		HAVING outstanding_amount > 0
 		ORDER BY outstanding_amount DESC
 		LIMIT 15
 	""", (today, today), as_dict=True)
 
 	# ── Top expense vendors ───────────────────────────────────────────────────
-	top_vendors = frappe.db.sql("""
+	top_vendors = frappe.db.sql(f"""
 		SELECT supplier_name as label, COALESCE(SUM(grand_total),0) as amount
-		FROM `tabPurchase Invoice`
-		WHERE docstatus=1 AND is_return=0 AND posting_date BETWEEN %s AND %s
+		FROM `tab{purch_dt}` t
+		WHERE docstatus=1 {purch_cond} AND {purch_date} BETWEEN %s AND %s
 		GROUP BY supplier_name ORDER BY amount DESC LIMIT 8
 	""", (month_start, today), as_dict=True)
 
-	# ── Pending payments ──────────────────────────────────────────────────────
+	# ── Pending payments (real, unaffected by billing mode) ──────────────────
 	pending_pe = frappe.db.sql("""
 		SELECT COUNT(*) as cnt, COALESCE(SUM(paid_amount),0) as total
 		FROM `tabPayment Entry`

@@ -1,6 +1,8 @@
 import frappe
 from frappe.utils import nowdate, getdate, get_first_day, get_last_day, add_months, flt
 
+from instabiz.overrides.billing_mode import is_dev_billing_mode, sales_doctype, sales_outstanding_expr
+
 
 def get_context(context):
 	context.no_cache = 1
@@ -14,42 +16,52 @@ def get_pulse_data():
 	last_month_end = get_last_day(add_months(today, -1))
 
 	# ── Revenue ──────────────────────────────────────────────────────────────
-	# TEST-ONLY BASIS CHANGE: Sales Order instead of Sales Invoice — billing
-	# isn't live in ERP yet, so SI-based revenue always read 0/wrong. Revert to
-	# Sales Invoice once invoicing goes live for real revenue-realization accounting.
-	rev_mtd = flt(frappe.db.sql("""
+	# Basis controlled by instabiz.overrides.billing_mode — dev mode reads
+	# Sales Order (billing isn't live in ERP yet, so SI-based revenue/AR always
+	# read 0). AR and collection rate previously stayed hardcoded to Sales
+	# Invoice even after revenue was switched, so both silently read 0/100%
+	# regardless of real order activity — fixed to follow the same toggle.
+	dev_mode = is_dev_billing_mode()
+	doctype = sales_doctype()
+	date_field = "transaction_date" if dev_mode else "posting_date"
+	outstanding_expr = sales_outstanding_expr("t")
+	status_cond = "AND t.status NOT IN ('Closed', 'Cancelled')" if dev_mode else "AND t.is_return=0"
+
+	rev_mtd = flt(frappe.db.sql(f"""
 		SELECT COALESCE(SUM(grand_total), 0)
-		FROM `tabSales Order`
+		FROM `tab{doctype}`
 		WHERE docstatus=1
-		AND transaction_date BETWEEN %s AND %s
+		AND {date_field} BETWEEN %s AND %s
 	""", (month_start, today))[0][0])
 
-	rev_last = flt(frappe.db.sql("""
+	rev_last = flt(frappe.db.sql(f"""
 		SELECT COALESCE(SUM(grand_total), 0)
-		FROM `tabSales Order`
+		FROM `tab{doctype}`
 		WHERE docstatus=1
-		AND transaction_date BETWEEN %s AND %s
+		AND {date_field} BETWEEN %s AND %s
 	""", (last_month_start, last_month_end))[0][0])
 
-	ar = flt(frappe.db.sql("""
-		SELECT COALESCE(SUM(outstanding_amount), 0)
-		FROM `tabSales Invoice`
-		WHERE docstatus=1 AND outstanding_amount > 0
+	ar = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM({outstanding_expr}), 0)
+		FROM `tab{doctype}` t
+		WHERE docstatus=1 {status_cond}
 	""")[0][0])
 
-	# Collection rate = collected / billed for the same 3-month window
+	# Collection rate = collected / billed for the same 3-month window. In dev
+	# mode "collected" means advance paid against orders (custom_advance_paid)
+	# — the only real payment signal that exists pre-invoice.
 	three_months_start = get_first_day(add_months(today, -3))
-	total_billed = flt(frappe.db.sql("""
+	total_billed = flt(frappe.db.sql(f"""
 		SELECT COALESCE(SUM(grand_total), 0)
-		FROM `tabSales Invoice`
-		WHERE docstatus=1 AND is_return=0
-		AND posting_date BETWEEN %s AND %s
+		FROM `tab{doctype}` t
+		WHERE docstatus=1 {status_cond}
+		AND {date_field} BETWEEN %s AND %s
 	""", (three_months_start, today))[0][0])
-	ar_3m = flt(frappe.db.sql("""
-		SELECT COALESCE(SUM(outstanding_amount), 0)
-		FROM `tabSales Invoice`
-		WHERE docstatus=1 AND outstanding_amount > 0
-		AND posting_date BETWEEN %s AND %s
+	ar_3m = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM({outstanding_expr}), 0)
+		FROM `tab{doctype}` t
+		WHERE docstatus=1 {status_cond}
+		AND {date_field} BETWEEN %s AND %s
 	""", (three_months_start, today))[0][0])
 	collected_3m = max(0.0, total_billed - ar_3m)
 	collection_rate = max(0.0, min(100.0, round(collected_3m / total_billed * 100, 1))) if total_billed else 100.0
@@ -131,14 +143,14 @@ def get_pulse_data():
 		wo_active, wo_completed, prod_score = 0, 0, 80
 
 	# ── 14-day revenue trend ──────────────────────────────────────────────────
-	trend_14 = frappe.db.sql("""
+	trend_14 = frappe.db.sql(f"""
 		SELECT
-			DATE_FORMAT(posting_date, '%%d %%b') as label,
-			posting_date as dt,
+			DATE_FORMAT({date_field}, '%%d %%b') as label,
+			{date_field} as dt,
 			COALESCE(SUM(grand_total), 0) as amount
-		FROM `tabSales Invoice`
-		WHERE docstatus=1 AND is_return=0
-		AND posting_date >= DATE_SUB(%s, INTERVAL 13 DAY)
+		FROM `tab{doctype}` t
+		WHERE docstatus=1 {status_cond}
+		AND {date_field} >= DATE_SUB(%s, INTERVAL 13 DAY)
 		GROUP BY dt, label
 		ORDER BY dt
 	""", (today,), as_dict=True)

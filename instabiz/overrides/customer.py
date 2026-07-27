@@ -2,19 +2,34 @@ import frappe
 from frappe.utils import flt
 from erpnext.selling.doctype.customer.customer import Customer
 
+from instabiz.overrides.billing_mode import is_dev_billing_mode, sales_doctype, sales_outstanding_expr
+
 
 def compute_customer_outstanding(customer):
-	"""Sum outstanding_amount of all submitted, unpaid Sales Invoices for this customer.
-
-	ERPNext maintains SI.outstanding_amount in real-time as Payment Entries are
-	submitted / cancelled, so this is the authoritative single source of truth.
-	Returns 0.0 if no open invoices exist.
+	"""Sum outstanding for this customer — basis controlled by
+	instabiz.overrides.billing_mode. Prod mode sums Sales Invoice
+	outstanding_amount (ERPNext maintains this in real-time as Payment
+	Entries are submitted/cancelled — authoritative single source of truth
+	once billing is live). Dev mode sums Sales Order grand_total minus
+	custom_advance_paid, since billing isn't live yet and every submitted
+	Sales Invoice-based read was silently 0 for every customer, regardless
+	of real order/advance activity (this was the actual root cause behind
+	the Customer form always showing zero outstanding).
 	"""
-	result = frappe.db.sql(
-		"SELECT COALESCE(SUM(outstanding_amount), 0) FROM `tabSales Invoice`"
-		" WHERE customer = %s AND docstatus = 1 AND outstanding_amount > 0",
-		customer,
-	)
+	if is_dev_billing_mode():
+		doctype = sales_doctype()
+		outstanding_expr = sales_outstanding_expr("t")
+		result = frappe.db.sql(
+			f"SELECT COALESCE(SUM({outstanding_expr}), 0) FROM `tab{doctype}` t"
+			" WHERE t.customer = %s AND t.docstatus = 1 AND t.status NOT IN ('Closed', 'Cancelled')",
+			customer,
+		)
+	else:
+		result = frappe.db.sql(
+			"SELECT COALESCE(SUM(outstanding_amount), 0) FROM `tabSales Invoice`"
+			" WHERE customer = %s AND docstatus = 1 AND outstanding_amount > 0",
+			customer,
+		)
 	return flt(result[0][0] if result else 0)
 
 
@@ -25,7 +40,10 @@ def refresh_customer_outstanding(customer):
 
 
 def update_customer_outstanding_on_si(doc, method=None):
-	"""doc_event handler: SI on_submit / on_cancel."""
+	"""doc_event handler: SI on_submit/on_cancel, and (dev mode only matters
+	here since prod mode ignores Sales Order) SO on_submit/on_cancel — a
+	Sales Order changes this customer's dev-mode outstanding just as much
+	as an SI submit changes the prod-mode figure."""
 	if doc.customer:
 		refresh_customer_outstanding(doc.customer)
 

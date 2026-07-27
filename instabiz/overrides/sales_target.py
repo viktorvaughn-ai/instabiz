@@ -4,6 +4,8 @@ import calendar
 import frappe
 from frappe.utils import flt, getdate, nowdate
 
+from instabiz.overrides.billing_mode import is_dev_billing_mode
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -25,23 +27,28 @@ def _month_days(d=None):
 
 
 def _get_actuals(sales_user, month_first, return_count=False):
-	"""Sum of submitted SO rounded_total for the user in the given month.
-	TEST-ONLY BASIS CHANGE: reads Sales Order (creation date) instead of Sales
-	Invoice (posting_date) — billing isn't live in ERP yet, so SI-based actuals
-	always read 0/wrong. Revert to Sales Invoice once invoicing goes live for real
-	revenue-realization accounting. Falls back to custom_sales_person display name
-	for legacy docs. Uses rounded_total (not grand_total) to match the SO list
-	view's sticky total bar (sales_order_list.js ib_update_so_total_bar).
-	Basis is `creation` (not `transaction_date`) per user decision 2026-07-25 —
-	matches the SO list view's default date filter field, so board and list
-	agree even when an order's transaction_date is backdated to a prior month.
+	"""Sum of submitted revenue-doc total for the user in the given month.
+
+	Basis controlled by instabiz.overrides.billing_mode.is_dev_billing_mode()
+	— dev mode reads Sales Order (creation date, matching the SO list view's
+	own default date filter, per explicit user decision 2026-07-25 — board
+	and list must agree even when an order's transaction_date is backdated).
+	Prod mode reads Sales Invoice (posting_date, real revenue-realization
+	accounting) once real invoicing is live. Falls back to custom_sales_person
+	display name for legacy docs missing custom_sales_person_user.
 	"""
 	month_last = _month_last(month_first)
 	full_name = frappe.db.get_value("User", sales_user, "full_name") or ""
+
+	if is_dev_billing_mode():
+		doctype, date_expr, amount_field = "Sales Order", "DATE(creation)", "rounded_total"
+	else:
+		doctype, date_expr, amount_field = "Sales Invoice", "posting_date", "rounded_total"
+
 	result = frappe.db.sql(
-		"""
-		SELECT COALESCE(SUM(rounded_total), 0) AS total, COUNT(*) AS cnt
-		FROM `tabSales Order`
+		f"""
+		SELECT COALESCE(SUM({amount_field}), 0) AS total, COUNT(*) AS cnt
+		FROM `tab{doctype}`
 		WHERE docstatus = 1
 		  AND (
 		      TRIM(custom_sales_person_user) = %(user)s
@@ -51,7 +58,7 @@ def _get_actuals(sales_user, month_first, return_count=False):
 		          AND TRIM(custom_sales_person) = %(full_name)s
 		      )
 		  )
-		  AND DATE(creation) BETWEEN %(from_date)s AND %(to_date)s
+		  AND {date_expr} BETWEEN %(from_date)s AND %(to_date)s
 		""",
 		{
 			"user": sales_user,

@@ -1,6 +1,8 @@
 import frappe
 from frappe.utils import nowdate, getdate, get_first_day, get_last_day, add_months, flt
 
+from instabiz.overrides.billing_mode import is_dev_billing_mode, sales_doctype, sales_outstanding_expr
+
 
 def get_context(context):
 	context.no_cache = 1
@@ -13,31 +15,40 @@ def get_dashboard_data():
 	last_month_start = get_first_day(add_months(today, -1))
 	last_month_end = get_last_day(add_months(today, -1))
 
+	# Basis controlled by instabiz.overrides.billing_mode — dev mode reads
+	# Sales Order (billing isn't live in ERP yet, so SI-based figures always
+	# read 0/wrong); prod mode reads Sales Invoice for real revenue-
+	# realization accounting. AR/trend/top-customers/recent-docs were
+	# previously left hardcoded to Sales Invoice even after revenue was
+	# switched, so they silently read zero/empty regardless of order activity.
+	dev_mode = is_dev_billing_mode()
+	sales_dt = sales_doctype()
+	date_field = "transaction_date" if dev_mode else "posting_date"
+	status_cond = "AND t.status NOT IN ('Closed', 'Cancelled')" if dev_mode else "AND t.is_return=0"
+	ar_expr = sales_outstanding_expr("t")
+
 	# ── Revenue MTD ──────────────────────────────────────────────────────────
-	# TEST-ONLY BASIS CHANGE: Sales Order instead of Sales Invoice — billing
-	# isn't live in ERP yet, so SI-based revenue always read 0/wrong. Revert to
-	# Sales Invoice once invoicing goes live for real revenue-realization accounting.
-	rev_mtd = flt(frappe.db.sql("""
+	rev_mtd = flt(frappe.db.sql(f"""
 		SELECT COALESCE(SUM(grand_total), 0)
-		FROM `tabSales Order`
-		WHERE docstatus=1
-		AND transaction_date BETWEEN %s AND %s
+		FROM `tab{sales_dt}` t
+		WHERE docstatus=1 {status_cond}
+		AND {date_field} BETWEEN %s AND %s
 	""", (month_start, today))[0][0])
 
-	rev_last = flt(frappe.db.sql("""
+	rev_last = flt(frappe.db.sql(f"""
 		SELECT COALESCE(SUM(grand_total), 0)
-		FROM `tabSales Order`
-		WHERE docstatus=1
-		AND transaction_date BETWEEN %s AND %s
+		FROM `tab{sales_dt}` t
+		WHERE docstatus=1 {status_cond}
+		AND {date_field} BETWEEN %s AND %s
 	""", (last_month_start, last_month_end))[0][0])
 
 	rev_delta = round(((rev_mtd - rev_last) / rev_last * 100), 1) if rev_last else 0
 
 	# ── Outstanding AR ───────────────────────────────────────────────────────
-	ar = flt(frappe.db.sql("""
-		SELECT COALESCE(SUM(outstanding_amount), 0)
-		FROM `tabSales Invoice`
-		WHERE docstatus=1 AND outstanding_amount > 0
+	ar = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM({ar_expr}), 0)
+		FROM `tab{sales_dt}` t
+		WHERE docstatus=1 {status_cond}
 	""")[0][0])
 
 	# ── Open Quotations ──────────────────────────────────────────────────────
@@ -75,39 +86,40 @@ def get_dashboard_data():
 		low_stock = 0
 
 	# ── 6-month revenue trend ────────────────────────────────────────────────
-	trend = frappe.db.sql("""
+	trend = frappe.db.sql(f"""
 		SELECT
-			DATE_FORMAT(posting_date, '%%b %%Y') as label,
-			DATE_FORMAT(posting_date, '%%Y-%%m') as ym,
+			DATE_FORMAT({date_field}, '%%b %%Y') as label,
+			DATE_FORMAT({date_field}, '%%Y-%%m') as ym,
 			COALESCE(SUM(grand_total), 0) as amount,
 			COALESCE(SUM(base_grand_total), 0) as base_amount
-		FROM `tabSales Invoice`
-		WHERE docstatus=1 AND is_return=0
-		AND posting_date >= DATE_SUB(%s, INTERVAL 6 MONTH)
+		FROM `tab{sales_dt}` t
+		WHERE docstatus=1 {status_cond}
+		AND {date_field} >= DATE_SUB(%s, INTERVAL 6 MONTH)
 		GROUP BY ym, label
 		ORDER BY ym
 	""", (today,), as_dict=True)
 
 	# ── Top 5 customers this month ───────────────────────────────────────────
-	top_customers = frappe.db.sql("""
+	top_customers = frappe.db.sql(f"""
 		SELECT customer_name, COALESCE(SUM(grand_total), 0) as total
-		FROM `tabSales Invoice`
-		WHERE docstatus=1 AND is_return=0
-		AND posting_date BETWEEN %s AND %s
+		FROM `tab{sales_dt}` t
+		WHERE docstatus=1 {status_cond}
+		AND {date_field} BETWEEN %s AND %s
 		GROUP BY customer_name
 		ORDER BY total DESC
 		LIMIT 5
 	""", (month_start, today), as_dict=True)
 
-	# ── Recent invoices — scoped to user unless privileged ───────────────────────
+	# ── Recent docs — scoped to user unless privileged ───────────────────────
 	roles = frappe.get_roles(frappe.session.user)
 	privileged = any(r in roles for r in ("System Manager", "Sales Manager", "Accounts Manager", "Accounts User"))
 	si_cond = "" if privileged else f"AND custom_sales_person_user = {frappe.db.escape(frappe.session.user)}"
 	recent_si = frappe.db.sql(f"""
-		SELECT name, customer_name, posting_date, due_date, grand_total, outstanding_amount, status
-		FROM `tabSales Invoice`
+		SELECT name, customer_name, {date_field} as posting_date, {date_field} as due_date,
+		       grand_total, {ar_expr} as outstanding_amount, status
+		FROM `tab{sales_dt}` t
 		WHERE docstatus=1 {si_cond}
-		ORDER BY posting_date DESC, creation DESC
+		ORDER BY {date_field} DESC, creation DESC
 		LIMIT 8
 	""", as_dict=True)
 

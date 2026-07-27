@@ -5,6 +5,8 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 
+from instabiz.overrides.billing_mode import is_dev_billing_mode, sales_doctype, sales_outstanding_expr
+
 
 def execute(filters=None):
 	filters = filters or {}
@@ -23,25 +25,32 @@ def _columns():
 
 
 def _data(filters):
+	# Basis controlled by instabiz.overrides.billing_mode — was hardcoded to
+	# Sales Invoice only, so this always read empty (billing isn't live yet).
 	territory = filters.get("territory")
 	sp_user = filters.get("sales_person_user")
 	min_balance = flt(filters.get("min_balance"))
+	dev_mode = is_dev_billing_mode()
+	doctype = sales_doctype()
+	outstanding_expr = sales_outstanding_expr("t")
+	status_cond = "AND t.status NOT IN ('Closed', 'Cancelled')" if dev_mode else ""
 
-	terr_cond = "AND si.territory = %(territory)s" if territory else ""
-	sp_cond = "AND si.custom_sales_person_user = %(sp_user)s" if sp_user else ""
+	terr_cond = "AND t.territory = %(territory)s" if territory else ""
+	sp_cond = "AND t.custom_sales_person_user = %(sp_user)s" if sp_user else ""
 
 	rows = frappe.db.sql(
 		f"""
 		SELECT
-			si.customer,
-			SUM(CASE WHEN si.outstanding_amount > 0 THEN si.outstanding_amount ELSE 0 END) AS debit,
-			SUM(CASE WHEN si.outstanding_amount < 0 THEN -si.outstanding_amount ELSE 0 END) AS credit
-		FROM `tabSales Invoice` si
-		WHERE si.docstatus = 1
-		AND si.outstanding_amount != 0
+			t.customer,
+			SUM(CASE WHEN {outstanding_expr} > 0 THEN {outstanding_expr} ELSE 0 END) AS debit,
+			SUM(CASE WHEN {outstanding_expr} < 0 THEN -({outstanding_expr}) ELSE 0 END) AS credit
+		FROM `tab{doctype}` t
+		WHERE t.docstatus = 1
+		AND t.grand_total > 0
+		{status_cond}
 		{terr_cond} {sp_cond}
-		GROUP BY si.customer
-		ORDER BY si.customer ASC
+		GROUP BY t.customer
+		ORDER BY t.customer ASC
 		""",
 		{"territory": territory, "sp_user": sp_user},
 		as_dict=True,
@@ -53,6 +62,8 @@ def _data(filters):
 		debit = flt(r.debit)
 		credit = flt(r.credit)
 		if abs(debit - credit) < min_balance:
+			continue
+		if not debit and not credit:
 			continue
 		data.append({
 			"idx": idx,
