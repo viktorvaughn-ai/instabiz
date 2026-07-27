@@ -239,7 +239,9 @@ button[data-label="Submit"] {
 .ib-cb-skip-btn:focus-visible,
 .ib-sl-preset-btn:focus-visible,
 .ib-pl-edit-btn:focus-visible,
-.ib-cb-pool-search:focus-visible {
+.ib-cb-pool-search:focus-visible,
+.ib-iph-pg-size:focus-visible,
+.ib-iph-preset-btn:focus-visible {
     outline: 2px solid var(--ib-primary);
     outline-offset: 2px;
 }
@@ -1157,12 +1159,15 @@ mark.ib-search-hl {
 .ib-chip--uom-kg   { background: var(--green-50);   border-color: var(--green-100);  color: var(--green-700);  }
 .ib-chip--ig       { background: var(--cyan-50,#ecfeff); border-color: var(--cyan-200,#a5f3fc); color: var(--cyan-700,#0e7490); }
 .ib-chip--wh       { background: var(--purple-50); border-color: var(--purple-100); color: var(--purple-700); }
+.ib-chip--search   { background: var(--ib-tint-mid); border-color: var(--ib-primary); color: var(--ib-primary); }
 .ib-sd-chips .ib-chip--search { background: var(--ib-tint-mid); border-color: var(--ib-primary); color: var(--ib-primary); }
 .ib-chip--zero     { background: var(--gray-50);   border-color: var(--gray-200);   color: var(--gray-700);   }
 .ib-chip--stock    { background: var(--green-50);  border-color: var(--green-100);  color: var(--green-700);  }
 .ib-chip--negative { background: var(--red-50);    border-color: var(--red-100);    color: var(--red-700);    }
 .ib-chip--low      { background: var(--yellow-50); border-color: var(--yellow-200); color: var(--yellow-800); }
 .ib-chip--hide     { background: var(--yellow-50); border-color: var(--yellow-200); color: var(--yellow-800); }
+.ib-chip--sp       { background: var(--blue-50);   border-color: var(--blue-100);   color: var(--blue-700);   }
+.ib-chip--customer { background: var(--ib-tint-mid); border-color: var(--ib-primary); color: var(--ib-primary); }
 
 .ib-chip-x {
     background: none;
@@ -3050,14 +3055,66 @@ iconify-icon { display: inline-flex; align-items: center; }
     gap: var(--margin-md);
 }
 
+.ib-iph-cards-row {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--margin-md);
+}
+
 .ib-iph-cards {
     display: flex;
     gap: var(--margin-md);
     align-items: stretch;
     min-height: 88px; /* reserve space before data loads — prevents CLS */
+    flex: 1;
 }
 
 .ib-iph-cards .ib-iph-card { flex: 1; min-width: 0; }
+
+.ib-iph-cards-row .ib-refresh-time { margin-top: var(--margin-xs); white-space: nowrap; }
+
+.ib-iph-uom-note {
+    font-size: var(--text-sm);
+    color: var(--yellow-800, #854d0e);
+    background: var(--yellow-50, #fefce8);
+    border: 1px solid var(--yellow-200, #fde68a);
+    border-radius: 4px;
+    padding: 6px 10px;
+}
+
+/* Date range quick-presets */
+.ib-iph-date-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    padding: 4px 15px 8px;
+    margin-top: -4px;
+}
+.ib-iph-preset-btn {
+    padding: 3px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    background: var(--fg-color);
+    color: var(--text-muted);
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color 0.15s, color 0.15s;
+}
+.ib-iph-preset-btn:hover { border-color: var(--ib-primary); color: var(--ib-primary); }
+
+/* Rate trend mini-chart card */
+.ib-iph-trend-card { padding: 14px 16px 4px; }
+.ib-iph-trend-label {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+.ib-iph-trend-chart { width: 100%; }
 
 .ib-iph-card {
     padding: 12px 14px;
@@ -3118,8 +3175,37 @@ iconify-icon { display: inline-flex; align-items: center; }
     padding: 10px 14px;
     border-bottom: 1px solid var(--border-color);
 }
+.ib-iph-toolbar-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--margin-md);
+    flex-wrap: wrap;
+}
 .ib-iph-search {
     max-width: 360px;
+    flex: 1;
+    min-width: 220px;
+}
+.ib-iph-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+.ib-iph-pg-size {
+    font-size: 12px; padding: 3px 6px; border: 1px solid var(--border-color);
+    border-radius: 4px; background: var(--card-bg); color: var(--text-color);
+    cursor: pointer;
+}
+
+/* Active filter chips — reuses shared .ib-chip / .ib-chip-x / .ib-chip-clear-all */
+.ib-iph-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
 }
 
 .ib-iph-table-scroll { overflow-x: auto; width: 100%; }
@@ -3138,6 +3224,25 @@ iconify-icon { display: inline-flex; align-items: center; }
     text-transform: uppercase;
     letter-spacing: 0.04em;
     white-space: nowrap;
+}
+.ib-iph-table thead th[data-col] { cursor: pointer; user-select: none; }
+.ib-iph-table thead th[data-col]:hover { color: var(--ib-primary); }
+.ib-iph-table thead th[data-col]::after {
+    content: "";
+    display: inline-block;
+    width: 0; height: 0;
+    margin-left: 5px;
+    vertical-align: middle;
+    opacity: 0.25;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 5px solid currentColor;
+}
+.ib-iph-table thead th.ib-iph-th-sort-asc::after,
+.ib-iph-table thead th.ib-iph-th-sort-desc::after { opacity: 1; color: var(--ib-primary); }
+.ib-iph-table thead th.ib-iph-th-sort-desc::after {
+    border-bottom: none;
+    border-top: 5px solid currentColor;
 }
 .ib-iph-table tbody tr { border-bottom: 1px solid var(--border-color); transition: background 0.1s; }
 .ib-iph-table tbody tr:last-child { border-bottom: none; }
@@ -3166,12 +3271,15 @@ iconify-icon { display: inline-flex; align-items: center; }
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: var(--margin-md);
     padding: 10px 14px;
     border-top: 1px solid var(--border-color);
     font-size: var(--text-sm);
     color: var(--text-muted);
 }
-.ib-iph-page-btns { display: flex; gap: 6px; }
+.ib-iph-pg-size--bottom { flex-shrink: 0; }
+.ib-iph-page-info { flex: 1; text-align: center; }
+.ib-iph-page-btns { display: flex; gap: 6px; flex-shrink: 0; }
 
 /* ── Production Tracker page ── */
 .ib-pt-wrap { padding: 15px; display: flex; flex-direction: column; gap: var(--margin-md); }
