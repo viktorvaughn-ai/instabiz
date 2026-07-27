@@ -141,6 +141,11 @@ def _auto_create_sr_if_needed(dn):
         ],
     })
     sr.insert(ignore_permissions=True)
+    # Commit now — the frappe.throw() below aborts this request, and without
+    # an explicit commit here, frappe's own exception handler rolls back the
+    # whole transaction (including this SR), leaving the error message
+    # pointing at a Stock Reconciliation that was never actually persisted.
+    frappe.db.commit()
 
     lines = "".join(
         f"<li>{r['item_code']} — need {r['needed']}, have {r['have']} in {r['warehouse']}</li>"
