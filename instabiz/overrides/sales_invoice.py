@@ -2,7 +2,7 @@
 import frappe
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import SalesInvoice  # pyright: ignore[reportMissingImports]
 
-from instabiz.overrides.utils import LOCATION_COMPANY_ADDRESS, LOCATION_COMPANY_GSTIN, IbStatusMixin, apply_location_cost_center, recalculate_items, set_sales_person, sync_sales_team
+from instabiz.overrides.utils import LOCATION_COMPANY_ADDRESS, LOCATION_COMPANY_GSTIN, IbStatusMixin, apply_location_cost_center, recalculate_items, set_sales_person, sync_sales_team, _guard_document_attachments
 from instabiz.overrides.naming import autoname_sales_invoice
 from instabiz.overrides.quotation import _auto_correct_gst_template
 
@@ -46,6 +46,7 @@ class CustomSalesInvoice(IbStatusMixin, SalesInvoice):
         set_sales_person(self)
         sync_sales_team(self)
         recalculate_items(self)
+        _guard_document_attachments(self)
         self._pre_transport_charges()   # set freight Actual row before ERPNext calc
         super().validate()
         self._apply_transport_gst()     # add extra GST on transport after ERPNext calc

@@ -20,6 +20,7 @@ from instabiz.overrides.utils import (
     _check_floor_price,
     _check_item_lifecycle,
     _check_customer_item_spec,
+    _guard_document_attachments,
 )
 from instabiz.overrides.advance_approval import check_advance_approval
 from instabiz.overrides.naming import autoname_sales_order
@@ -65,6 +66,7 @@ class CustomSalesOrder(IbStatusMixin, SalesOrder):
         _check_floor_price(self)
         _check_item_lifecycle(self)
         _check_customer_item_spec(self)
+        _guard_document_attachments(self)
         super().validate()
 
     def before_cancel(self):

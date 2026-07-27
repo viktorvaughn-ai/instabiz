@@ -503,6 +503,68 @@ def _check_floor_price(doc):
 		frappe.throw(msg, title=_("Floor Price Breach"))
 
 
+# ── Document attachment stamping + tamper guard ───────────────────────────────
+
+def _stamp_document_attachments(doc, fieldname="custom_document_attachments"):
+	"""Stamp uploaded_by/uploaded_on the first time a document row gets a file.
+
+	Child table row controllers do NOT get their own validate() called by Frappe
+	during a parent save (confirmed — Document.run_method only invokes hooks for
+	the parent) — this has to run from the parent's own validate() instead.
+	"""
+	from frappe.utils import now_datetime
+
+	for row in doc.get(fieldname) or []:
+		if not row.attachment:
+			continue
+		if not row.uploaded_by:
+			row.uploaded_by = frappe.session.user
+		if not row.uploaded_on:
+			row.uploaded_on = now_datetime()
+
+
+def _guard_document_attachments(doc, fieldname="custom_document_attachments"):
+	"""Once uploaded, a document row (LR copy, receipt, advance payment
+	screenshot, etc.) can only be removed or have its file swapped by
+	Sales Manager / System Manager — everyone else can add rows freely, but
+	can't delete or silently swap out proof documents already on record.
+	"""
+	from instabiz.overrides.permissions import _is_privileged
+
+	_stamp_document_attachments(doc, fieldname)
+
+	if _is_privileged(frappe.session.user):
+		return
+	if doc.is_new():
+		return
+
+	# get_doc_before_save() only returns a value if something else already
+	# populated it earlier in the request (e.g. version tracking) — it does NOT
+	# lazily fetch on its own. Force a real fetch of the pre-save state here, or
+	# this guard silently no-ops and a non-privileged user can delete/swap freely.
+	doc.load_doc_before_save()
+	old_doc = doc.get_doc_before_save()
+	if not old_doc:
+		return
+
+	old_rows = {r.name: r.attachment for r in (old_doc.get(fieldname) or [])}
+	if not old_rows:
+		return
+	new_rows = {r.name: r.attachment for r in (doc.get(fieldname) or []) if r.name}
+
+	for row_name, old_attachment in old_rows.items():
+		if row_name not in new_rows:
+			frappe.throw(
+				_("Only Sales Manager or System Manager can remove an uploaded document."),
+				frappe.PermissionError,
+			)
+		if new_rows[row_name] != old_attachment:
+			frappe.throw(
+				_("Only Sales Manager or System Manager can replace an uploaded document's file."),
+				frappe.PermissionError,
+			)
+
+
 # ── Item lifecycle enforcement ────────────────────────────────────────────────
 
 def _check_item_lifecycle(doc):

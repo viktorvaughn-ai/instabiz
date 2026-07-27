@@ -20,6 +20,7 @@ from instabiz.overrides.utils import (
     recalculate_items,
     set_sales_person,
     sync_sales_team,
+    _guard_document_attachments,
 )
 
 # ── Document class ────────────────────────────────────────────────────────────
@@ -54,6 +55,7 @@ class CustomDeliveryNote(IbStatusMixin, DeliveryNote):
         sync_sales_team(self)
         recalculate_items(self)
         apply_location_cost_center(self)
+        _guard_document_attachments(self)
         super().validate()
 
     def on_update_after_submit(self):

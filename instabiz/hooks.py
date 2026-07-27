@@ -181,7 +181,11 @@ doc_events = {
     "Employee": {
         "after_save": "instabiz.overrides.employee_drive.sync_employee_docs_to_drive",
     },
+    "Quotation": {
+        "on_update": "instabiz.overrides.document_attachment_sync.sync_document_attachments_to_drive",
+    },
     "Sales Order": {
+        "on_update": "instabiz.overrides.document_attachment_sync.sync_document_attachments_to_drive",
         "on_submit": [
             "instabiz.overrides.stock_events.publish_stock_update",
             "instabiz.overrides.customer_assignment.mark_assignment_done_on_so",
@@ -194,6 +198,7 @@ doc_events = {
         ],
     },
     "Delivery Note": {
+        "on_update": "instabiz.overrides.document_attachment_sync.sync_document_attachments_to_drive",
         "on_submit": [
             "instabiz.overrides.stock_events.publish_stock_update",
             "instabiz.overrides.dispatch_notification.run_dispatch_notification",
@@ -202,10 +207,10 @@ doc_events = {
         "on_cancel": "instabiz.overrides.stock_events.publish_stock_update",
     },
     "Sales Invoice": {
-        "on_update": "instabiz.overrides.si_drive_sync.sync_si_documents_to_drive",
+        "on_update": "instabiz.overrides.document_attachment_sync.sync_document_attachments_to_drive",
         "on_submit": [
             "instabiz.overrides.customer.update_customer_outstanding_on_si",
-            "instabiz.overrides.si_drive_sync.sync_si_documents_to_drive",
+            "instabiz.overrides.document_attachment_sync.sync_document_attachments_to_drive",
             "instabiz.overrides.einvoice.run_einvoice_on_submit",
         ],
         "on_cancel": "instabiz.overrides.customer.update_customer_outstanding_on_si",
@@ -288,7 +293,7 @@ override_whitelisted_methods = {
 }
 
 # ── Frontend assets ───────────────────────────────────────────────────────────
-app_include_css = ["/assets/instabiz/css/instabiz.css"]
+app_include_css = ["instabiz.bundle.css"]
 app_include_js  = [
     "https://cdn.jsdelivr.net/npm/iconify-icon@2.1.0/dist/iconify-icon.min.js",  # Iconify icons (CDN)
     "/assets/instabiz/js/ib_color_map.js",            # item color name → hex mapping

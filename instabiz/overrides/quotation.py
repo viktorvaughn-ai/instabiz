@@ -20,6 +20,7 @@ from instabiz.overrides.utils import (
     _check_floor_price,
     _check_item_lifecycle,
     _check_customer_item_spec,
+    _guard_document_attachments,
 )
 from instabiz.overrides.naming import autoname_quotation
 
@@ -163,6 +164,7 @@ class CustomQuotation(IbStatusMixin, Quotation):
         _check_floor_price(self)
         _check_item_lifecycle(self)
         _check_customer_item_spec(self)
+        _guard_document_attachments(self)
         # Ensure valid_till is never before transaction_date.
         # valid_till is hidden from users; on reopened/amended docs the old value
         # can be stale, causing ERPNext's validate_valid_till() to throw.
