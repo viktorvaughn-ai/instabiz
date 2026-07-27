@@ -7,7 +7,7 @@ def get_kb_data():
 	user_roles = frappe.get_roles(frappe.session.user)
 	return {
 		"pdf_url": "/files/instabiz_knowledge_base.pdf",
-		"version": "June 2026",
+		"version": "July 2026",
 		"roles": user_roles,
 		"is_manager": bool(
 			{"System Manager", "Sales Manager", "Accounts Manager", "HR Manager", "Purchase Manager"} & set(user_roles)
