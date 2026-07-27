@@ -2,6 +2,8 @@
 import frappe
 from frappe.utils import flt
 
+from instabiz.overrides.billing_mode import is_dev_billing_mode
+
 
 def execute(filters=None):
 	columns = _columns()
@@ -81,22 +83,30 @@ def _data(filters):
 	)
 	grn_map = {r.purchase_order: r for r in grn_rows}
 
-	pi_rows = frappe.db.sql(
-		f"""
-		SELECT pii.purchase_order,
-		       COUNT(DISTINCT pi.name) AS pi_count,
-		       SUM(pi.grand_total) AS billed_amount,
-		       SUM(pi.outstanding_amount) AS outstanding
-		FROM `tabPurchase Invoice` pi
-		INNER JOIN `tabPurchase Invoice Item` pii ON pii.parent = pi.name
-		WHERE pi.docstatus = 1 AND pii.purchase_order IN ({placeholders})
-		GROUP BY pii.purchase_order
-		""",
-		tuple(po_names),
-		as_dict=True,
-	)
-	pi_map = {r.purchase_order: r for r in pi_rows}
+	# Basis controlled by instabiz.overrides.billing_mode — dev mode has no
+	# real Purchase Invoice yet (billing isn't live), so nothing is "billed":
+	# skip the PI join entirely and treat the full PO value as outstanding
+	# payable (matches purchase_outstanding_expr's dev branch = po.grand_total).
+	if is_dev_billing_mode():
+		pi_map = {}
+	else:
+		pi_rows = frappe.db.sql(
+			f"""
+			SELECT pii.purchase_order,
+			       COUNT(DISTINCT pi.name) AS pi_count,
+			       SUM(pi.grand_total) AS billed_amount,
+			       SUM(pi.outstanding_amount) AS outstanding
+			FROM `tabPurchase Invoice` pi
+			INNER JOIN `tabPurchase Invoice Item` pii ON pii.parent = pi.name
+			WHERE pi.docstatus = 1 AND pii.purchase_order IN ({placeholders})
+			GROUP BY pii.purchase_order
+			""",
+			tuple(po_names),
+			as_dict=True,
+		)
+		pi_map = {r.purchase_order: r for r in pi_rows}
 
+	dev_mode = is_dev_billing_mode()
 	result = []
 	for r in rows:
 		grn = grn_map.get(r.name)
@@ -106,7 +116,7 @@ def _data(filters):
 		received_amount = flt(grn.received_amount) if grn else 0.0
 		pi_count = pi.pi_count if pi else 0
 		billed_amount = flt(pi.billed_amount) if pi else 0.0
-		outstanding = flt(pi.outstanding) if pi else 0.0
+		outstanding = flt(pi.outstanding) if pi else (flt(r.grand_total) if dev_mode else 0.0)
 
 		per_recv = flt(r.per_received)
 		per_billed = flt(r.per_billed)

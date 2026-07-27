@@ -3,6 +3,8 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 
+from instabiz.overrides.billing_mode import is_dev_billing_mode, sales_doctype, sales_outstanding_expr
+
 
 def execute(filters=None):
 	filters = filters or {}
@@ -25,20 +27,31 @@ def _columns():
 
 
 def _data(filters):
-	conds = ["si.docstatus = 1", "si.is_return = 0", "si.custom_sales_person_user IS NOT NULL"]
+	# Basis controlled by instabiz.overrides.billing_mode — dev mode reads
+	# Sales Order (billing isn't live yet, SI-based collections always reads
+	# empty); prod mode reads real Sales Invoice. Sales Order has no is_return
+	# and no posting_date (uses transaction_date instead).
+	dev_mode = is_dev_billing_mode()
+	doctype  = sales_doctype()
+	date_field  = "transaction_date" if dev_mode else "posting_date"
+	outstanding_expr = sales_outstanding_expr("t")
+
+	conds = ["t.docstatus = 1", "t.custom_sales_person_user IS NOT NULL"]
+	if not dev_mode:
+		conds.append("t.is_return = 0")
 	params = {}
 
 	if filters.get("from_date"):
-		conds.append("si.posting_date >= %(from_date)s")
+		conds.append(f"t.{date_field} >= %(from_date)s")
 		params["from_date"] = filters["from_date"]
 	if filters.get("to_date"):
-		conds.append("si.posting_date <= %(to_date)s")
+		conds.append(f"t.{date_field} <= %(to_date)s")
 		params["to_date"] = filters["to_date"]
 	if filters.get("territory"):
-		conds.append("si.territory = %(territory)s")
+		conds.append("t.territory = %(territory)s")
 		params["territory"] = filters["territory"]
 	if filters.get("sales_person_user"):
-		conds.append("si.custom_sales_person_user = %(sales_person_user)s")
+		conds.append("t.custom_sales_person_user = %(sales_person_user)s")
 		params["sales_person_user"] = filters["sales_person_user"]
 
 	where = " AND ".join(conds)
@@ -46,19 +59,19 @@ def _data(filters):
 	rows = frappe.db.sql(
 		f"""
 		SELECT
-			si.custom_sales_person_user                                       AS sales_person,
-			COUNT(DISTINCT si.name)                                           AS invoice_count,
-			ROUND(SUM(si.grand_total), 2)                                     AS invoiced_amount,
-			ROUND(SUM(si.grand_total - si.outstanding_amount), 2)             AS collected_amount,
-			ROUND(SUM(si.outstanding_amount), 2)                              AS outstanding,
-			CASE WHEN SUM(si.grand_total) > 0
-			     THEN ROUND(SUM(si.grand_total - si.outstanding_amount)
-			                / SUM(si.grand_total) * 100, 1)
+			t.custom_sales_person_user                                       AS sales_person,
+			COUNT(DISTINCT t.name)                                           AS invoice_count,
+			ROUND(SUM(t.grand_total), 2)                                     AS invoiced_amount,
+			ROUND(SUM(t.grand_total) - SUM({outstanding_expr}), 2)           AS collected_amount,
+			ROUND(SUM({outstanding_expr}), 2)                                AS outstanding,
+			CASE WHEN SUM(t.grand_total) > 0
+			     THEN ROUND((SUM(t.grand_total) - SUM({outstanding_expr}))
+			                / SUM(t.grand_total) * 100, 1)
 			     ELSE 0
 			END                                                               AS collection_pct
-		FROM `tabSales Invoice` si
+		FROM `tab{doctype}` t
 		WHERE {where}
-		GROUP BY si.custom_sales_person_user
+		GROUP BY t.custom_sales_person_user
 		ORDER BY collected_amount DESC
 		""",
 		params,

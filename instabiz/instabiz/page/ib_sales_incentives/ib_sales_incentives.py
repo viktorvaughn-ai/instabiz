@@ -1,6 +1,8 @@
 import frappe
 from frappe.utils import nowdate, getdate, get_first_day, get_last_day, add_months, flt
 
+from instabiz.overrides.billing_mode import is_dev_billing_mode, sales_doctype, sales_outstanding_expr
+
 
 def get_context(context):
 	context.no_cache = 1
@@ -88,15 +90,25 @@ def get_sales_reps_for_targets(month=None):
 	targets      = _target_map(month_first)
 	prev_targets = _target_map(prev_first)
 
+	# Basis controlled by instabiz.overrides.billing_mode — dev mode reads
+	# Sales Order (billing isn't live yet, SI-based collected always reads
+	# empty); prod mode reads real Sales Invoice. Sales Order has no
+	# is_return and no posting_date (falls back to transaction_date).
+	dev_mode = is_dev_billing_mode()
+	doctype  = sales_doctype()
+	date_field = "transaction_date" if dev_mode else "posting_date"
+	outstanding_expr = sales_outstanding_expr("t")
+	return_cond = "" if dev_mode else "AND is_return = 0"
+
 	# MTD collected for each rep this month
 	collected_rows = frappe.db.sql(
-		"""
+		f"""
 		SELECT custom_sales_person_user AS sp_user,
-			   COALESCE(SUM(grand_total - outstanding_amount), 0) AS collected,
+			   COALESCE(SUM(grand_total) - SUM({outstanding_expr}), 0) AS collected,
 			   COALESCE(SUM(grand_total), 0) AS revenue
-		FROM `tabSales Invoice`
-		WHERE docstatus = 1 AND is_return = 0
-		  AND posting_date BETWEEN %s AND %s
+		FROM `tab{doctype}` t
+		WHERE docstatus = 1 {return_cond}
+		  AND {date_field} BETWEEN %s AND %s
 		  AND custom_sales_person_user IS NOT NULL AND custom_sales_person_user != ''
 		GROUP BY custom_sales_person_user
 		""",
@@ -138,22 +150,30 @@ def get_incentives_data(month=None):
 	slabs_by_desig = _load_slabs()
 	team_map = _load_team_map()
 
+	# Basis controlled by instabiz.overrides.billing_mode — see
+	# get_sales_reps_for_targets above for rationale.
+	dev_mode = is_dev_billing_mode()
+	doctype  = sales_doctype()
+	date_field = "transaction_date" if dev_mode else "posting_date"
+	outstanding_expr = sales_outstanding_expr("t")
+	return_cond = "" if dev_mode else "AND t.is_return=0"
+
 	# ── Per-salesperson billing ───────────────────────────────────────────────
-	by_sp = frappe.db.sql("""
+	by_sp = frappe.db.sql(f"""
 		SELECT
-			si.custom_sales_person_user as sp_user,
-			COALESCE(u.full_name, si.custom_sales_person_user) as sp_name,
-			COUNT(si.name) as invoice_count,
-			COALESCE(SUM(si.grand_total), 0) as revenue,
-			COALESCE(SUM(si.outstanding_amount), 0) as outstanding,
-			COALESCE(SUM(si.grand_total - si.outstanding_amount), 0) as collected
-		FROM `tabSales Invoice` si
-		LEFT JOIN `tabUser` u ON u.name = si.custom_sales_person_user
-		WHERE si.docstatus=1 AND si.is_return=0
-		AND si.posting_date BETWEEN %s AND %s
-		AND si.custom_sales_person_user IS NOT NULL
-		AND si.custom_sales_person_user != ''
-		GROUP BY si.custom_sales_person_user, u.full_name
+			t.custom_sales_person_user as sp_user,
+			COALESCE(u.full_name, t.custom_sales_person_user) as sp_name,
+			COUNT(t.name) as invoice_count,
+			COALESCE(SUM(t.grand_total), 0) as revenue,
+			COALESCE(SUM({outstanding_expr}), 0) as outstanding,
+			COALESCE(SUM(t.grand_total) - SUM({outstanding_expr}), 0) as collected
+		FROM `tab{doctype}` t
+		LEFT JOIN `tabUser` u ON u.name = t.custom_sales_person_user
+		WHERE t.docstatus=1 {return_cond}
+		AND t.{date_field} BETWEEN %s AND %s
+		AND t.custom_sales_person_user IS NOT NULL
+		AND t.custom_sales_person_user != ''
+		GROUP BY t.custom_sales_person_user, u.full_name
 		ORDER BY revenue DESC
 	""", (month_start, month_end), as_dict=True)
 
@@ -207,9 +227,9 @@ def get_incentives_data(month=None):
 
 	# ── Monthly trend per top 3 SPs ───────────────────────────────────────────
 	# Fetch top 3 SP users first — MariaDB doesn't support LIMIT in IN-subquery
-	top3_rows = frappe.db.sql("""
-		SELECT custom_sales_person_user FROM `tabSales Invoice`
-		WHERE docstatus=1 AND is_return=0 AND posting_date BETWEEN %s AND %s
+	top3_rows = frappe.db.sql(f"""
+		SELECT custom_sales_person_user FROM `tab{doctype}` t
+		WHERE t.docstatus=1 {return_cond} AND t.{date_field} BETWEEN %s AND %s
 		AND custom_sales_person_user IS NOT NULL AND custom_sales_person_user != ''
 		GROUP BY custom_sales_person_user ORDER BY SUM(grand_total) DESC LIMIT 3
 	""", (month_start, month_end), as_list=True)
@@ -219,16 +239,16 @@ def get_incentives_data(month=None):
 		placeholders = ",".join(["%s"] * len(top3))
 		trend = frappe.db.sql(f"""
 			SELECT
-				si.custom_sales_person_user as sp_user,
-				COALESCE(u.full_name, si.custom_sales_person_user) as sp_name,
-				DATE_FORMAT(si.posting_date,'%%b %%Y') as label,
-				DATE_FORMAT(si.posting_date,'%%Y-%%m') as ym,
-				COALESCE(SUM(si.grand_total - si.outstanding_amount),0) as collected
-			FROM `tabSales Invoice` si
-			LEFT JOIN `tabUser` u ON u.name = si.custom_sales_person_user
-			WHERE si.docstatus=1 AND si.is_return=0
-			AND si.custom_sales_person_user IN ({placeholders})
-			AND si.posting_date >= DATE_SUB(%s, INTERVAL 5 MONTH)
+				t.custom_sales_person_user as sp_user,
+				COALESCE(u.full_name, t.custom_sales_person_user) as sp_name,
+				DATE_FORMAT(t.{date_field},'%%b %%Y') as label,
+				DATE_FORMAT(t.{date_field},'%%Y-%%m') as ym,
+				COALESCE(SUM(t.grand_total) - SUM({outstanding_expr}),0) as collected
+			FROM `tab{doctype}` t
+			LEFT JOIN `tabUser` u ON u.name = t.custom_sales_person_user
+			WHERE t.docstatus=1 {return_cond}
+			AND t.custom_sales_person_user IN ({placeholders})
+			AND t.{date_field} >= DATE_SUB(%s, INTERVAL 5 MONTH)
 			GROUP BY sp_user, sp_name, ym, label
 			ORDER BY ym, collected DESC
 		""", top3 + [month_start], as_dict=True)
@@ -236,15 +256,15 @@ def get_incentives_data(month=None):
 		trend = []
 
 	# ── Customer-wise top 10 ──────────────────────────────────────────────────
-	top_customers = frappe.db.sql("""
-		SELECT si.custom_sales_person_user as sp_user,
-			   si.customer_name,
-			   COALESCE(SUM(si.grand_total - si.outstanding_amount), 0) as collected
-		FROM `tabSales Invoice` si
-		WHERE si.docstatus=1 AND si.is_return=0
-		AND si.posting_date BETWEEN %s AND %s
-		AND si.custom_sales_person_user IS NOT NULL
-		GROUP BY si.custom_sales_person_user, si.customer_name
+	top_customers = frappe.db.sql(f"""
+		SELECT t.custom_sales_person_user as sp_user,
+			   t.customer_name,
+			   COALESCE(SUM(t.grand_total) - SUM({outstanding_expr}), 0) as collected
+		FROM `tab{doctype}` t
+		WHERE t.docstatus=1 {return_cond}
+		AND t.{date_field} BETWEEN %s AND %s
+		AND t.custom_sales_person_user IS NOT NULL
+		GROUP BY t.custom_sales_person_user, t.customer_name
 		ORDER BY collected DESC LIMIT 20
 	""", (month_start, month_end), as_dict=True)
 

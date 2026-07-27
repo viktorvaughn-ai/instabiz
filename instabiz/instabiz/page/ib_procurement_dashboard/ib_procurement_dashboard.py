@@ -1,6 +1,8 @@
 import frappe
 from frappe.utils import nowdate, getdate, get_first_day, get_last_day, add_months, flt
 
+from instabiz.overrides.billing_mode import is_dev_billing_mode, purchase_doctype
+
 
 def get_context(context):
 	context.no_cache = 1
@@ -33,15 +35,26 @@ def get_procurement_data():
 		WHERE docstatus=1 AND status IN ('To Receive and Bill','To Receive')
 	""")[0][0])
 
+	# Basis controlled by instabiz.overrides.billing_mode — dev mode reads
+	# Purchase Order "spend" (billing isn't live yet, PI-based spend always
+	# reads empty); prod mode reads real Purchase Invoice. Purchase Order has
+	# no is_return and no posting_date (falls back to transaction_date).
+	# open_po_value/open_po_list above are genuinely PO-based already and are
+	# left untouched.
+	dev_mode = is_dev_billing_mode()
+	spend_doctype = purchase_doctype()
+	spend_date_field = "transaction_date" if dev_mode else "posting_date"
+	spend_return_cond = "" if dev_mode else "AND is_return=0"
+
 	# ── Spend MTD ─────────────────────────────────────────────────────────────
-	spend_mtd = flt(frappe.db.sql("""
-		SELECT COALESCE(SUM(grand_total),0) FROM `tabPurchase Invoice`
-		WHERE docstatus=1 AND is_return=0 AND posting_date BETWEEN %s AND %s
+	spend_mtd = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM(grand_total),0) FROM `tab{spend_doctype}`
+		WHERE docstatus=1 {spend_return_cond} AND {spend_date_field} BETWEEN %s AND %s
 	""", (month_start, today))[0][0])
 
-	spend_last = flt(frappe.db.sql("""
-		SELECT COALESCE(SUM(grand_total),0) FROM `tabPurchase Invoice`
-		WHERE docstatus=1 AND is_return=0 AND posting_date BETWEEN %s AND %s
+	spend_last = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM(grand_total),0) FROM `tab{spend_doctype}`
+		WHERE docstatus=1 {spend_return_cond} AND {spend_date_field} BETWEEN %s AND %s
 	""", (last_start, last_end))[0][0])
 
 	# ── Overdue AP ────────────────────────────────────────────────────────────
@@ -51,11 +64,11 @@ def get_procurement_data():
 	""", (today,))[0][0])
 
 	# ── Vendor-wise spend MTD ─────────────────────────────────────────────────
-	by_vendor = frappe.db.sql("""
+	by_vendor = frappe.db.sql(f"""
 		SELECT supplier_name as label, COALESCE(SUM(grand_total),0) as amount,
 			   COUNT(*) as invoices
-		FROM `tabPurchase Invoice`
-		WHERE docstatus=1 AND is_return=0 AND posting_date BETWEEN %s AND %s
+		FROM `tab{spend_doctype}`
+		WHERE docstatus=1 {spend_return_cond} AND {spend_date_field} BETWEEN %s AND %s
 		GROUP BY supplier_name ORDER BY amount DESC LIMIT 10
 	""", (month_start, today), as_dict=True)
 
@@ -71,13 +84,13 @@ def get_procurement_data():
 	""", (today,), as_dict=True)
 
 	# ── 6-month spend trend ───────────────────────────────────────────────────
-	spend_trend = frappe.db.sql("""
-		SELECT DATE_FORMAT(posting_date,'%%b %%Y') as label,
-			   DATE_FORMAT(posting_date,'%%Y-%%m') as ym,
+	spend_trend = frappe.db.sql(f"""
+		SELECT DATE_FORMAT({spend_date_field},'%%b %%Y') as label,
+			   DATE_FORMAT({spend_date_field},'%%Y-%%m') as ym,
 			   COALESCE(SUM(grand_total),0) as amount
-		FROM `tabPurchase Invoice`
-		WHERE docstatus=1 AND is_return=0
-		AND posting_date >= DATE_SUB(%s, INTERVAL 6 MONTH)
+		FROM `tab{spend_doctype}`
+		WHERE docstatus=1 {spend_return_cond}
+		AND {spend_date_field} >= DATE_SUB(%s, INTERVAL 6 MONTH)
 		GROUP BY ym, label ORDER BY ym
 	""", (today,), as_dict=True)
 

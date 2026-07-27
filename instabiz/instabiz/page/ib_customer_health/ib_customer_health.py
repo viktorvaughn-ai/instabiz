@@ -1,6 +1,8 @@
 import frappe
 from frappe.utils import nowdate, getdate, get_first_day, add_months, flt
 
+from instabiz.overrides.billing_mode import is_dev_billing_mode, sales_doctype, sales_outstanding_expr
+
 
 def get_context(context):
 	context.no_cache = 1
@@ -21,6 +23,16 @@ def get_customer_health(search=None, territory=None, limit=50, offset=0):
 	offset = int(offset)
 	user = frappe.session.user
 	privileged = _ch_privileged(user)
+
+	# Basis controlled by instabiz.overrides.billing_mode — dev mode reads
+	# Sales Order (billing isn't live yet, SI-based health always reads
+	# empty); prod mode reads real Sales Invoice. Sales Order has no
+	# is_return and no posting_date (falls back to transaction_date).
+	dev_mode = is_dev_billing_mode()
+	doctype  = sales_doctype()
+	date_field = "transaction_date" if dev_mode else "posting_date"
+	outstanding_expr = sales_outstanding_expr("t")
+	return_cond = "" if dev_mode else "AND t.is_return=0"
 
 	conditions = ["c.disabled = 0"]
 	params = []
@@ -54,29 +66,29 @@ def get_customer_health(search=None, territory=None, limit=50, offset=0):
 			COALESCE(oq.quote_value, 0) as quote_value
 		FROM `tabCustomer` c
 		LEFT JOIN (
-			SELECT customer, SUM(outstanding_amount) as outstanding
-			FROM `tabSales Invoice`
-			WHERE docstatus=1 AND outstanding_amount > 0
+			SELECT customer, SUM({outstanding_expr}) as outstanding
+			FROM `tab{doctype}` t
+			WHERE t.docstatus=1 AND {outstanding_expr} > 0
 			GROUP BY customer
 		) ar ON ar.customer = c.name
 		LEFT JOIN (
 			SELECT customer, SUM(grand_total) as revenue
-			FROM `tabSales Invoice`
-			WHERE docstatus=1 AND is_return=0
-			AND posting_date BETWEEN %s AND %s
+			FROM `tab{doctype}` t
+			WHERE t.docstatus=1 {return_cond}
+			AND t.{date_field} BETWEEN %s AND %s
 			GROUP BY customer
 		) mtd ON mtd.customer = c.name
 		LEFT JOIN (
 			SELECT customer, SUM(grand_total) as revenue
-			FROM `tabSales Invoice`
-			WHERE docstatus=1 AND is_return=0
-			AND posting_date BETWEEN %s AND %s
+			FROM `tab{doctype}` t
+			WHERE t.docstatus=1 {return_cond}
+			AND t.{date_field} BETWEEN %s AND %s
 			GROUP BY customer
 		) q3 ON q3.customer = c.name
 		LEFT JOIN (
-			SELECT customer, MAX(posting_date) as last_order
-			FROM `tabSales Invoice`
-			WHERE docstatus=1 AND is_return=0
+			SELECT customer, MAX(t.{date_field}) as last_order
+			FROM `tab{doctype}` t
+			WHERE t.docstatus=1 {return_cond}
 			GROUP BY customer
 		) last_si ON last_si.customer = c.name
 		LEFT JOIN (
@@ -117,16 +129,16 @@ def get_customer_health(search=None, territory=None, limit=50, offset=0):
 			COALESCE(SUM(mtd.revenue), 0) as total_mtd
 		FROM `tabCustomer` c
 		LEFT JOIN (
-			SELECT customer, SUM(outstanding_amount) as outstanding
-			FROM `tabSales Invoice`
-			WHERE docstatus=1 AND outstanding_amount > 0
+			SELECT customer, SUM({outstanding_expr}) as outstanding
+			FROM `tab{doctype}` t
+			WHERE t.docstatus=1 AND {outstanding_expr} > 0
 			GROUP BY customer
 		) ar ON ar.customer = c.name
 		LEFT JOIN (
 			SELECT customer, SUM(grand_total) as revenue
-			FROM `tabSales Invoice`
-			WHERE docstatus=1 AND is_return=0
-			AND posting_date BETWEEN %s AND %s
+			FROM `tab{doctype}` t
+			WHERE t.docstatus=1 {return_cond}
+			AND t.{date_field} BETWEEN %s AND %s
 			GROUP BY customer
 		) mtd ON mtd.customer = c.name
 		WHERE {where}
