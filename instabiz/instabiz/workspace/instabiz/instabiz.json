@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz",
  "links": [],
- "modified": "2026-07-24 21:05:07.065161",
+ "modified": "2026-07-27 07:37:37.565934",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz",
@@ -122,6 +122,13 @@
    "doc_view": "",
    "label": "IB Rate Card",
    "link_to": "ib-price-list",
+   "type": "Page"
+  },
+  {
+   "color": "Green",
+   "doc_view": "",
+   "label": "Production Tracker",
+   "link_to": "ib-production-tracker",
    "type": "Page"
   },
   {
@@ -371,13 +378,6 @@
    "doc_view": "",
    "label": "Item Price History",
    "link_to": "ib-item-price-history",
-   "type": "Page"
-  },
-  {
-   "color": "Green",
-   "doc_view": "",
-   "label": "Production Tracker",
-   "link_to": "ib-production-tracker",
    "type": "Page"
   },
   {
