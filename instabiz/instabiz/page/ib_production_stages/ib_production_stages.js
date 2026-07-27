@@ -127,6 +127,23 @@ class IBProductionStages {
 		this._inject_styles();
 		this._build_shell();
 		this.refresh();
+		this._start_live_updates();
+	}
+
+	// Server already publishes "ib_floor_update" (production.py _notify_floor_update)
+	// on every Start/Advance/Hold/Complete — nothing client-side was listening,
+	// so multi-terminal floor use required a manual Refresh click to see any
+	// other station's progress. Debounced (1.5s) + route-checked, matching the
+	// established pattern in ib_stock_common.js's make_live().
+	_start_live_updates() {
+		frappe.realtime.off("ib_floor_update");
+		let timer = null;
+		frappe.realtime.on("ib_floor_update", () => {
+			if (frappe.get_route()[0] !== "ib-production-stages") return;
+			if (this.active_wo || (this._side_panel_open && this._side_panel_open())) return;
+			clearTimeout(timer);
+			timer = setTimeout(() => this.refresh(), 1500);
+		});
 	}
 
 	// -----------------------------------------------------------------------
