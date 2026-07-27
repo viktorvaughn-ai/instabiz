@@ -2,22 +2,25 @@ import frappe
 
 from instabiz.overrides.permissions import _is_privileged
 
+EXPORT_ROW_CAP = 5000
 
-@frappe.whitelist()
-def get_item_price_history(item_code, customer=None, from_date=None, to_date=None, limit=20, offset=0):
-	"""Past Sales Order lines for one item, newest first.
+# Whitelisted sort columns only — never interpolate client-supplied column names directly.
+SORT_COLUMNS = {
+	"transaction_date": "so.transaction_date",
+	"sales_order": "so.name",
+	"customer": "so.customer_name",
+	"location": "so.custom_location",
+	"sales_person": "so.custom_sales_person",
+	"qty": "soi.qty",
+	"uom": "soi.uom",
+	"rate": "soi.rate",
+	"amount": "soi.amount",
+}
 
-	Sourced from Sales Order (not Sales Invoice) — matches the rest of the app's
-	current SO-basis for "what was actually sold", since billing isn't live yet
-	(see sales_target.py / dashboards). Non-privileged users only see their own
-	orders, same row-level rule as the rest of the sales doctypes.
-	"""
+
+def _build_where(item_code, customer, from_date, to_date, sales_person_user, location, uom, search, user):
 	if not item_code:
 		frappe.throw(frappe._("Item is required"))
-
-	limit = int(limit)
-	offset = int(offset)
-	user = frappe.session.user
 
 	conditions = ["so.docstatus = 1", "soi.item_code = %(item_code)s"]
 	params = {"item_code": item_code}
@@ -25,6 +28,10 @@ def get_item_price_history(item_code, customer=None, from_date=None, to_date=Non
 	if customer:
 		conditions.append("so.customer = %(customer)s")
 		params["customer"] = customer
+
+	if uom:
+		conditions.append("soi.uom = %(uom)s")
+		params["uom"] = uom
 
 	if from_date:
 		conditions.append("so.transaction_date >= %(from_date)s")
@@ -34,11 +41,97 @@ def get_item_price_history(item_code, customer=None, from_date=None, to_date=Non
 		conditions.append("so.transaction_date <= %(to_date)s")
 		params["to_date"] = to_date
 
+	if sales_person_user:
+		conditions.append("so.custom_sales_person_user = %(sales_person_user)s")
+		params["sales_person_user"] = sales_person_user
+
+	if location:
+		conditions.append("so.custom_location = %(location)s")
+		params["location"] = location
+
+	if search:
+		conditions.append(
+			"""(
+				so.name LIKE %(search)s
+				OR so.customer_name LIKE %(search)s
+				OR so.custom_location LIKE %(search)s
+				OR so.custom_sales_person LIKE %(search)s
+			)"""
+		)
+		params["search"] = f"%{search}%"
+
 	if not _is_privileged(user):
 		conditions.append("(so.custom_sales_person_user = %(user)s OR so.owner = %(user)s)")
 		params["user"] = user
 
-	where = " AND ".join(conditions)
+	return " AND ".join(conditions), params
+
+
+def _order_by(sort_by, sort_dir):
+	col = SORT_COLUMNS.get(sort_by)
+	if not col:
+		return "so.transaction_date DESC, so.creation DESC"
+	direction = "ASC" if str(sort_dir).lower() == "asc" else "DESC"
+	return f"{col} {direction}, so.creation DESC"
+
+
+@frappe.whitelist()
+def get_item_uoms(item_code):
+	"""Distinct UOMs this item has actually sold in, most-frequent first.
+
+	One item can sell in several UOMs at very different rate scales (e.g. per-PCS
+	vs per-SQMT) — blending them into one min/max/last is comparing apples to
+	oranges. Powers the UOM filter dropdown so the frontend can default to the
+	dominant UOM instead of mixing them.
+	"""
+	if not item_code:
+		return []
+	user = frappe.session.user
+	where, params = _build_where(item_code, None, None, None, None, None, None, None, user)
+	return frappe.db.sql(
+		f"""
+		SELECT soi.uom, COUNT(*) AS cnt
+		FROM `tabSales Order Item` soi
+		INNER JOIN `tabSales Order` so ON so.name = soi.parent
+		WHERE {where}
+		GROUP BY soi.uom
+		ORDER BY cnt DESC
+		""",
+		params,
+		as_dict=True,
+	)
+
+
+@frappe.whitelist()
+def get_item_price_history(
+	item_code,
+	customer=None,
+	from_date=None,
+	to_date=None,
+	sales_person_user=None,
+	location=None,
+	uom=None,
+	search=None,
+	sort_by=None,
+	sort_dir="desc",
+	limit=20,
+	offset=0,
+):
+	"""Past Sales Order lines for one item, newest first (or per sort_by/sort_dir).
+
+	Sourced from Sales Order (not Sales Invoice) — matches the rest of the app's
+	current SO-basis for "what was actually sold", since billing isn't live yet
+	(see sales_target.py / dashboards). Non-privileged users only see their own
+	orders, same row-level rule as the rest of the sales doctypes.
+	"""
+	limit = int(limit)
+	offset = int(offset)
+	user = frappe.session.user
+
+	where, params = _build_where(
+		item_code, customer, from_date, to_date, sales_person_user, location, uom, search, user
+	)
+	order_by = _order_by(sort_by, sort_dir)
 
 	rows = frappe.db.sql(
 		f"""
@@ -56,30 +149,109 @@ def get_item_price_history(item_code, customer=None, from_date=None, to_date=Non
 		FROM `tabSales Order Item` soi
 		INNER JOIN `tabSales Order` so ON so.name = soi.parent
 		WHERE {where}
-		ORDER BY so.transaction_date DESC, so.creation DESC
+		ORDER BY {order_by}
 		LIMIT %(limit)s OFFSET %(offset)s
 		""",
 		{**params, "limit": limit, "offset": offset},
 		as_dict=True,
 	)
 
-	total = frappe.db.sql(
+	agg = frappe.db.sql(
 		f"""
-		SELECT COUNT(*) AS cnt
+		SELECT COUNT(*) AS cnt, MIN(soi.rate) AS min_rate, MAX(soi.rate) AS max_rate
 		FROM `tabSales Order Item` soi
 		INNER JOIN `tabSales Order` so ON so.name = soi.parent
 		WHERE {where}
 		""",
 		params,
 		as_dict=True,
-	)[0].cnt
+	)[0]
 
-	rates = [r.rate for r in rows]
+	last = frappe.db.sql(
+		f"""
+		SELECT soi.rate
+		FROM `tabSales Order Item` soi
+		INNER JOIN `tabSales Order` so ON so.name = soi.parent
+		WHERE {where}
+		ORDER BY so.transaction_date DESC, so.creation DESC
+		LIMIT 1
+		""",
+		params,
+		as_dict=True,
+	)
+
+	trend_rows = frappe.db.sql(
+		f"""
+		SELECT so.transaction_date AS date, soi.rate AS rate
+		FROM `tabSales Order Item` soi
+		INNER JOIN `tabSales Order` so ON so.name = soi.parent
+		WHERE {where}
+		ORDER BY so.transaction_date DESC, so.creation DESC
+		LIMIT 60
+		""",
+		params,
+		as_dict=True,
+	)
+
+	total = agg.cnt
 	summary = {
 		"count": total,
-		"last_rate": rows[0].rate if rows else None,
-		"min_rate": min(rates) if rates else None,
-		"max_rate": max(rates) if rates else None,
+		"last_rate": last[0].rate if last else None,
+		"min_rate": agg.min_rate,
+		"max_rate": agg.max_rate,
 	}
 
-	return {"data": rows, "total": total, "summary": summary}
+	return {
+		"data": rows,
+		"total": total,
+		"summary": summary,
+		"trend": list(reversed(trend_rows)),
+	}
+
+
+@frappe.whitelist()
+def export_item_price_history(
+	item_code,
+	customer=None,
+	from_date=None,
+	to_date=None,
+	sales_person_user=None,
+	location=None,
+	uom=None,
+	search=None,
+	sort_by=None,
+	sort_dir="desc",
+):
+	"""Full matching row set (no pagination) for CSV export, capped at EXPORT_ROW_CAP."""
+	user = frappe.session.user
+
+	where, params = _build_where(
+		item_code, customer, from_date, to_date, sales_person_user, location, uom, search, user
+	)
+	order_by = _order_by(sort_by, sort_dir)
+
+	rows = frappe.db.sql(
+		f"""
+		SELECT
+			so.name AS sales_order,
+			so.transaction_date,
+			so.customer,
+			so.customer_name,
+			so.custom_sales_person AS sales_person,
+			so.custom_location AS location,
+			soi.qty,
+			soi.uom,
+			soi.rate,
+			soi.amount
+		FROM `tabSales Order Item` soi
+		INNER JOIN `tabSales Order` so ON so.name = soi.parent
+		WHERE {where}
+		ORDER BY {order_by}
+		LIMIT {EXPORT_ROW_CAP + 1}
+		""",
+		params,
+		as_dict=True,
+	)
+
+	truncated = len(rows) > EXPORT_ROW_CAP
+	return {"data": rows[:EXPORT_ROW_CAP], "truncated": truncated}
