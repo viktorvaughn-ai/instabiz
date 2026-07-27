@@ -17,6 +17,8 @@ const _IB_PT_STAGE_ICONS = {
 	"Delivered":        "lucide:check-circle",
 };
 
+const _IB_PT_STAGES = ["Coating", "Slitting", "Rewinding", "Cutting", "Packing", "Ready to Deliver"];
+
 const _IB_PT_RISK = {
 	"overdue":  { label: "Overdue",  color: "#dc2626", bg: "#fef2f2" },
 	"at-risk":  { label: "At Risk",  color: "#ea580c", bg: "#fff7ed" },
@@ -28,6 +30,13 @@ const _IB_PT_PRIORITY_COLOR = {
 	Urgent: "#dc2626", High: "#ea580c", Normal: "#2563eb", Low: "#6b7280",
 };
 
+const _IB_PT_SORT_COLS = {
+	delivery:  { label: "Delivery",  get: (o) => o.delivery_date || "9999-99-99" },
+	priority:  { label: "Priority",  get: (o) => ({ Urgent: 0, High: 1, Normal: 2, Low: 3 }[o.priority] ?? 9) },
+	pct:       { label: "Progress",  get: (o) => o.pct || 0 },
+	customer:  { label: "Customer",  get: (o) => (o.customer || "").toLowerCase() },
+};
+
 function _ib_pt_esc(s) {
 	return frappe.utils.escape_html(String(s || ""));
 }
@@ -37,6 +46,10 @@ class IbProductionTracker {
 		this.page = wrapper.page;
 		this._orders = [];
 		this._risk_filter = "all";
+		this._sort_col = "delivery";
+		this._sort_asc = true;
+		this._page = 0;
+		this._page_size = 20;
 		this._is_privileged = frappe.user.has_role(["Sales Manager", "System Manager"]);
 		this._setup_toolbar();
 		this._setup_content();
@@ -45,13 +58,26 @@ class IbProductionTracker {
 
 	_setup_toolbar() {
 		this.page.set_secondary_action(__("Refresh"), () => this.refresh());
+		this.page.add_inner_button(__("Export CSV"), () => this._export_csv());
 
 		$(this.page.page_form).addClass("ib-page-form");
 
 		this.f_search = this.page.add_field({
 			fieldname: "search", label: __("Search"), fieldtype: "Data",
 			placeholder: __("Order, customer…"),
-			change: () => this._render(),
+			change: () => { this._page = 0; this._render(); },
+		});
+
+		this.f_priority = this.page.add_field({
+			fieldname: "priority", label: __("Priority"), fieldtype: "Select",
+			options: ["", "Urgent", "High", "Normal", "Low"],
+			change: () => { this._page = 0; this._render(); },
+		});
+
+		this.f_stage = this.page.add_field({
+			fieldname: "stage", label: __("Stage"), fieldtype: "Select",
+			options: [""].concat(_IB_PT_STAGES),
+			change: () => { this._page = 0; this._render(); },
 		});
 
 		if (this._is_privileged) {
@@ -79,8 +105,32 @@ class IbProductionTracker {
 					<span class="ib-pt-chip" data-risk="at-risk">${__("At Risk")}</span>
 					<span class="ib-pt-chip" data-risk="on-track">${__("On Track")}</span>
 				</div>
-				<div class="ib-card ib-pt-list"></div>
-				<div class="ib-pt-empty" style="display:none">${__("No in-flight orders.")}</div>
+				<div class="ib-card ib-pt-list-wrap">
+					<div class="ib-pt-list-header">
+						<span class="ib-pt-sort-col" data-col="customer">${__("Order")} <span class="ib-sort-icon"></span></span>
+						<span>${__("Stage")}</span>
+						<span class="ib-pt-sort-col" data-col="pct">${__("Progress")} <span class="ib-sort-icon"></span></span>
+						<span class="ib-pt-sort-col" data-col="delivery">${__("Delivery")} <span class="ib-sort-icon"></span></span>
+					</div>
+					<div class="ib-pt-list"></div>
+					<div class="ib-pt-empty" style="display:none">${__("No in-flight orders.")}</div>
+					<div class="ib-pt-pagination">
+						<div class="ib-pt-page-size">
+							${__("Rows per page")}:
+							<select class="ib-pt-page-size-select">
+								<option value="20">20</option>
+								<option value="50">50</option>
+								<option value="100">100</option>
+								<option value="0">${__("All")}</option>
+							</select>
+						</div>
+						<span class="ib-pt-page-info"></span>
+						<div class="ib-pt-page-btns">
+							<button class="btn btn-default btn-xs ib-pt-prev">${__("Prev")}</button>
+							<button class="btn btn-default btn-xs ib-pt-next">${__("Next")}</button>
+						</div>
+					</div>
+				</div>
 			</div>
 		`).appendTo(this.$body);
 
@@ -88,11 +138,39 @@ class IbProductionTracker {
 		this.$chips = this.$content.find(".ib-pt-chips");
 		this.$list  = this.$content.find(".ib-pt-list");
 		this.$empty = this.$content.find(".ib-pt-empty");
+		this.$header = this.$content.find(".ib-pt-list-header");
+		this.$pagination = this.$content.find(".ib-pt-pagination");
+		this.$page_info = this.$content.find(".ib-pt-page-info");
+		this.$page_size_select = this.$content.find(".ib-pt-page-size-select");
 
 		this.$chips.on("click", ".ib-pt-chip", (e) => {
 			this.$chips.find(".ib-pt-chip").removeClass("ib-pt-chip--active");
 			$(e.currentTarget).addClass("ib-pt-chip--active");
 			this._risk_filter = $(e.currentTarget).data("risk");
+			this._page = 0;
+			this._render();
+		});
+
+		this.$header.on("click", ".ib-pt-sort-col", (e) => {
+			const col = $(e.currentTarget).data("col");
+			this._sort_asc = (this._sort_col === col) ? !this._sort_asc : true;
+			this._sort_col = col;
+			this._render();
+		});
+
+		this.$page_size_select.on("change", () => {
+			this._page_size = parseInt(this.$page_size_select.val(), 10) || 0;
+			this._page = 0;
+			this._render();
+		});
+
+		this.$content.find(".ib-pt-prev").on("click", () => {
+			if (this._page <= 0) return;
+			this._page -= 1;
+			this._render();
+		});
+		this.$content.find(".ib-pt-next").on("click", () => {
+			this._page += 1;
 			this._render();
 		});
 	}
@@ -107,6 +185,7 @@ class IbProductionTracker {
 			},
 			callback: (r) => {
 				this._orders = r.message || [];
+				this._page = 0;
 				this._render_cards();
 				this._render();
 			},
@@ -133,21 +212,52 @@ class IbProductionTracker {
 		`);
 	}
 
-	_render() {
+	// Filter + sort the full order set — used by both _render (paginated view)
+	// and _export_csv (full filtered/sorted set, ignoring pagination).
+	_filtered_sorted() {
 		const term = (this.f_search.get_value() || "").trim().toLowerCase();
+		const priority = this.f_priority.get_value();
+		const stage = this.f_stage.get_value();
+
 		let rows = this._orders;
 		if (this._risk_filter !== "all") rows = rows.filter(o => o.risk === this._risk_filter);
+		if (priority) rows = rows.filter(o => o.priority === priority);
+		if (stage) rows = rows.filter(o => o.current_stage === stage);
 		if (term) {
 			rows = rows.filter(o => [o.sales_order, o.customer, o.sales_person]
 				.filter(Boolean).join(" ").toLowerCase().includes(term));
 		}
 
-		if (!rows.length) {
+		const sortDef = _IB_PT_SORT_COLS[this._sort_col];
+		if (sortDef) {
+			rows = [...rows].sort((a, b) => {
+				const av = sortDef.get(a), bv = sortDef.get(b);
+				const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+				return this._sort_asc ? cmp : -cmp;
+			});
+		}
+		return rows;
+	}
+
+	_render() {
+		const all_rows = this._filtered_sorted();
+
+		this.$header.find(".ib-sort-icon").text("");
+		this.$header.find(`[data-col="${this._sort_col}"] .ib-sort-icon`).text(this._sort_asc ? " ↑" : " ↓");
+
+		if (!all_rows.length) {
 			this.$list.empty();
 			this.$empty.show();
+			this.$pagination.hide();
 			return;
 		}
 		this.$empty.hide();
+
+		const page_size = this._page_size || all_rows.length;
+		const max_page = Math.max(0, Math.ceil(all_rows.length / page_size) - 1);
+		if (this._page > max_page) this._page = max_page;
+		const start = this._page * page_size;
+		const rows = all_rows.slice(start, start + page_size);
 
 		this.$list.html(rows.map(o => this._row_html(o)).join(""));
 
@@ -155,6 +265,12 @@ class IbProductionTracker {
 			const so = $(e.currentTarget).data("so");
 			this._toggle_detail($(e.currentTarget), so);
 		});
+
+		this.$pagination.show();
+		const end = Math.min(start + page_size, all_rows.length);
+		this.$page_info.text(__("Showing {0}-{1} of {2}", [start + 1, end, all_rows.length]));
+		this.$content.find(".ib-pt-prev").prop("disabled", this._page <= 0);
+		this.$content.find(".ib-pt-next").prop("disabled", this._page >= max_page);
 	}
 
 	_row_html(o) {
@@ -245,5 +361,31 @@ class IbProductionTracker {
 				</tr>`;
 			}).join("")}</tbody>
 		</table>`;
+	}
+
+	_export_csv() {
+		const rows = this._filtered_sorted();
+		if (!rows.length) {
+			frappe.show_alert({ message: __("Nothing to export."), indicator: "orange" });
+			return;
+		}
+		const headers = ["Sales Order", "Customer", "Sales Person", "Priority", "Current Stage", "Progress %", "Delivery Date", "Days Left", "Risk"];
+		const csvEscape = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+		const lines = [headers.join(",")];
+		rows.forEach(o => {
+			lines.push([
+				o.sales_order, o.customer, o.sales_person || "", o.priority || "",
+				o.current_stage || "", o.pct, o.delivery_date || "", o.days_left ?? "", o.risk,
+			].map(csvEscape).join(","));
+		});
+		const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement("a");
+		a.href = url;
+		a.download = `production-tracker-${frappe.datetime.get_today()}.csv`;
+		document.body.appendChild(a);
+		a.click();
+		a.remove();
+		URL.revokeObjectURL(url);
 	}
 }
