@@ -140,7 +140,7 @@ class IBProductionStages {
 		let timer = null;
 		frappe.realtime.on("ib_floor_update", () => {
 			if (frappe.get_route()[0] !== "ib-production-stages") return;
-			if (this.active_wo || (this._side_panel_open && this._side_panel_open())) return;
+			if (this.active_wo) return;
 			clearTimeout(timer);
 			timer = setTimeout(() => this.refresh(), 1500);
 		});
