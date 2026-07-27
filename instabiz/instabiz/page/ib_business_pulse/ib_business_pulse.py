@@ -25,7 +25,9 @@ def get_pulse_data():
 	doctype = sales_doctype()
 	date_field = "transaction_date" if dev_mode else "posting_date"
 	outstanding_expr = sales_outstanding_expr("t")
-	status_cond = "AND t.status NOT IN ('Closed', 'Cancelled')" if dev_mode else "AND t.is_return=0"
+	# Only 'Cancelled' excluded, not 'Closed' — CustomSalesOrder.STATUS_MAP maps
+	# DB status 'Closed' to user-facing label 'Confirmed' (a real completed sale).
+	status_cond = "AND t.status != 'Cancelled'" if dev_mode else "AND t.is_return=0"
 
 	rev_mtd = flt(frappe.db.sql(f"""
 		SELECT COALESCE(SUM(grand_total), 0)

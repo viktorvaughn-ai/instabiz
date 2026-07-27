@@ -61,7 +61,9 @@ def _sales_data(today, since, date_fmt, group_fmt):
 	dev_mode = is_dev_billing_mode()
 	sales_dt = sales_doctype()
 	sales_date = "transaction_date" if dev_mode else "posting_date"
-	sales_cond = "AND t.status NOT IN ('Closed', 'Cancelled')" if dev_mode else "AND t.is_return=0"
+	# Only 'Cancelled' excluded, not 'Closed' — CustomSalesOrder.STATUS_MAP maps
+	# DB status 'Closed' to user-facing label 'Confirmed' (a real completed sale).
+	sales_cond = "AND t.status != 'Cancelled'" if dev_mode else "AND t.is_return=0"
 	outstanding_expr = sales_outstanding_expr("t")
 	item_dt = f"{sales_dt} Item"
 
@@ -392,7 +394,9 @@ def _my_work_sales(user, today, since, date_fmt, group_fmt, month_start):
 	dev_mode = is_dev_billing_mode()
 	sales_dt = sales_doctype()
 	sales_date = "transaction_date" if dev_mode else "posting_date"
-	sales_cond = "AND t.status NOT IN ('Closed', 'Cancelled')" if dev_mode else "AND t.is_return=0"
+	# Only 'Cancelled' excluded, not 'Closed' — CustomSalesOrder.STATUS_MAP maps
+	# DB status 'Closed' to user-facing label 'Confirmed' (a real completed sale).
+	sales_cond = "AND t.status != 'Cancelled'" if dev_mode else "AND t.is_return=0"
 	outstanding_expr = sales_outstanding_expr("t")
 
 	billing_row = frappe.db.sql(f"""
@@ -742,7 +746,9 @@ def _my_work_finance(user, today, since, date_fmt, group_fmt, month_start):
 	purch_dt = purchase_doctype()
 	sales_date = "transaction_date" if dev_mode else "posting_date"
 	purch_date = "transaction_date" if dev_mode else "posting_date"
-	sales_cond = "AND t.status NOT IN ('Closed', 'Cancelled')" if dev_mode else "AND t.is_return=0"
+	# Only 'Cancelled' excluded, not 'Closed' — CustomSalesOrder.STATUS_MAP maps
+	# DB status 'Closed' to user-facing label 'Confirmed' (a real completed sale).
+	sales_cond = "AND t.status != 'Cancelled'" if dev_mode else "AND t.is_return=0"
 	purch_cond = "AND t.status NOT IN ('Closed', 'Cancelled')" if dev_mode else "AND t.is_return=0"
 	ar_expr = sales_outstanding_expr("t")
 	ap_expr = purchase_outstanding_expr("t")
@@ -836,7 +842,9 @@ def _finance_data(today, since, date_fmt, group_fmt):
 	sales_dt = sales_doctype()
 	purch_dt = purchase_doctype()
 	sales_date = "transaction_date" if dev_mode else "posting_date"
-	sales_cond = "AND t.status NOT IN ('Closed', 'Cancelled')" if dev_mode else "AND t.is_return=0"
+	# Only 'Cancelled' excluded, not 'Closed' — CustomSalesOrder.STATUS_MAP maps
+	# DB status 'Closed' to user-facing label 'Confirmed' (a real completed sale).
+	sales_cond = "AND t.status != 'Cancelled'" if dev_mode else "AND t.is_return=0"
 	purch_cond = "AND t.status NOT IN ('Closed', 'Cancelled')" if dev_mode else ""
 	ar_expr = sales_outstanding_expr("t")
 	ap_expr = purchase_outstanding_expr("t")

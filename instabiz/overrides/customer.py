@@ -15,13 +15,18 @@ def compute_customer_outstanding(customer):
 	Sales Invoice-based read was silently 0 for every customer, regardless
 	of real order/advance activity (this was the actual root cause behind
 	the Customer form always showing zero outstanding).
+
+	Only 'Cancelled' is excluded, not 'Closed' — CustomSalesOrder.STATUS_MAP
+	maps the DB status 'Closed' to the user-facing label 'Confirmed', i.e. a
+	manually-closed order is still a real, legitimately-confirmed sale, not
+	a voided one. Excluding it silently undercounted every such order.
 	"""
 	if is_dev_billing_mode():
 		doctype = sales_doctype()
 		outstanding_expr = sales_outstanding_expr("t")
 		result = frappe.db.sql(
 			f"SELECT COALESCE(SUM({outstanding_expr}), 0) FROM `tab{doctype}` t"
-			" WHERE t.customer = %s AND t.docstatus = 1 AND t.status NOT IN ('Closed', 'Cancelled')",
+			" WHERE t.customer = %s AND t.docstatus = 1 AND t.status != 'Cancelled'",
 			customer,
 		)
 	else:

@@ -33,7 +33,9 @@ def _data(filters):
 	dev_mode = is_dev_billing_mode()
 	doctype = sales_doctype()
 	outstanding_expr = sales_outstanding_expr("t")
-	status_cond = "AND t.status NOT IN ('Closed', 'Cancelled')" if dev_mode else ""
+	# Only 'Cancelled' excluded, not 'Closed' — CustomSalesOrder.STATUS_MAP maps
+	# DB status 'Closed' to user-facing label 'Confirmed' (a real completed sale).
+	status_cond = "AND t.status != 'Cancelled'" if dev_mode else ""
 
 	terr_cond = "AND t.territory = %(territory)s" if territory else ""
 	sp_cond = "AND t.custom_sales_person_user = %(sp_user)s" if sp_user else ""

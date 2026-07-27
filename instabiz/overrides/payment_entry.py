@@ -185,9 +185,36 @@ def _maybe_flag_advance_pending(so_name, total_advance):
 	if total_advance <= 0:
 		return
 	row = frappe.db.get_value(
-		"Sales Order", so_name, ["docstatus", "custom_advance_approval_status"], as_dict=True
+		"Sales Order", so_name,
+		["docstatus", "custom_advance_approval_status", "customer_name", "currency"],
+		as_dict=True,
 	)
 	if row and row.docstatus == 0 and not row.custom_advance_approval_status:
 		frappe.db.set_value(
 			"Sales Order", so_name, "custom_advance_approval_status", "Pending", update_modified=False
 		)
+		_notify_advance_approver(so_name, row.customer_name, total_advance, row.currency)
+
+
+def _notify_advance_approver(so_name, customer_name, total_advance, currency):
+	"""Ping the designated approver — without this, a Pending advance sits silent
+	until someone happens to reopen that Draft SO; the approve/reject UI already
+	existed but nothing ever told the approver there was something to act on."""
+	from instabiz.overrides.advance_approval import APPROVER_EMAIL
+
+	if not frappe.db.exists("User", APPROVER_EMAIL):
+		return
+	marker = f"[ib-advance-pending-{so_name}]"
+	frappe.get_doc({
+		"doctype":       "Notification Log",
+		"subject":       f"Advance approval needed: {so_name} {marker}"[:140],
+		"email_content": (
+			f"An advance payment of {fmt_money(total_advance, currency=currency)} was collected against "
+			f"Draft Sales Order {so_name} ({customer_name or ''}). It cannot be confirmed until you approve it."
+		),
+		"for_user":      APPROVER_EMAIL,
+		"from_user":     "Administrator",
+		"type":          "Alert",
+		"document_type": "Sales Order",
+		"document_name": so_name,
+	}).insert(ignore_permissions=True)

@@ -24,7 +24,9 @@ def get_dashboard_data():
 	dev_mode = is_dev_billing_mode()
 	sales_dt = sales_doctype()
 	date_field = "transaction_date" if dev_mode else "posting_date"
-	status_cond = "AND t.status NOT IN ('Closed', 'Cancelled')" if dev_mode else "AND t.is_return=0"
+	# Only 'Cancelled' excluded, not 'Closed' — CustomSalesOrder.STATUS_MAP maps
+	# DB status 'Closed' to user-facing label 'Confirmed' (a real completed sale).
+	status_cond = "AND t.status != 'Cancelled'" if dev_mode else "AND t.is_return=0"
 	ar_expr = sales_outstanding_expr("t")
 
 	# ── Revenue MTD ──────────────────────────────────────────────────────────

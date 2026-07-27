@@ -50,7 +50,9 @@ def _data(filters):
 	if dev_mode:
 		date_field  = "transaction_date"
 		amount_expr = sales_outstanding_expr("t")
-		status_cond = "AND t.status NOT IN ('Closed', 'Cancelled')"
+		# Only 'Cancelled' excluded, not 'Closed' — CustomSalesOrder.STATUS_MAP maps
+		# DB status 'Closed' to user-facing label 'Confirmed' (a real completed sale).
+		status_cond = "AND t.status != 'Cancelled'"
 	else:
 		date_field  = "posting_date"
 		amount_expr = sales_outstanding_expr("t")
