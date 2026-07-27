@@ -3,7 +3,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import today, now, flt, add_days, getdate, nowdate
+from frappe.utils import today, now, flt, add_days, getdate, nowdate, date_diff
 
 _PRODUCTION_ROLES = {"Factory Management", "Factory Production", "System Manager"}
 
@@ -11,6 +11,23 @@ _PRODUCTION_ROLES = {"Factory Management", "Factory Production", "System Manager
 def _require_production_role():
     if not (_PRODUCTION_ROLES & set(frappe.get_roles())):
         frappe.throw(_("Not permitted — Factory Management role required"), frappe.PermissionError)
+
+
+def _check_so_production_access(sales_order):
+	"""Restrict production visibility to: production-role users, Sales Manager/
+	System Manager, or the Sales Order's own sales person/owner. Was previously
+	unguarded — any logged-in user could pull any other rep's order detail."""
+	if _PRODUCTION_ROLES & set(frappe.get_roles()):
+		return
+	from instabiz.overrides.permissions import _is_privileged
+	if _is_privileged(frappe.session.user):
+		return
+	row = frappe.db.get_value("Sales Order", sales_order, ["custom_sales_person_user", "owner"], as_dict=True)
+	if not row:
+		frappe.throw(_("Sales Order {0} not found").format(sales_order))
+	if frappe.session.user in (row.custom_sales_person_user, row.owner):
+		return
+	frappe.throw(_("Not permitted to view production status for this Sales Order"), frappe.PermissionError)
 
 STAGES = [
 	"Coating",
@@ -837,6 +854,7 @@ def put_on_hold(work_order):
 		from instabiz.overrides.n8n_hooks import on_work_order_update
 		doc = frappe.get_doc("IB Work Order", work_order)
 		on_work_order_update(doc)
+		_notify_production_hold(doc)
 		frappe.db.commit()
 		_notify_floor_update()
 		return {"status": "ok"}
@@ -1834,8 +1852,9 @@ def get_so_production_status(sales_order):
 	"""Return full production status for a Sales Order.
 
 	Shows per-item: route, current stage, completed stages, machine assignments.
-	Used by the production dashboard SO-drill-down.
+	Used by the production dashboard SO-drill-down and the SO-form panel.
 	"""
+	_check_so_production_access(sales_order)
 	os_name = frappe.db.get_value(
 		"IB Order Sheet",
 		{"sales_order": sales_order, "status": ["!=", "Cancelled"]},
@@ -1943,10 +1962,132 @@ def get_so_production_panel(sales_order):
 			for item in items
 		)
 		result["ready_to_deliver"] = rtd_done
+
+		# Overall order-level pct/stage/risk — same numbers the Production
+		# Tracker page shows, so the SO form and the tracker never disagree.
+		overall_pct, overall_stage = _order_progress_summary(result["order_sheet"], items)
+		result["overall_pct"] = overall_pct
+		result["overall_current_stage"] = overall_stage
+		if result.get("delivery_date"):
+			days_left = date_diff(getdate(result["delivery_date"]), getdate(today()))
+			result["days_left"] = days_left
+			if days_left < 0 and overall_pct < 100:
+				result["risk"] = "overdue"
+			elif days_left <= 2 and overall_pct < 100:
+				result["risk"] = "at-risk"
+			else:
+				result["risk"] = "on-track"
+		else:
+			result["days_left"] = None
+			result["risk"] = "none"
 	else:
 		result["ready_to_deliver"] = False
 
 	return result
+
+
+# ── Sales-facing Production Tracker ───────────────────────────────────────────
+
+def _order_progress_summary(os_name, items):
+	"""Aggregate per-item stage entries (from get_so_production_status) into one
+	order-level pct + current stage, for the tracker list view."""
+	total_steps = 0
+	completed_steps = 0
+	active_stages = []
+	for item in items:
+		stages = item.get("stages", [])
+		total_steps += len(stages)
+		completed_steps += sum(1 for s in stages if s["status"] == "Completed")
+		if item.get("current_stage"):
+			active_stages.append(item["current_stage"])
+
+	pct = round(completed_steps / total_steps * 100, 1) if total_steps else 0.0
+	# "Current stage" for the whole order = the earliest stage among items still
+	# in progress (the bottleneck) — matches how a sales person would ask
+	# "what's holding this order up".
+	current_stage = None
+	if active_stages:
+		order_idx = {s: i for i, s in enumerate(STAGES)}
+		current_stage = min(active_stages, key=lambda s: order_idx.get(s, 999))
+	elif pct >= 100:
+		current_stage = "Ready to Deliver"
+	return pct, current_stage
+
+
+@frappe.whitelist()
+def get_my_production_orders(sales_person_user=None, show_completed=0):
+	"""In-flight Sales Orders with a production progress summary, for the sales-
+	facing Production Tracker page. Non-privileged users always see only their
+	own orders regardless of sales_person_user; Sales Manager/System Manager/
+	production roles may pass sales_person_user to view a specific rep, or
+	omit it to see everyone.
+	"""
+	from instabiz.overrides.permissions import _is_privileged
+	privileged = _is_privileged(frappe.session.user) or bool(_PRODUCTION_ROLES & set(frappe.get_roles()))
+	target_user = frappe.session.user if not privileged else sales_person_user
+
+	show_completed = int(show_completed or 0)
+	conditions = ["os.status != 'Cancelled'", "so.docstatus = 1"]
+	params = {}
+	if target_user:
+		conditions.append("so.custom_sales_person_user = %(user)s")
+		params["user"] = target_user
+	if not show_completed:
+		conditions.append("os.status != 'Completed'")
+
+	order_sheets = frappe.db.sql(f"""
+		SELECT os.name AS order_sheet, os.sales_order, os.priority, os.status,
+		       os.delivery_date, so.customer, so.customer_name,
+		       so.custom_sales_person_user, so.custom_sales_person
+		FROM `tabIB Order Sheet` os
+		JOIN `tabSales Order` so ON so.name = os.sales_order
+		WHERE {" AND ".join(conditions)}
+		ORDER BY os.delivery_date ASC
+	""", params, as_dict=True)
+
+	today_date = getdate(today())
+	out = []
+	for row in order_sheets:
+		# _so_progress_pct re-derives the order sheet by sales_order — cheap
+		# enough at this scale and keeps one single source of truth for the
+		# pct/stage math shared with the milestone notifier.
+		pct, current_stage, _os_name = _so_progress_pct(row.sales_order)
+		item_count = frappe.db.count("IB Order Sheet Item", {"parent": row.order_sheet})
+
+		days_left = date_diff(row.delivery_date, today_date) if row.delivery_date else None
+		if days_left is None:
+			risk = "none"
+		elif days_left < 0 and pct < 100:
+			risk = "overdue"
+		elif days_left <= 2 and pct < 100:
+			risk = "at-risk"
+		else:
+			risk = "on-track"
+
+		out.append({
+			"sales_order": row.sales_order,
+			"order_sheet": row.order_sheet,
+			"customer": row.customer_name or row.customer,
+			"sales_person": row.custom_sales_person or row.custom_sales_person_user,
+			"priority": row.priority,
+			"os_status": row.status,
+			"delivery_date": str(row.delivery_date) if row.delivery_date else None,
+			"days_left": days_left,
+			"risk": risk,
+			"pct": pct,
+			"current_stage": current_stage,
+			"item_count": item_count,
+		})
+
+	return out
+
+
+@frappe.whitelist()
+def get_so_production_timeline(sales_order):
+	"""Full per-item stage timeline for one Sales Order — drill-down behind
+	get_my_production_orders(). Reuses get_so_production_status's own access
+	check (rep/owner/Sales Manager/System Manager/production role)."""
+	return get_so_production_status(sales_order)
 
 
 def _get_dispatch_info(sales_order):
@@ -2354,11 +2495,51 @@ def get_cutting_fit_suggestions(machine):
 	return fits
 
 
-# ── Ready-to-Deliver notification (doc event) ─────────────────────────────────
+# ── Production progress notifications (doc event) ────────────────────────────
+
+def _so_progress_pct(so_name):
+	"""Return (pct, current_stage, order_sheet_name) for a Sales Order's active
+	Order Sheet, or (None, None, None) if it has none. Internal — no permission
+	check, callers must already be in a trusted/system context (this is what
+	the sales-facing whitelisted APIs call, after their own access check)."""
+	os_name = frappe.db.get_value(
+		"IB Order Sheet", {"sales_order": so_name, "status": ["!=", "Cancelled"]}, "name"
+	)
+	if not os_name:
+		return None, None, None
+
+	items = frappe.db.get_all("IB Order Sheet Item", filters={"parent": os_name}, fields=["item_code"])
+	wos = frappe.db.get_all(
+		"IB Work Order",
+		filters={"order_sheet": os_name, "status": ["!=", "Cancelled"]},
+		fields=["item_code", "stage", "status"],
+	)
+	wo_by_item = {}
+	for wo in wos:
+		wo_by_item.setdefault(wo.item_code, []).append(wo)
+
+	items_summary = []
+	for item in items:
+		route = _get_stage_route(item.item_code)
+		item_wos = {w.stage: w for w in wo_by_item.get(item.item_code, [])}
+		stages = [{"stage": s, "status": item_wos[s].status if s in item_wos else "Not Created"} for s in route]
+		current = next((s["stage"] for s in stages if s["status"] in ("Pending", "In Progress")), None)
+		items_summary.append({"stages": stages, "current_stage": current})
+
+	pct, current_stage = _order_progress_summary(os_name, items_summary)
+	return pct, current_stage, os_name
+
+
+_PROGRESS_MILESTONES = [25, 50, 75, 100]
+
 
 def on_work_order_update_notify(doc, method=None):
-	"""Bell to sales person when all items on an Order Sheet reach Ready to Deliver."""
-	if doc.stage != "Ready to Deliver" or doc.status != "Completed":
+	"""Notify the sales person as their order's production progresses, at
+	25/50/75/100% milestones — not just the old Ready-to-Deliver-only signal.
+	Each milestone fires once ever per Sales Order (dedup via subject marker,
+	no date bound — unlike the old RTD-only version, a milestone should never
+	repeat, not just never-repeat-same-day)."""
+	if doc.status != "Completed":
 		return
 	if not doc.order_sheet:
 		return
@@ -2371,38 +2552,38 @@ def on_work_order_update_notify(doc, method=None):
 	if not sales_person_user:
 		return
 
-	marker = f"[ib-prod-rtd-{so_name}]"
-	already = frappe.db.sql("""
-		SELECT name FROM `tabNotification Log`
-		WHERE for_user = %s AND subject LIKE %s AND DATE(creation) = %s LIMIT 1
-	""", (sales_person_user, f"%{marker}%", today()))
-	if already:
+	pct, current_stage, _os_name = _so_progress_pct(so_name)
+	if pct is None:
 		return
 
-	os_item_count = frappe.db.sql(
-		"SELECT COUNT(DISTINCT item_code) FROM `tabIB Order Sheet Item` WHERE parent = %s",
-		(doc.order_sheet,),
-	)[0][0]
-	if not os_item_count:
+	milestone = max((m for m in _PROGRESS_MILESTONES if pct >= m), default=None)
+	if milestone is None:
 		return
 
-	rtd_done = frappe.db.sql("""
-		SELECT COUNT(DISTINCT item_code) FROM `tabIB Work Order`
-		WHERE order_sheet = %s AND stage = 'Ready to Deliver' AND status = 'Completed'
-	""", (doc.order_sheet,))[0][0]
-
-	if rtd_done < os_item_count:
+	marker = f"[ib-prod-{so_name}-{milestone}]"
+	if frappe.db.exists("Notification Log", {"for_user": sales_person_user, "subject": ["like", f"%{marker}%"]}):
 		return
 
-	customer = frappe.db.get_value("IB Order Sheet", doc.order_sheet, "customer_name") or ""
-	frappe.get_doc({
-		"doctype": "Notification Log",
-		"subject": f"Order Ready for Dispatch: {so_name} {marker}",
-		"email_content": (
+	customer = frappe.db.get_value("Sales Order", so_name, "customer_name") or ""
+	if milestone == 100:
+		subject = f"Order Ready for Dispatch: {so_name}"
+		body = (
 			f"<p>Sales Order <strong>{so_name}</strong> for <strong>{customer}</strong> "
 			f"has completed all production stages and is <strong>Ready to Deliver</strong>. "
 			f"Please arrange packaging and dispatch to the customer's delivery address.</p>"
-		),
+		)
+	else:
+		stage_txt = f" — now in <strong>{current_stage}</strong>" if current_stage else ""
+		subject = f"Production Update: {so_name} is {milestone}% complete"
+		body = (
+			f"<p>Sales Order <strong>{so_name}</strong> for <strong>{customer}</strong> "
+			f"is now <strong>{milestone}% through production</strong>{stage_txt}.</p>"
+		)
+
+	frappe.get_doc({
+		"doctype": "Notification Log",
+		"subject": f"{subject} {marker}"[:140],
+		"email_content": body,
 		"for_user": sales_person_user,
 		"type": "Alert",
 		"document_type": "Sales Order",
@@ -2410,6 +2591,40 @@ def on_work_order_update_notify(doc, method=None):
 		"from_user": "Administrator",
 	}).insert(ignore_permissions=True)
 	frappe.db.commit()
+
+
+def _notify_production_hold(doc):
+	"""Alert the sales person when one of their order's items goes On Hold —
+	a real delivery-delay risk they'd otherwise only discover by asking."""
+	if not doc.order_sheet:
+		return
+	so_name = frappe.db.get_value("IB Order Sheet", doc.order_sheet, "sales_order")
+	if not so_name:
+		return
+	sales_person_user = frappe.db.get_value("Sales Order", so_name, "custom_sales_person_user")
+	if not sales_person_user:
+		return
+
+	marker = f"[ib-prod-hold-{doc.name}]"
+	if frappe.db.exists("Notification Log", {"for_user": sales_person_user, "subject": ["like", f"%{marker}%"]}):
+		return
+
+	customer = frappe.db.get_value("Sales Order", so_name, "customer_name") or ""
+	notes = frappe.utils.escape_html(doc.notes) if doc.notes else ""
+	frappe.get_doc({
+		"doctype": "Notification Log",
+		"subject": f"Production Paused: {so_name} — {doc.stage} on hold {marker}"[:140],
+		"email_content": (
+			f"<p>Sales Order <strong>{so_name}</strong> for <strong>{customer}</strong> "
+			f"has been placed <strong>On Hold</strong> at the <strong>{doc.stage}</strong> stage."
+			f"{f' Note: {notes}' if notes else ''} This may affect the delivery date.</p>"
+		),
+		"for_user": sales_person_user,
+		"type": "Alert",
+		"document_type": "Sales Order",
+		"document_name": so_name,
+		"from_user": "Administrator",
+	}).insert(ignore_permissions=True)
 
 
 # ── n8n connectivity helpers ──────────────────────────────────────────────────

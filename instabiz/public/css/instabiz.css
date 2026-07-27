@@ -3173,3 +3173,85 @@ iconify-icon { display: inline-flex; align-items: center; }
 }
 .ib-iph-page-btns { display: flex; gap: 6px; }
 
+/* ── Production Tracker page ── */
+.ib-pt-wrap { padding: 15px; display: flex; flex-direction: column; gap: var(--margin-md); }
+
+.ib-pt-cards { display: flex; gap: var(--margin-md); flex-wrap: wrap; }
+.ib-pt-card { padding: 12px 16px; flex: 1; min-width: 130px; }
+.ib-pt-card-value { font-size: 1.6rem; font-weight: 700; line-height: 1.15; color: var(--heading-color); }
+.ib-pt-card-label { font-size: var(--text-sm); color: var(--text-muted); margin-top: var(--margin-xs); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }
+.ib-pt-card--danger .ib-pt-card-value { color: #dc2626; }
+.ib-pt-card--warn .ib-pt-card-value { color: #ea580c; }
+.ib-pt-card--accent .ib-pt-card-value { color: #059669; }
+
+.ib-pt-chips { display: flex; gap: 8px; }
+.ib-pt-chip {
+    padding: 4px 12px; border-radius: 14px; font-size: 12px; font-weight: 600;
+    color: var(--text-muted); background: var(--subtle-fg, #f1f5f9); cursor: pointer;
+    border: 1px solid transparent; transition: all 0.15s;
+}
+.ib-pt-chip:hover { background: var(--ib-tint-mid); }
+.ib-pt-chip--active { background: var(--ib-primary); color: #fff; }
+
+.ib-pt-list { display: flex; flex-direction: column; }
+.ib-pt-row {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr 1.3fr 1fr;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: background 0.1s;
+}
+.ib-pt-row:last-child { border-bottom: none; }
+.ib-pt-row:hover { background: var(--ib-tint-mid); }
+.ib-pt-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ib-pt-row-id { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; }
+.ib-pt-row-customer { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ib-pt-row-sp { font-size: 11px; color: var(--text-muted); opacity: 0.75; }
+.ib-pt-priority {
+    font-size: 9px; font-weight: 700; text-transform: uppercase; padding: 1px 6px;
+    border-radius: 8px; letter-spacing: 0.03em;
+}
+.ib-pt-row-stage {
+    display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-color);
+    white-space: nowrap;
+}
+.ib-pt-row-progress { display: flex; align-items: center; gap: 8px; }
+.ib-pt-bar { flex: 1; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; max-width: 120px; }
+.ib-pt-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+.ib-pt-pct { font-size: 11px; color: var(--text-muted); white-space: nowrap; min-width: 30px; }
+.ib-pt-row-delivery { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; font-size: 12px; }
+.ib-pt-risk-badge { font-size: 10px; font-weight: 700; padding: 1px 8px; border-radius: 10px; white-space: nowrap; }
+
+.ib-pt-row-detail { grid-column: 1 / -1; padding-top: 10px; }
+.ib-pt-detail-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ib-pt-detail-table th {
+    text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase;
+    color: var(--text-muted); padding: 4px 8px; border-bottom: 1px solid var(--border-color);
+}
+.ib-pt-detail-table td { padding: 6px 8px; vertical-align: middle; }
+.ib-pt-detail-item { font-family: monospace; font-size: 11px; white-space: nowrap; }
+.ib-pt-stage-chip {
+    display: inline-flex; align-items: center; gap: 3px; border: 1px solid;
+    border-radius: 10px; padding: 2px 7px; font-size: 10px; font-weight: 600;
+    white-space: nowrap; margin: 1px;
+}
+
+.ib-pt-empty { text-align: center; color: var(--text-muted); padding: 48px 20px; font-size: var(--text-md); }
+
+.ib-pt-spinner { display: inline-flex; gap: 6px; align-items: center; padding: 20px; justify-content: center; width: 100%; }
+.ib-pt-spinner span {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--ib-primary); animation: ib-sd-bounce 1.2s infinite ease-in-out;
+}
+.ib-pt-spinner span:nth-child(1) { animation-delay: 0s; }
+.ib-pt-spinner span:nth-child(2) { animation-delay: 0.2s; }
+.ib-pt-spinner span:nth-child(3) { animation-delay: 0.4s; }
+
+@media (max-width: 900px) {
+    .ib-pt-row { grid-template-columns: 1fr 1fr; }
+    .ib-pt-row-delivery { align-items: flex-start; }
+}
+

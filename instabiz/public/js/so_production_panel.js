@@ -18,7 +18,11 @@ function _ib_so_prod_panel(frm) {
 	const $existing = $(frm.layout.wrapper).find(".ib-so-prod-panel");
 	$existing.remove();
 
-	const $anchor = $(frm.layout.sections[0].$wrapper);
+	// Current Frappe's Section object exposes `.wrapper`, not `.$wrapper` — the
+	// latter was always undefined here, so `$anchor.after($panel)` silently
+	// no-op'd on an empty jQuery set. The panel has likely never actually
+	// rendered until this fix.
+	const $anchor = $(frm.layout.sections[0].wrapper);
 	const $panel = $(`
 		<div class="ib-so-prod-panel" style="margin:0 0 12px 0">
 			<div style="padding:12px 14px;text-align:center;color:var(--text-muted);
@@ -65,8 +69,40 @@ const _IB_PRIORITY_COLOR = {
 	Urgent: "#dc2626", High: "#ea580c", Normal: "#2563eb", Low: "#6b7280",
 };
 
+const _IB_RISK = {
+	"overdue":  { label: "Overdue",  color: "#dc2626", bg: "#fef2f2" },
+	"at-risk":  { label: "At Risk",  color: "#ea580c", bg: "#fff7ed" },
+	"on-track": { label: "On Track", color: "#059669", bg: "#ecfdf5" },
+	"none":     { label: "",         color: "#6b7280", bg: "#f9fafb" },
+};
+
 function _ib_esc(s) {
 	return frappe.utils.escape_html(String(s || ""));
+}
+
+function _ib_overall_progress_row(data) {
+	if (data.overall_pct == null) return "";
+	const risk = _IB_RISK[data.risk] || _IB_RISK.none;
+	const pct = data.overall_pct;
+	const days = data.days_left;
+	const daysTxt = days == null ? "" :
+		days < 0 ? __("{0}d overdue", [Math.abs(days)]) :
+		days === 0 ? __("Due today") :
+		__("{0}d left", [days]);
+	return `
+	<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+		<div style="flex:1;min-width:160px;display:flex;align-items:center;gap:8px">
+			<div style="flex:1;height:7px;background:#e5e7eb;border-radius:4px;overflow:hidden;max-width:200px">
+				<div style="width:${pct}%;height:100%;background:${pct >= 100 ? "#059669" : "#2563eb"};border-radius:4px;transition:width .3s"></div>
+			</div>
+			<span style="font-size:12px;font-weight:600;color:var(--text-color)">${pct}%</span>
+			${data.overall_current_stage ? `<span style="font-size:11px;color:var(--text-muted)">— ${_ib_esc(data.overall_current_stage)}</span>` : ""}
+		</div>
+		${daysTxt ? `<span style="background:${risk.bg};color:${risk.color};padding:2px 9px;
+			border-radius:10px;font-size:10px;font-weight:700">${daysTxt}</span>` : ""}
+		<a href="/app/ib-production-tracker" style="font-size:11px;color:var(--text-muted);white-space:nowrap">
+			${__("View in Production Tracker")} →</a>
+	</div>`;
 }
 
 function _ib_build_prod_panel(data) {
@@ -174,6 +210,7 @@ function _ib_build_prod_panel(data) {
 				${frappe.datetime.str_to_user(data.delivery_date)}</span>` : ""}
 		</div>
 		<div style="padding:11px 13px">
+			${_ib_overall_progress_row(data)}
 			${rtdBanner}
 			<div style="overflow-x:auto">
 				<table style="width:100%;border-collapse:collapse;font-size:12px">
