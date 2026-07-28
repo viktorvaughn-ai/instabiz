@@ -17,7 +17,7 @@ from erpnext.controllers.accounts_controller import AccountsController
 from erpnext.accounts.general_ledger import make_gl_entries
 from erpnext.accounts.party import get_party_account
 from erpnext.stock.stock_ledger import make_sl_entries
-from instabiz.overrides.utils import recalculate_items
+from instabiz.overrides.utils import recalculate_items, LOCATION_WAREHOUSE, LOCATION_COST_CENTER
 
 
 class IBDebitNote(AccountsController):
@@ -198,11 +198,22 @@ class IBDebitNote(AccountsController):
 
     # ── GL Entries ────────────────────────────────────────────────────────────
 
+    def _location_cost_center(self) -> str:
+        """Derive location cost center from item warehouse; falls back to company default."""
+        warehouse_to_loc = {w: l for l, w in LOCATION_WAREHOUSE.items()}
+        for row in self.items:
+            loc = warehouse_to_loc.get(row.get("warehouse"))
+            if loc:
+                cc = LOCATION_COST_CENTER.get(loc)
+                if cc:
+                    return cc
+        return frappe.db.get_value("Company", self.company, "cost_center") or ""
+
     def _make_gl_entries(self, cancel: bool = False) -> None:
         if not getattr(self, "company_gstin", None):
             self.company_gstin = self._get_company_gstin()
         ap_account = get_party_account("Supplier", self.supplier, self.company)
-        cost_center = frappe.db.get_value("Company", self.company, "cost_center") or ""
+        cost_center = self._location_cost_center()
         remark = (self.remarks or "").strip() or (
             "Debit Note {name} against {pi}".format(
                 name=self.name, pi=self.against_purchase_invoice or "N/A"

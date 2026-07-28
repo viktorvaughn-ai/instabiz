@@ -1380,6 +1380,17 @@ const KB_SECTIONS = [
 				desc: "2-page print format on Sales Invoice: Page 1 = Tax Invoice with IRN and QR code, bank details, amount in words. Page 2 = E-Way Bill with EWB QR, goods, transport, vehicle details.",
 				tags: "print tax invoice format irn qr eway",
 			},
+			{
+				num: "114", title: "GST Accounts Are Shared, Not Per-Location — Cost Center Tracks the Split",
+				desc: "All 3 GSTINs (Chennai, Gujarat, Maharashtra) post CGST/SGST/IGST to the same single set of ledger accounts — India Compliance does not allow separate GST account sets per location under one Company. Location-wise tracking instead runs through Cost Center: every Q/SO/DN/SI, PO/PR/PI, and IB Credit/Debit Note tax row now carries the correct location Cost Center (Maharashtra - IB / Gujarat - IB / Chennai - IB), not just the item rows.",
+				tags: "gst cost center location multi-gstin chennai gujarat maharashtra chart of accounts reconciliation",
+				steps: [
+					"To see GST payable/collected split by location: open <b>General Ledger</b> or <b>Trial Balance</b>.",
+					"Filter by <b>Cost Center</b> = Maharashtra - IB / Gujarat - IB / Chennai - IB.",
+					"Filter Account to an Output/Input CGST, SGST, or IGST account to see that location's GST activity only.",
+				],
+				note: "Applies going forward only — GL entries posted before 2026-07-29 still show cost center \"Main - IB\" regardless of location and are not retroactively corrected (same approach used for the per-location stock account split).",
+			},
 		],
 	},
 	{

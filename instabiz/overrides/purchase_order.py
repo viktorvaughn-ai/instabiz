@@ -47,7 +47,7 @@ def _auto_correct_purchase_gst_template(doc):
 
 
 def _apply_purchase_cost_center(doc):
-	"""Set cost_center on item rows from set_warehouse → location mapping."""
+	"""Set cost_center on item + tax rows from set_warehouse → location mapping."""
 	warehouse = doc.get("set_warehouse") or _first_warehouse(doc)
 	if not warehouse:
 		return
@@ -59,6 +59,8 @@ def _apply_purchase_cost_center(doc):
 		return
 	for item in doc.get("items") or []:
 		item.cost_center = cc
+	for tax in doc.get("taxes") or []:
+		tax.cost_center = cc
 
 
 def _first_warehouse(doc):

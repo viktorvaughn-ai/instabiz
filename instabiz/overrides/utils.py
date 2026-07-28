@@ -270,7 +270,7 @@ def item_postprocess(source_item, target_item, source_doc):
 
 
 def apply_location_cost_center(doc):
-    """Set cost_center on parent + every item row from LOCATION_COST_CENTER.
+    """Set cost_center on parent + every item/tax row from LOCATION_COST_CENTER.
 
     Runs on SO / DN / SI validate() so GL entries carry the correct cost center.
     Always overwrites — location is authoritative for cost center allocation.
@@ -282,6 +282,8 @@ def apply_location_cost_center(doc):
     doc.cost_center = cc
     for item in doc.get("items") or []:
         item.cost_center = cc
+    for tax in doc.get("taxes") or []:
+        tax.cost_center = cc
 
 
 # ─────────────────────────────────────────────────────────────────────────────
