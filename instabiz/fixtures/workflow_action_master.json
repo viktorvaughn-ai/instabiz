@@ -1,0 +1,37 @@
+[
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2026-07-30 12:36:59.948858",
+  "name": "Start",
+  "workflow_action_name": "Start"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2026-07-30 12:36:59.958076",
+  "name": "Complete",
+  "workflow_action_name": "Complete"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2026-07-30 12:36:59.959513",
+  "name": "Hold",
+  "workflow_action_name": "Hold"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2026-07-30 12:36:59.960880",
+  "name": "Resume",
+  "workflow_action_name": "Resume"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2026-07-30 12:36:59.962286",
+  "name": "Cancel",
+  "workflow_action_name": "Cancel"
+ }
+]

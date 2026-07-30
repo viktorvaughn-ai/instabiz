@@ -2158,36 +2158,3 @@ def toggle_agent_active(agent_code, is_active):
 	frappe.db.commit()
 	return {"success": True, "agent_code": agent_code, "is_active": cint(is_active)}
 
-
-# ── n8n webhook trigger ───────────────────────────────────────────────────────
-
-def notify_n8n(event: str, payload: dict):
-	"""Enqueue a background POST to n8n webhook — never blocks the calling
-	request. Called from doc_events (was previously a synchronous requests.post
-	with a 5s timeout inline in the request thread — every WO status change
-	paid up to 5 dead seconds whenever n8n wasn't reachable, confirmed 2026-07-15
-	that it hasn't been running at all)."""
-	n8n_url = frappe.conf.get("n8n_webhook_url")
-	if not n8n_url:
-		return
-	frappe.enqueue(
-		"instabiz.overrides.ai_agents._post_to_n8n",
-		queue="short",
-		enqueue_after_commit=True,
-		event=event,
-		payload=payload,
-		n8n_url=n8n_url,
-		site=frappe.local.site,
-	)
-
-
-def _post_to_n8n(event, payload, n8n_url, site):
-	try:
-		import requests
-		requests.post(
-			n8n_url,
-			json={"event": event, "payload": payload, "site": site},
-			timeout=5,
-		)
-	except Exception as e:
-		frappe.log_error("IB n8n webhook", str(e))

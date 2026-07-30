@@ -3,6 +3,7 @@ import json
 
 import frappe
 from frappe import _
+from frappe.model.workflow import apply_workflow
 from frappe.utils import today, now, flt, add_days, getdate, nowdate, date_diff
 
 _PRODUCTION_ROLES = {"Factory Management", "Factory Production", "System Manager"}
@@ -756,7 +757,8 @@ def assign_machine(work_order, machine):
 
 @frappe.whitelist()
 def start_work_order(work_order):
-	"""Set status=In Progress, record started_at."""
+	"""Transition status Pending/On Hold -> In Progress via the IB Work Order
+	Workflow (action "Start"/"Resume"), record started_at."""
 	_require_production_role()
 	# Advisory lock prevents two concurrent calls (e.g. double-click, two tabs)
 	# from both passing the status check before either write lands — same
@@ -766,21 +768,18 @@ def start_work_order(work_order):
 	if not locked:
 		frappe.throw(_("Could not acquire lock for Work Order {0}. Please try again.").format(work_order))
 	try:
-		current_status = frappe.db.get_value("IB Work Order", work_order, "status")
-		if current_status == "In Progress":
-			return {"status": "ok", "started_at": frappe.db.get_value("IB Work Order", work_order, "started_at")}
-		if current_status not in ("Pending", "On Hold"):
+		doc = frappe.get_doc("IB Work Order", work_order)
+		if doc.status == "In Progress":
+			return {"status": "ok", "started_at": doc.started_at}
+		if doc.status not in ("Pending", "On Hold"):
 			frappe.throw(
 				_("Work Order {0} cannot be started from status '{1}'. Expected: Pending or On Hold.").format(
-					work_order, current_status
+					work_order, doc.status
 				)
 			)
 		started_at = now()
-		frappe.db.set_value("IB Work Order", work_order, {"status": "In Progress", "started_at": started_at})
-		# frappe.db.set_value bypasses Document events — fire the n8n webhook explicitly.
-		from instabiz.overrides.n8n_hooks import on_work_order_update
-		doc = frappe.get_doc("IB Work Order", work_order)
-		on_work_order_update(doc)
+		doc.started_at = started_at
+		apply_workflow(doc, "Resume" if doc.status == "On Hold" else "Start")
 		frappe.db.commit()
 		_notify_floor_update()
 		return {"status": "ok", "started_at": started_at}
@@ -810,19 +809,12 @@ def complete_work_order(work_order):
 		# completed_qty is never populated (IB Production Entry is unused by design) — fall back
 		# to target_qty so the WO/Order Sheet Item actually reach "Completed" status.
 		qty_done = flt(doc.completed_qty) or flt(doc.target_qty)
-		frappe.db.set_value(
-			"IB Work Order", work_order,
-			{"status": "Completed", "completed_at": completed_at, "completed_qty": qty_done},
-		)
-		# frappe.db.set_value bypasses Document events — the IB Work Order.on_update hook
-		# (on_work_order_update_notify + n8n's on_work_order_update) never fires from this
-		# path. Call both directly so the bell + webhook actually fire.
-		doc.status = "Completed"
 		doc.completed_at = completed_at
 		doc.completed_qty = qty_done
-		on_work_order_update_notify(doc)
-		from instabiz.overrides.n8n_hooks import on_work_order_update
-		on_work_order_update(doc)
+		# apply_workflow saves the doc via the IB Work Order Workflow, which fires
+		# standard Document events — IB Work Order.on_update (on_work_order_update_notify)
+		# runs automatically, no manual call needed.
+		apply_workflow(doc, "Complete")
 
 		# Update Order Sheet Item completed_qty and status
 		if doc.order_sheet and doc.item_code:
@@ -846,14 +838,10 @@ def put_on_hold(work_order):
 	if not locked:
 		frappe.throw(_("Could not acquire lock for Work Order {0}. Please try again.").format(work_order))
 	try:
-		current_status = frappe.db.get_value("IB Work Order", work_order, "status")
-		if current_status == "On Hold":
-			frappe.throw(_("Work Order {0} is already On Hold.").format(work_order))
-		frappe.db.set_value("IB Work Order", work_order, "status", "On Hold")
-		# frappe.db.set_value bypasses Document events — fire the n8n webhook explicitly.
-		from instabiz.overrides.n8n_hooks import on_work_order_update
 		doc = frappe.get_doc("IB Work Order", work_order)
-		on_work_order_update(doc)
+		if doc.status == "On Hold":
+			frappe.throw(_("Work Order {0} is already On Hold.").format(work_order))
+		apply_workflow(doc, "Hold")
 		_notify_production_hold(doc)
 		frappe.db.commit()
 		_notify_floor_update()
@@ -1243,13 +1231,7 @@ def _update_order_sheet_progress(order_sheet_name):
 	if not items:
 		return
 	if all(item.status == "Completed" for item in items):
-		already_completed = frappe.db.get_value("IB Order Sheet", order_sheet_name, "status") == "Completed"
 		frappe.db.set_value("IB Order Sheet", order_sheet_name, "status", "Completed")
-		if not already_completed:
-			# frappe.db.set_value bypasses Document events — the n8n order_sheet_completed
-			# webhook (wired to IB Order Sheet.on_update) never fires from this path.
-			from instabiz.overrides.n8n_hooks import on_order_sheet_updated
-			on_order_sheet_updated(frappe.get_doc("IB Order Sheet", order_sheet_name))
 
 
 @frappe.whitelist()
@@ -1295,19 +1277,12 @@ def advance_to_next_stage(work_order):
 		# completed_qty is never populated (IB Production Entry is unused by design) — fall back
 		# to target_qty so the WO/Order Sheet Item actually reach "Completed" status.
 		qty_done = flt(doc.completed_qty) or flt(doc.target_qty)
-		frappe.db.set_value(
-			"IB Work Order", work_order,
-			{"status": "Completed", "completed_at": completed_at, "completed_qty": qty_done},
-		)
-		doc.status = "Completed"
 		doc.completed_at = completed_at
 		doc.completed_qty = qty_done
-		# frappe.db.set_value bypasses Document events — the IB Work Order.on_update hook
-		# (on_work_order_update_notify + n8n's on_work_order_update) never fires from this
-		# path. Call both directly so the bell + webhook actually fire.
-		on_work_order_update_notify(doc)
-		from instabiz.overrides.n8n_hooks import on_work_order_update
-		on_work_order_update(doc)
+		# apply_workflow saves the doc via the IB Work Order Workflow, which fires
+		# standard Document events — IB Work Order.on_update (on_work_order_update_notify)
+		# runs automatically, no manual call needed.
+		apply_workflow(doc, "Complete")
 		_update_order_sheet_item(doc.order_sheet, doc.item_code, qty_done,
 								 order_sheet_item=doc.order_sheet_item or None)
 
@@ -2295,204 +2270,13 @@ def batch_assign_machine(work_orders, machine, batch_group=None):
 	return {"updated": updated, "machine": machine, "batch_group": batch_group}
 
 
-# ── Live floor status (all stages, realtime) ───────────────────────────────────
-
 def _notify_floor_update():
-	"""Fire on every WO status/machine-assignment change so any open Live Floor
-	tab live-refreshes. Same after_commit pattern as stock_events.publish_stock_update."""
+	"""Fire on every WO status/machine-assignment change so any open Production
+	Stages tab live-refreshes across terminals (ib_production_stages.js
+	_start_live_updates). Originally added for the since-removed Seat Map/Live
+	Floor UI, but the event itself is a separate, still-active cross-terminal
+	refresh mechanism — do not remove without also removing that listener."""
 	frappe.publish_realtime("ib_floor_update", {}, after_commit=True)
-
-
-@frappe.whitelist()
-def get_live_floor_status():
-	"""Per-machine live occupancy across ALL stages — which WO/order is
-	currently running or queued on each active machine."""
-	_require_production_role()
-	machines = frappe.db.get_all(
-		"IB Machine",
-		filters={"status": "Active"},
-		fields=["name", "machine_code", "machine_name", "machine_type", "location"],
-		order_by="machine_type, machine_code",
-	)
-	if not machines:
-		return []
-
-	wos = frappe.db.get_all(
-		"IB Work Order",
-		filters={"machine": ["in", [m.name for m in machines]], "status": ["in", ["Pending", "In Progress"]]},
-		fields=["name", "machine", "item_code", "item_name", "stage", "status",
-		        "order_sheet", "target_qty", "completed_qty", "started_at", "priority"],
-		order_by="started_at desc, creation",
-	)
-
-	os_names = list({wo.order_sheet for wo in wos if wo.order_sheet})
-	os_map = {}
-	if os_names:
-		for r in frappe.db.get_all("IB Order Sheet", filters={"name": ["in", os_names]},
-		                            fields=["name", "customer_name", "sales_order"]):
-			os_map[r.name] = r
-
-	by_machine = {}
-	for wo in wos:
-		by_machine.setdefault(wo.machine, []).append(wo)
-
-	def _enrich(w):
-		osr = os_map.get(w.order_sheet, {})
-		return {
-			"work_order": w.name, "item_code": w.item_code, "item_name": w.item_name,
-			"customer_name": osr.get("customer_name"), "sales_order": osr.get("sales_order"),
-			"target_qty": flt(w.target_qty), "completed_qty": flt(w.completed_qty),
-			"started_at": w.started_at, "priority": w.priority,
-		}
-
-	result = []
-	for m in machines:
-		wo_list = by_machine.get(m.name, [])
-		running = [w for w in wo_list if w.status == "In Progress"]
-		queued = [w for w in wo_list if w.status == "Pending"]
-		result.append({
-			"machine": m.name, "machine_code": m.machine_code, "machine_name": m.machine_name,
-			"machine_type": m.machine_type, "location": m.location,
-			"running": [_enrich(w) for w in running],
-			"queued": [_enrich(w) for w in queued],
-			"is_idle": not running,
-		})
-	return result
-
-
-# ── Cutting/Slitting seat map ──────────────────────────────────────────────────
-# Movie-seat-style view of used vs free width across Slitting/Cutting machines.
-# Width per WO prefers the actual captured IB Production Entry.roll_width_mm
-# (real measured roll) and falls back to the Item's nominal width_mm when no
-# entry has been logged yet — so the view is useful immediately, not blocked
-# on Log Entry adoption, while rewarding real capture with more precise data.
-
-_SEAT_SIZE_MM = 50
-
-
-def _wo_width_mm(work_order, item_code):
-	captured = frappe.db.get_value(
-		"IB Production Entry",
-		{"work_order": work_order, "docstatus": 1, "roll_width_mm": [">", 0]},
-		"roll_width_mm",
-		order_by="creation desc",
-	)
-	if captured:
-		return flt(captured), True
-	nominal = frappe.db.get_value("Item", item_code, "width_mm")
-	return flt(nominal), False
-
-
-@frappe.whitelist()
-def get_cutting_slot_map():
-	"""Per-machine seat occupancy for Slitting/Cutting machines with a
-	configured machine_width_mm. Each 50mm of width is one 'seat'."""
-	_require_production_role()
-	machines = frappe.db.get_all(
-		"IB Machine",
-		filters={
-			"machine_type": ["in", ["Slitting", "Cutting"]],
-			"status": "Active",
-			"machine_width_mm": [">", 0],
-		},
-		fields=["name", "machine_code", "machine_name", "machine_type", "machine_width_mm"],
-		order_by="machine_type, machine_code",
-	)
-
-	result = []
-	for m in machines:
-		seat_count = int(flt(m.machine_width_mm) // _SEAT_SIZE_MM)
-		wos = frappe.db.get_all(
-			"IB Work Order",
-			filters={"machine": m.name, "stage": m.machine_type, "status": ["in", ["Pending", "In Progress"]]},
-			fields=["name", "item_code", "item_name", "order_sheet", "status"],
-			order_by="creation",
-		)
-
-		blocks = []
-		seat_cursor = 0
-		used_mm = 0.0
-		for wo in wos:
-			width, measured = _wo_width_mm(wo.name, wo.item_code)
-			if not width or width <= 0:
-				continue
-			seats_needed = max(1, round(width / _SEAT_SIZE_MM))
-			if seat_cursor >= seat_count:
-				break
-			seats_needed = min(seats_needed, seat_count - seat_cursor)
-			customer_name = None
-			if wo.order_sheet:
-				customer_name = frappe.db.get_value("IB Order Sheet", wo.order_sheet, "customer_name")
-			blocks.append({
-				"work_order": wo.name,
-				"item_code": wo.item_code,
-				"item_name": wo.item_name,
-				"customer_name": customer_name,
-				"status": wo.status,
-				"width_mm": width,
-				"measured": measured,
-				"seat_start": seat_cursor,
-				"seat_count": seats_needed,
-			})
-			seat_cursor += seats_needed
-			used_mm += width
-
-		result.append({
-			"machine": m.name,
-			"machine_code": m.machine_code,
-			"machine_name": m.machine_name,
-			"machine_type": m.machine_type,
-			"machine_width_mm": flt(m.machine_width_mm),
-			"seat_size_mm": _SEAT_SIZE_MM,
-			"seat_count": seat_count,
-			"blocks": blocks,
-			"free_seats": max(0, seat_count - seat_cursor),
-			"used_mm": used_mm,
-			"free_mm": max(0.0, flt(m.machine_width_mm) - used_mm),
-		})
-	return result
-
-
-@frappe.whitelist()
-def get_cutting_fit_suggestions(machine):
-	"""Pending, unassigned WOs (same stage as the given machine) whose Item
-	width fits in the machine's current free width — candidates to bundle
-	into the gap shown on the seat map."""
-	_require_production_role()
-	m = frappe.db.get_value(
-		"IB Machine", machine, ["machine_type", "machine_width_mm"], as_dict=True
-	)
-	if not m or not m.machine_width_mm:
-		return []
-
-	slot_map = get_cutting_slot_map()
-	this_machine = next((row for row in slot_map if row["machine"] == machine), None)
-	free_mm = this_machine["free_mm"] if this_machine else flt(m.machine_width_mm)
-
-	candidates = frappe.db.get_all(
-		"IB Work Order",
-		filters={"stage": m.machine_type, "status": "Pending", "machine": ["in", ["", None]]},
-		fields=["name", "item_code", "item_name", "order_sheet", "priority"],
-	)
-
-	fits = []
-	for wo in candidates:
-		width, measured = _wo_width_mm(wo.name, wo.item_code)
-		if width and width <= free_mm:
-			customer_name = None
-			if wo.order_sheet:
-				customer_name = frappe.db.get_value("IB Order Sheet", wo.order_sheet, "customer_name")
-			fits.append({
-				"work_order": wo.name,
-				"item_code": wo.item_code,
-				"item_name": wo.item_name,
-				"customer_name": customer_name,
-				"priority": wo.priority,
-				"width_mm": width,
-				"measured": measured,
-			})
-	fits.sort(key=lambda f: -f["width_mm"])
-	return fits
 
 
 # ── Production progress notifications (doc event) ────────────────────────────
@@ -2626,33 +2410,3 @@ def _notify_production_hold(doc):
 		"from_user": "Administrator",
 	}).insert(ignore_permissions=True)
 
-
-# ── n8n connectivity helpers ──────────────────────────────────────────────────
-
-@frappe.whitelist()
-def test_n8n_connection():
-	"""Test n8n webhook connectivity. Returns ok/error for dashboard display."""
-	url = frappe.conf.get("n8n_webhook_url") or ""
-	if not url:
-		return {"ok": False, "error": "n8n_webhook_url not configured in site_config.json"}
-	try:
-		import requests
-		resp = requests.post(
-			url,
-			json={"event": "ping", "payload": {"test": True, "site": frappe.local.site}},
-			timeout=5,
-		)
-		return {"ok": resp.status_code < 400, "status_code": resp.status_code, "url": url}
-	except Exception as e:
-		return {"ok": False, "error": str(e), "url": url}
-
-
-@frappe.whitelist()
-def get_n8n_status():
-	"""Return n8n configuration state for the dashboard panel."""
-	url = frappe.conf.get("n8n_webhook_url") or ""
-	return {
-		"configured": bool(url),
-		"webhook_url": url,
-		"n8n_ui": "http://localhost:5678",
-	}

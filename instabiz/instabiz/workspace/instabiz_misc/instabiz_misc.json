@@ -1,7 +1,7 @@
 {
  "charts": [],
- "content": "[{\"id\":\"misc-h0\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>SETUP MASTERS</b></span>\",\"col\":12}},{\"id\":\"misc-coa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Chart of Accounts\",\"col\":3}},{\"id\":\"misc-cc\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Cost Center\",\"col\":3}},{\"id\":\"misc-h1\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>AUTOMATION / INFRA</b></span>\",\"col\":12}},{\"id\":\"misc-agdef\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Agent Definitions\",\"col\":3}},{\"id\":\"misc-n8n\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"n8n Console\",\"col\":3}},{\"id\":\"misc-sh\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"System Health\",\"col\":3}},{\"id\":\"misc-h2\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>HELP & KNOWLEDGE BASE</b></span>\",\"col\":12}},{\"id\":\"misc-kb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Knowledge Base\",\"col\":3}}]",
- "creation": "2026-07-24 20:46:32.175481",
+ "content": "[{\"id\": \"misc-h0\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>SETUP MASTERS</b></span>\", \"col\": 12}}, {\"id\": \"misc-coa\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Chart of Accounts\", \"col\": 3}}, {\"id\": \"misc-cc\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Cost Center\", \"col\": 3}}, {\"id\": \"misc-h1\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>AUTOMATION / INFRA</b></span>\", \"col\": 12}}, {\"id\": \"misc-sh\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"System Health\", \"col\": 3}}, {\"id\": \"misc-h2\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>HELP & KNOWLEDGE BASE</b></span>\", \"col\": 12}}, {\"id\": \"misc-kb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Knowledge Base\", \"col\": 3}}]",
+ "creation": "2026-07-29 01:54:13.220811",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz Misc",
  "links": [],
- "modified": "2026-07-24 20:48:05.802868",
+ "modified": "2026-07-30 12:43:11.819530",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz Misc",
@@ -40,20 +40,6 @@
    "label": "Cost Center",
    "link_to": "Cost Center",
    "type": "DocType"
-  },
-  {
-   "color": "Purple",
-   "doc_view": "List",
-   "label": "Agent Definitions",
-   "link_to": "IB Agent Definition",
-   "type": "DocType"
-  },
-  {
-   "color": "Green",
-   "doc_view": "",
-   "label": "n8n Console",
-   "link_to": "ib-n8n-console",
-   "type": "Page"
   },
   {
    "color": "Grey",

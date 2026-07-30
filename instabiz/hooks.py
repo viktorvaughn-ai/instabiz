@@ -117,6 +117,18 @@ app_version = "0.0.1"
 fixtures = [
     "Custom Field",
     {
+        "dt": "Workflow",
+        "filters": [["document_type", "=", "IB Work Order"]]
+    },
+    {
+        "dt": "Workflow State",
+        "filters": [["name", "in", ["In Progress", "Completed", "On Hold", "Cancelled"]]]
+    },
+    {
+        "dt": "Workflow Action Master",
+        "filters": [["name", "in", ["Start", "Complete", "Hold", "Resume", "Cancel"]]]
+    },
+    {
         "dt": "Property Setter",
         "filters": [["doc_type", "in", ["Quotation", "Sales Order", "Lead", "Delivery Note", "Customer",
                                           "IB Credit Note", "IB Debit Note", "Purchase Invoice",
@@ -230,14 +242,7 @@ doc_events = {
         "on_cancel": "instabiz.overrides.stock_events.publish_stock_update",
     },
     "IB Work Order": {
-        "on_update": [
-            "instabiz.overrides.n8n_hooks.on_work_order_update",
-            "instabiz.overrides.production.on_work_order_update_notify",
-        ],
-    },
-    "IB Order Sheet": {
-        "after_insert": "instabiz.overrides.n8n_hooks.on_order_sheet_created",
-        "on_update":    "instabiz.overrides.n8n_hooks.on_order_sheet_updated",
+        "on_update": "instabiz.overrides.production.on_work_order_update_notify",
     },
 }
 
@@ -307,7 +312,6 @@ app_include_js  = [
     "/assets/instabiz/js/ib_list_print.js",         # shared list view print utility
     "/assets/instabiz/js/ib_dash_utils.js",         # dashboard shared: countUp loader, skeleton helpers, fmt
     "/assets/instabiz/js/so_production_panel.js",  # SO form: production stage + dispatch status panel
-    # "/assets/instabiz/js/broadcast.js",            # global broadcast modal subscriber — DISABLED
     # ib_stock_dashboard.js is loaded by Frappe's page engine (not global)
     # "/assets/instabiz/js/quotation_list.js",        # Quotation list view
     # "/assets/instabiz/js/sales_order_list.js",      # Sales Order list view
@@ -325,7 +329,6 @@ doctype_list_js = {
     "Purchase Order":    "public/js/purchase_order_list.js",
     "Purchase Receipt":  "public/js/purchase_receipt_list.js",
     "Purchase Invoice":  "public/js/purchase_invoice_list.js",
-    "IB Item Price List": "public/js/ib_item_price_list_list.js",
     "Customer":          "public/js/customer_list.js",
     "GL Entry":          "public/js/gl_entry_list.js",
 }

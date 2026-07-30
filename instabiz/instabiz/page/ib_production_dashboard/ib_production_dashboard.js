@@ -45,7 +45,7 @@ class IBProductionDashboard {
 		this.$container.find("#ib-pd-kpis").html(window.ib_skel_kpis ? ib_skel_kpis(4) : "");
 
 		let _done = 0;
-		const _total = 4;
+		const _total = 3;
 		const _check_done = () => {
 			if (++_done >= _total) {
 				this._fetching = false;
@@ -85,14 +85,6 @@ class IBProductionDashboard {
 			},
 			error: () => _check_done(),
 		});
-		frappe.call({
-			method: "instabiz.overrides.production.get_n8n_status",
-			callback: (r) => {
-				if (r.message) this._render_n8n_bar(r.message);
-				_check_done();
-			},
-			error: () => _check_done(),
-		});
 	}
 
 	// ── Layout ────────────────────────────────────────────────────────────────
@@ -102,7 +94,6 @@ class IBProductionDashboard {
 				<div style="text-align:right;margin-bottom:8px">
 					<span id="ib-pd-refresh-ts" class="ib-pd-refresh-time"></span>
 				</div>
-				<div id="ib-pd-n8n-bar"></div>
 				<div class="ib-pd-kpi-row" id="ib-pd-kpis"></div>
 				<div class="ib-pd-section-title">Pipeline</div>
 				<div class="ib-pd-pipeline" id="ib-pd-pipeline"></div>
@@ -408,45 +399,6 @@ class IBProductionDashboard {
 		});
 	}
 
-	// ── n8n status bar ────────────────────────────────────────────────────────
-	_render_n8n_bar(n8n) {
-		const $bar = this.$container.find("#ib-pd-n8n-bar");
-		if (!n8n) { $bar.hide(); return; }
-		const configured = n8n.configured;
-		const icon  = configured ? "lucide:plug-zap" : "lucide:plug";
-		const color = configured ? "#059669" : "#9ca3af";
-		const label = configured ? "n8n Connected" : "n8n Not Configured";
-		const hint  = configured ? "" : `
-			<a href="${n8n.n8n_ui}" target="_blank"
-				style="font-size:11px;color:var(--primary);margin-left:8px">
-				Open n8n UI
-			</a>
-			<span style="font-size:11px;color:var(--text-muted);margin-left:8px">
-				→ set n8n_webhook_url in site_config.json
-			</span>`;
-		$bar.html(`
-			<div style="padding:8px 12px;background:${color}0d;border:1px solid ${color}30;
-				border-radius:6px;margin-bottom:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-				<iconify-icon icon="${icon}" width="14" height="14" style="color:${color};flex-shrink:0"></iconify-icon>
-				<span style="font-size:12px;font-weight:600;color:${color}">${label}</span>
-				${hint}
-				${configured ? `
-				<button onclick="frappe.call({
-					method:'instabiz.overrides.production.test_n8n_connection',
-					callback(r){
-						const msg = r.message.ok ? 'n8n ping OK' : ('n8n error: ' + r.message.error);
-						frappe.show_alert({message:msg,indicator:r.message.ok?'green':'red'});
-					}
-				})"
-				style="margin-left:auto;background:none;border:1px solid ${color};color:${color};
-					border-radius:4px;padding:2px 10px;font-size:11px;cursor:pointer">
-					<iconify-icon icon="lucide:activity" width="11" height="11"
-						style="vertical-align:middle;margin-right:3px"></iconify-icon>
-					Test
-				</button>` : ""}
-			</div>
-		`).show();
-	}
 
 	// ── AI prod actions panel ─────────────────────────────────────────────────
 	_render_ai_prod_actions(actions) {
@@ -488,14 +440,14 @@ class IBProductionDashboard {
 				<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;
 					white-space:pre-wrap">${frappe.utils.escape_html(a.summary || "")}</div>
 				<div style="display:flex;gap:6px">
-					<button class="ib-pd-ai-btn ib-pd-ai-approve" data-name="${frappe.utils.escape_html(a.name)}"
+					<button class="ib-pd-ai-btn ib-pd-ai-approve btn btn-xs btn-success" data-name="${frappe.utils.escape_html(a.name)}"
 						style="background:#059669;color:#fff;border:none;border-radius:5px;
 						padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer">
 						<iconify-icon icon="lucide:check" width="11" height="11"
 							style="vertical-align:middle;margin-right:3px"></iconify-icon>
 						Approve
 					</button>
-					<button class="ib-pd-ai-btn ib-pd-ai-reject" data-name="${frappe.utils.escape_html(a.name)}"
+					<button class="ib-pd-ai-btn ib-pd-ai-reject btn btn-xs btn-danger" data-name="${frappe.utils.escape_html(a.name)}"
 						style="background:none;border:1px solid #dc2626;color:#dc2626;border-radius:5px;
 						padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer">
 						<iconify-icon icon="lucide:x" width="11" height="11"

@@ -78,12 +78,10 @@ def _check_socketio():
 		return _ok("offline", "Socket.IO / Realtime", f"port {port}: {e}")
 
 
-# Only these two components can be restarted from the page, and only to these
-# exact PM2 process names — never built from user input, so no injection surface
+# Components that can be restarted from the page, restricted to these exact
+# PM2 process names — never built from user input, so no injection surface
 # even though we call subprocess with an explicit arg list (no shell=True).
-_RESTARTABLE = {
-	"n8n": "n8n",
-}
+_RESTARTABLE = {}
 
 
 def _pm2_status(process_name):
@@ -103,22 +101,6 @@ def _pm2_status(process_name):
 		return "not_found"
 	except Exception:
 		return None
-
-
-def _check_n8n():
-	try:
-		from instabiz.instabiz.page.ib_n8n_console.ib_n8n_console import get_n8n_status
-		res = get_n8n_status()
-		pm2 = _pm2_status("n8n")
-		status = "online" if res.get("status") == "online" else "offline"
-		detail_bits = [res.get("n8n_url", "")]
-		if pm2:
-			detail_bits.append(f"pm2: {pm2}")
-		if res.get("error") and status != "online":
-			detail_bits.append(res["error"])
-		return _ok(status, "n8n", " | ".join(b for b in detail_bits if b), {"pm2_status": pm2, "key": "n8n"})
-	except Exception as e:
-		return _ok("unknown", "n8n", str(e))
 
 
 def _check_claude():
@@ -175,7 +157,6 @@ CHECKS = [
 	_check_background_workers,
 	_check_scheduler,
 	_check_socketio,
-	_check_n8n,
 	_check_claude,
 	_check_gst,
 ]
