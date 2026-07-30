@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\": \"stk-h0\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>INVENTORY</b></span>\", \"col\": 12}}, {\"id\": \"stk-sb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Live Stock Balance\", \"col\": 3}}, {\"id\": \"stk-sl\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Stock Ledger\", \"col\": 3}}, {\"id\": \"stock-recon\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Stock Reconciliation\", \"col\": 3}}, {\"id\": \"stk-h1\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>REPORTS</b></span>\", \"col\": 12}}, {\"id\": \"stk-sa\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Stock Ageing\", \"col\": 3}}, {\"id\": \"stk-h2\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\", \"col\": 12}}, {\"id\": \"stk-kb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Knowledge Base\", \"col\": 3}}, {\"id\": \"stk-inward\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Inward Stock Transfer\", \"col\": 3}}]",
+ "content": "[{\"id\": \"stk-h0\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>INVENTORY</b></span>\", \"col\": 12}}, {\"id\": \"stk-sb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Live Stock Balance\", \"col\": 3}}, {\"id\": \"stk-sl\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Stock Ledger\", \"col\": 3}}, {\"id\": \"stock-recon\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Stock Reconciliation\", \"col\": 3}}, {\"id\": \"stk-inward\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Inward Stock Transfer\", \"col\": 3}}, {\"id\": \"stock-analytics-hub\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Analytics Hub\", \"col\": 3}}, {\"id\": \"stk-h1\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>REPORTS</b></span>\", \"col\": 12}}, {\"id\": \"stk-sa\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Stock Ageing\", \"col\": 3}}, {\"id\": \"stk-h2\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\", \"col\": 12}}, {\"id\": \"stk-kb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Knowledge Base\", \"col\": 3}}]",
  "creation": "2026-07-29 01:54:13.924807",
  "custom_blocks": [],
  "docstatus": 0,
@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz Stock",
  "links": [],
- "modified": "2026-07-30 15:33:55.697320",
+ "modified": "2026-07-30 16:00:59.174158",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz Stock",
@@ -63,16 +63,11 @@
    "type": "Page"
   },
   {
-   "doc_view": "List",
-   "label": "Item",
-   "link_to": "Item",
-   "type": "DocType"
-  },
-  {
-   "doc_view": "List",
-   "label": "Stock Entry",
-   "link_to": "Stock Entry",
-   "type": "DocType"
+   "color": "Blue",
+   "doc_view": "",
+   "label": "Analytics Hub",
+   "link_to": "ib-analytics-hub",
+   "type": "Page"
   },
   {
    "color": "Blue",

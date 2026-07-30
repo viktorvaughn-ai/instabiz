@@ -13,12 +13,14 @@ def get_context(context):
 
 _PRIVILEGED_ANALYTICS_ROLES = {"System Manager", "Sales Manager", "Accounts Manager", "Factory Management"}
 # Per-tab additions on top of the base set above — HR Manager/HR User run
-# company HR ops, so they need the privileged (company-wide) view on the HR
-# tab specifically, same as Factory Management does for Production and
-# Accounts Manager does for Finance. They stay non-privileged (scoped to
-# their own work) on every other tab, same as any other non-privileged role.
+# company HR ops and Stock Manager runs company stock, so they need the
+# privileged (company-wide) view on their own tab specifically, same as
+# Factory Management does for Production and Accounts Manager does for
+# Finance. They stay non-privileged (scoped to their own work) on every
+# other tab, same as any other non-privileged role.
 _TAB_EXTRA_PRIVILEGED_ROLES = {
 	"hr": {"HR Manager", "HR User"},
+	"inventory": {"Stock Manager"},
 }
 
 
