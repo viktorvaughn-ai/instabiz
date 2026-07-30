@@ -15,6 +15,12 @@ frappe.query_reports["IB SKU Report"] = {
 			reqd: 1,
 		},
 		{
+			fieldname: "customer",
+			label: __("Customer"),
+			fieldtype: "Link",
+			options: "Customer",
+		},
+		{
 			fieldname: "territory",
 			label: __("Territory"),
 			fieldtype: "Link",
@@ -25,6 +31,12 @@ frappe.query_reports["IB SKU Report"] = {
 			label: __("Item Group"),
 			fieldtype: "Link",
 			options: "Item Group",
+		},
+		{
+			fieldname: "sales_person_user",
+			label: __("Sales Person"),
+			fieldtype: "Link",
+			options: "User",
 		},
 		{
 			fieldname: "chart_type",

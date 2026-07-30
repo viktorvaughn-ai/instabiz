@@ -26,13 +26,17 @@ def _columns():
 
 
 def _data(filters):
-	from_date  = filters.get("from_date")
-	to_date    = filters.get("to_date")
-	territory  = filters.get("territory")
-	item_group = filters.get("item_group")
+	from_date    = filters.get("from_date")
+	to_date      = filters.get("to_date")
+	territory    = filters.get("territory")
+	item_group   = filters.get("item_group")
+	customer     = filters.get("customer")
+	sales_person = filters.get("sales_person_user")
 
-	terr_cond = "AND so.territory = %(territory)s" if territory else ""
-	ig_cond   = "AND i.item_group = %(item_group)s" if item_group else ""
+	terr_cond = "AND so.territory = %(territory)s"                        if territory    else ""
+	ig_cond   = "AND i.item_group = %(item_group)s"                       if item_group   else ""
+	cust_cond = "AND so.customer = %(customer)s"                          if customer     else ""
+	sp_cond   = "AND so.custom_sales_person_user = %(sales_person_user)s" if sales_person  else ""
 
 	rows = frappe.db.sql(
 		f"""
@@ -50,12 +54,13 @@ def _data(filters):
 		INNER JOIN `tabItem` i ON i.name = soi.item_code
 		WHERE so.docstatus = 1
 		AND so.transaction_date BETWEEN %(from_date)s AND %(to_date)s
-		{terr_cond} {ig_cond}
+		{terr_cond} {ig_cond} {cust_cond} {sp_cond}
 		GROUP BY soi.item_code
 		ORDER BY revenue DESC
 		""",
 		{"from_date": from_date, "to_date": to_date,
-		 "territory": territory, "item_group": item_group},
+		 "territory": territory, "item_group": item_group,
+		 "customer": customer, "sales_person_user": sales_person},
 		as_dict=True,
 	)
 
