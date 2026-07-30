@@ -83,8 +83,19 @@ class IBDPRPage {
 		if (this.$btn_weekly) this.$btn_weekly.toggleClass("btn-primary", this._mode === "weekly").toggleClass("btn-default", this._mode !== "weekly");
 	}
 
+	// DPR's date picker can be set to any past day — flag it clearly so a
+	// stale/old report isn't mistaken for today's production numbers.
+	_is_historical() {
+		return this._date !== frappe.datetime.get_today();
+	}
+
 	_set_refresh_label(text) {
-		if (this.$refresh_label) this.$refresh_label.text(text);
+		if (!this.$refresh_label) return;
+		const hist = this._is_historical();
+		const label = hist
+			? `Viewing historical data for ${frappe.datetime.str_to_user(this._date)} — ${text}`
+			: text;
+		this.$refresh_label.text(label).toggleClass("ib-dpr-refresh-time--hist", hist);
 	}
 
 	// ── Layout ────────────────────────────────────────────────────────────────
@@ -452,6 +463,7 @@ class IBDPRPage {
 			}
 			.ib-dpr-empty { text-align: center; padding: 32px; color: var(--text-muted, #6b7280); font-size: 13px; }
 			.ib-dpr-refresh-time { font-size: 11px; color: var(--text-muted, #6b7280); margin-right: 8px; }
+			.ib-dpr-refresh-time--hist { color: #b45309; font-weight: 600; }
 			.btn-primary.ib-dpr-toggle  { background: #d97757; border-color: #d97757; color: #fff; }
 			.btn-default.ib-dpr-toggle  { background: var(--card-bg, #fff); color: var(--text-color, #333); }
 

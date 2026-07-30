@@ -97,6 +97,7 @@ class IBHrmsDashboard {
 .ib-hr-stat-val { font-weight: 600; color: var(--heading-color); }
 .ib-hr-top-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
 .ib-hr-ts { font-size: 11px; color: var(--text-muted); margin-left: auto; }
+.ib-hr-ts--hist { color: #b45309; font-weight: 600; }
 .ib-hr-filter-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
 .ib-hr-search { flex: 0 1 220px; padding: 5px 10px; border: 1px solid var(--border-color);
   border-radius: 6px; font-size: 12px; background: var(--input-bg, #fff); color: var(--text-color); }
@@ -155,6 +156,26 @@ class IBHrmsDashboard {
 		this.page.add_button(__("New Leave"), () => frappe.new_doc("Leave Application"));
 	}
 
+	// Selected month field is a full date (always day 1) — used both to query
+	// the month and to detect whether the user is looking at a past/future
+	// month vs. the live current one (the "Present/Absent Today" KPI cards
+	// always reflect real today regardless of this filter, which can read as
+	// contradictory when the rest of the page is showing an old month).
+	_is_historical_month() {
+		const cur_month = frappe.datetime.get_today().slice(0, 7) + "-01";
+		return this._month !== cur_month;
+	}
+
+	_month_label() {
+		return frappe.datetime.str_to_obj(this._month).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+	}
+
+	_set_ts(text) {
+		const hist = this._is_historical_month();
+		const label = hist ? `Viewing historical data for ${this._month_label()} — ${text}` : text;
+		this.$wrap.find("#ib-hr-ts").text(label).toggleClass("ib-hr-ts--hist", hist);
+	}
+
 	refresh() {
 		const req_month = this._month;
 		const opts = ib_guarded_call(this, {
@@ -171,15 +192,15 @@ class IBHrmsDashboard {
 				this._data = r.message;
 				this._render_kpis(r.message);
 				this._render_tab();
-				this.$wrap.find("#ib-hr-ts").text("Updated " + frappe.datetime.now_time());
+				this._set_ts("Updated " + frappe.datetime.now_time());
 				ib_countup_all && ib_countup_all(this.$wrap);
 			},
 			error: () => {
-				if (this._month === req_month) this.$wrap.find("#ib-hr-ts").text("Error — click Refresh");
+				if (this._month === req_month) this._set_ts("Error — click Refresh");
 			},
 		});
 		if (opts) {
-			this.$wrap.find("#ib-hr-ts").text("Loading…");
+			this._set_ts("Loading…");
 			this.$wrap.find("#ib-hr-kpis").html(window.ib_skel_kpis ? ib_skel_kpis(4) : "");
 			frappe.call(opts);
 		}
