@@ -84,11 +84,11 @@ class IbStockLedger {
 			change:    () => { if (!this._restoring) this._reset_and_refresh(); },
 		});
 
-		this.f_uom = this.page.add_field({
-			fieldname: "uom",
-			label:     __("UOM"),
-			fieldtype: "Select",
-			options:   "\nSQMT\nPCS\nKG",
+		this.f_customer = this.page.add_field({
+			fieldname: "customer",
+			label:     __("Customer"),
+			fieldtype: "Link",
+			options:   "Customer",
 			change:    () => { if (!this._restoring) this._reset_and_refresh(); },
 		});
 
@@ -96,6 +96,7 @@ class IbStockLedger {
 			fieldname: "from_date",
 			label:     __("From"),
 			fieldtype: "Date",
+			default:   frappe.datetime.add_days(frappe.datetime.get_today(), -30),
 			change:    () => { if (!this._restoring) this._reset_and_refresh(); },
 		});
 
@@ -103,6 +104,7 @@ class IbStockLedger {
 			fieldname: "to_date",
 			label:     __("To"),
 			fieldtype: "Date",
+			default:   frappe.datetime.get_today(),
 			change:    () => { if (!this._restoring) this._reset_and_refresh(); },
 		});
 
@@ -283,7 +285,7 @@ class IbStockLedger {
 				from_date:    from_date                    || null,
 				to_date:      to_date                      || null,
 				voucher_type: this.f_vtype.get_value()     || null,
-				uom:          this.f_uom.get_value()       || null,
+				customer:     this.f_customer.get_value()  || null,
 				limit:        this._page_size,
 				offset,
 			},
@@ -502,9 +504,9 @@ class IbStockLedger {
 		if (wh) chips.push({ label: wh.split(" - ")[0], type: "wh",
 			clear: _server_clear(() => this.f_warehouse.set_value("")) });
 
-		const uom = this.f_uom.get_value();
-		if (uom) chips.push({ label: uom, type: `uom-${uom.toLowerCase()}`,
-			clear: _server_clear(() => this.f_uom.set_value("")) });
+		const customer = this.f_customer.get_value();
+		if (customer) chips.push({ label: customer, type: "customer",
+			clear: _server_clear(() => this.f_customer.set_value("")) });
 
 		const vtype = this.f_vtype.get_value();
 		if (vtype) chips.push({ label: vtype, type: "vtype",
@@ -654,7 +656,7 @@ class IbStockLedger {
 				from_date:    from_date                    || null,
 				to_date:      to_date                      || null,
 				voucher_type: this.f_vtype.get_value()     || null,
-				uom:          this.f_uom.get_value()       || null,
+				customer:     this.f_customer.get_value()  || null,
 				limit:        100000,
 				offset:       0,
 			},
@@ -703,7 +705,7 @@ class IbStockLedger {
 			localStorage.setItem(this._STORAGE_KEY, JSON.stringify({
 				item_code:    this.f_item.get_value()      || "",
 				warehouse:    this.f_warehouse.get_value() || "",
-				uom:          this.f_uom.get_value()       || "",
+				customer:     this.f_customer.get_value()  || "",
 				from_date:    this.f_from.get_value()      || "",
 				to_date:      this.f_to.get_value()        || "",
 				voucher_type: this.f_vtype.get_value()     || "",
@@ -723,7 +725,7 @@ class IbStockLedger {
 			this._restoring = true;
 			if (saved.item_code)    this.f_item.set_value(saved.item_code);
 			if (saved.warehouse)    this.f_warehouse.set_value(saved.warehouse);
-			if (saved.uom)          this.f_uom.set_value(saved.uom);
+			if (saved.customer)     this.f_customer.set_value(saved.customer);
 			if (saved.from_date)    this.f_from.set_value(saved.from_date);
 			if (saved.to_date)      this.f_to.set_value(saved.to_date);
 			if (saved.voucher_type) this.f_vtype.set_value(saved.voucher_type);
@@ -738,7 +740,7 @@ class IbStockLedger {
 		this._restoring = true;
 		this.f_item.set_value("");
 		this.f_warehouse.set_value("");
-		this.f_uom.set_value("");
+		this.f_customer.set_value("");
 		this.f_from.set_value("");
 		this.f_to.set_value("");
 		this.f_vtype.set_value("");

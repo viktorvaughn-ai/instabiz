@@ -32,7 +32,7 @@ _VTYPE_SHORT = {
 
 @frappe.whitelist()
 def get_ledger(item_code=None, warehouse=None, from_date=None, to_date=None,
-               voucher_type=None, uom=None, limit=50, offset=0):
+               voucher_type=None, customer=None, limit=50, offset=0):
 	limit  = int(limit)
 	offset = int(offset)
 
@@ -56,9 +56,13 @@ def get_ledger(item_code=None, warehouse=None, from_date=None, to_date=None,
 		conditions.append("sle.voucher_type = %(voucher_type)s")
 		params["voucher_type"] = voucher_type
 
-	if uom:
-		conditions.append("sle.stock_uom = %(uom)s")
-		params["uom"] = uom
+	if customer:
+		# Stock Ledger Entry has no direct customer field — resolve via the
+		# voucher (Delivery Note / Sales Invoice / Sales Order all carry `customer`).
+		# voucher_type is mutually exclusive per row, so at most one join matches
+		# — no row fan-out.
+		conditions.append("COALESCE(dn.customer, si.customer, so.customer) = %(customer)s")
+		params["customer"] = customer
 
 	where = " AND ".join(conditions)
 
@@ -86,6 +90,9 @@ def get_ledger(item_code=None, warehouse=None, from_date=None, to_date=None,
 			sle.voucher_no
 		FROM `tabStock Ledger Entry` sle
 		INNER JOIN `tabItem` i ON i.name = sle.item_code
+		LEFT JOIN `tabDelivery Note` dn ON sle.voucher_type = 'Delivery Note' AND sle.voucher_no = dn.name
+		LEFT JOIN `tabSales Invoice` si ON sle.voucher_type = 'Sales Invoice' AND sle.voucher_no = si.name
+		LEFT JOIN `tabSales Order` so ON sle.voucher_type = 'Sales Order' AND sle.voucher_no = so.name
 		WHERE {where}
 		ORDER BY sle.posting_datetime DESC, sle.creation DESC
 		LIMIT %(limit)s OFFSET %(offset)s
@@ -98,6 +105,9 @@ def get_ledger(item_code=None, warehouse=None, from_date=None, to_date=None,
 			COALESCE(SUM(CASE WHEN sle.actual_qty < 0 THEN -sle.actual_qty  ELSE 0 END), 0) AS qty_out
 		FROM `tabStock Ledger Entry` sle
 		INNER JOIN `tabItem` i ON i.name = sle.item_code
+		LEFT JOIN `tabDelivery Note` dn ON sle.voucher_type = 'Delivery Note' AND sle.voucher_no = dn.name
+		LEFT JOIN `tabSales Invoice` si ON sle.voucher_type = 'Sales Invoice' AND sle.voucher_no = si.name
+		LEFT JOIN `tabSales Order` so ON sle.voucher_type = 'Sales Order' AND sle.voucher_no = so.name
 		WHERE {where}
 	""", params, as_dict=True)[0]
 
