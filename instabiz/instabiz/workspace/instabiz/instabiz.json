@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz",
  "links": [],
- "modified": "2026-07-30 15:32:22.083050",
+ "modified": "2026-07-30 15:50:55.853794",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz",
@@ -61,7 +61,6 @@
    "doc_view": "",
    "label": "Analytics Hub",
    "link_to": "ib-analytics-hub",
-   "restrict_to_role": "Sales Manager",
    "type": "Page"
   },
   {
