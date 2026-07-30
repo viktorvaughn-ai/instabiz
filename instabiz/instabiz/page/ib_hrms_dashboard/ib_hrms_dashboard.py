@@ -1,6 +1,8 @@
 import frappe
 from frappe.utils import nowdate, getdate, get_first_day, get_last_day, flt
 
+from instabiz.overrides.utils import build_multi_token_where_named
+
 
 def get_context(context):
 	context.no_cache = 1
@@ -8,8 +10,10 @@ def get_context(context):
 
 @frappe.whitelist()
 def get_hrms_data(month=None, att_search=None, att_status=None, leave_search=None,
-				   leave_status=None, pay_search=None, pay_status=None):
+				   leave_status=None, pay_search=None, pay_status=None,
+				   att_offset=0, leave_offset=0, pay_offset=0, page_size=20):
 	frappe.only_for(["HR Manager", "HR User", "Factory Management", "System Manager"])
+	att_offset, leave_offset, pay_offset, page_size = int(att_offset), int(leave_offset), int(pay_offset), int(page_size)
 	today = getdate(nowdate())
 	month_date = getdate(month) if month else today
 	month_start = get_first_day(month_date)
@@ -71,14 +75,20 @@ def get_hrms_data(month=None, att_search=None, att_status=None, leave_search=Non
 
 	# ── Attendance for month ──────────────────────────────────────────────────
 	try:
-		conditions = ["a.attendance_date >= %(month_start)s", "a.docstatus=1"]
-		params = {"month_start": month_start}
+		conditions = ["a.attendance_date BETWEEN %(month_start)s AND %(month_end)s", "a.docstatus=1"]
+		params = {"month_start": month_start, "month_end": month_end}
 		if att_status:
 			conditions.append("a.status = %(att_status)s")
 			params["att_status"] = att_status
-		if att_search:
-			conditions.append("(e.employee_name LIKE %(att_search)s OR a.employee LIKE %(att_search)s)")
-			params["att_search"] = f"%{att_search}%"
+		att_cond, att_extra = build_multi_token_where_named(["e.employee_name", "a.employee"], att_search, "att_tok")
+		if att_cond:
+			conditions.append(att_cond)
+			params.update(att_extra)
+		attendance_total = int(frappe.db.sql(f"""
+			SELECT COUNT(*) FROM `tabAttendance` a
+			LEFT JOIN `tabEmployee` e ON e.name=a.employee
+			WHERE {' AND '.join(conditions)}
+		""", params)[0][0])
 		attendance_list = frappe.db.sql(f"""
 			SELECT a.employee, e.employee_name, e.department, a.attendance_date,
 				   a.status, a.in_time, a.out_time
@@ -86,10 +96,10 @@ def get_hrms_data(month=None, att_search=None, att_status=None, leave_search=Non
 			LEFT JOIN `tabEmployee` e ON e.name=a.employee
 			WHERE {' AND '.join(conditions)}
 			ORDER BY a.attendance_date DESC, a.employee
-			LIMIT 200
-		""", params, as_dict=True)
+			LIMIT %(page_size)s OFFSET %(att_offset)s
+		""", {**params, "page_size": page_size, "att_offset": att_offset}, as_dict=True)
 	except Exception:
-		attendance_list = []
+		attendance_list, attendance_total = [], 0
 
 	# ── Leave applications ────────────────────────────────────────────────────
 	try:
@@ -100,9 +110,15 @@ def get_hrms_data(month=None, att_search=None, att_status=None, leave_search=Non
 			params["leave_status"] = leave_status
 		else:
 			conditions.append("la.status IN ('Open','Approved','Rejected')")
-		if leave_search:
-			conditions.append("(e.employee_name LIKE %(leave_search)s OR la.employee LIKE %(leave_search)s)")
-			params["leave_search"] = f"%{leave_search}%"
+		leave_cond, leave_extra = build_multi_token_where_named(["e.employee_name", "la.employee"], leave_search, "leave_tok")
+		if leave_cond:
+			conditions.append(leave_cond)
+			params.update(leave_extra)
+		leave_total = int(frappe.db.sql(f"""
+			SELECT COUNT(*) FROM `tabLeave Application` la
+			LEFT JOIN `tabEmployee` e ON e.name=la.employee
+			WHERE {' AND '.join(conditions)}
+		""", params)[0][0])
 		leave_list = frappe.db.sql(f"""
 			SELECT la.name, la.employee, e.employee_name,
 				   la.leave_type, la.from_date, la.to_date,
@@ -111,10 +127,10 @@ def get_hrms_data(month=None, att_search=None, att_status=None, leave_search=Non
 			LEFT JOIN `tabEmployee` e ON e.name=la.employee
 			WHERE {' AND '.join(conditions)}
 			ORDER BY la.from_date DESC
-			LIMIT 100
-		""", params, as_dict=True)
+			LIMIT %(page_size)s OFFSET %(leave_offset)s
+		""", {**params, "page_size": page_size, "leave_offset": leave_offset}, as_dict=True)
 	except Exception:
-		leave_list = []
+		leave_list, leave_total = [], 0
 
 	# ── Salary slips MTD ──────────────────────────────────────────────────────
 	try:
@@ -123,9 +139,30 @@ def get_hrms_data(month=None, att_search=None, att_status=None, leave_search=Non
 		if pay_status:
 			conditions.append("ss.docstatus = %(pay_docstatus)s")
 			params["pay_docstatus"] = 1 if pay_status == "Submitted" else 0
-		if pay_search:
-			conditions.append("(e.employee_name LIKE %(pay_search)s OR ss.employee LIKE %(pay_search)s)")
-			params["pay_search"] = f"%{pay_search}%"
+		pay_cond, pay_extra = build_multi_token_where_named(["e.employee_name", "ss.employee"], pay_search, "pay_tok")
+		if pay_cond:
+			conditions.append(pay_cond)
+			params.update(pay_extra)
+		pay_total = int(frappe.db.sql(f"""
+			SELECT COUNT(*) FROM `tabSalary Slip` ss
+			LEFT JOIN `tabEmployee` e ON e.name=ss.employee
+			WHERE {' AND '.join(conditions)}
+		""", params)[0][0])
+		# Submitted/draft summary must reflect the full filtered set, not just
+		# the current page — otherwise it flickers per-page once real
+		# pagination replaces the old "cap at 100, sum in JS" approach.
+		pay_summary_row = frappe.db.sql(f"""
+			SELECT
+				SUM(CASE WHEN ss.docstatus=1 THEN 1 ELSE 0 END) AS submitted_count,
+				SUM(CASE WHEN ss.docstatus=0 THEN 1 ELSE 0 END) AS draft_count,
+				COALESCE(SUM(CASE WHEN ss.docstatus=1 THEN ss.net_pay ELSE 0 END), 0) AS submitted_net_total
+			FROM `tabSalary Slip` ss
+			LEFT JOIN `tabEmployee` e ON e.name=ss.employee
+			WHERE {' AND '.join(conditions)}
+		""", params, as_dict=True)[0]
+		pay_submitted_count = int(pay_summary_row.submitted_count or 0)
+		pay_draft_count = int(pay_summary_row.draft_count or 0)
+		pay_submitted_net_total = flt(pay_summary_row.submitted_net_total)
 		salary_slips = frappe.db.sql(f"""
 			SELECT ss.name, ss.employee, e.employee_name,
 				   ss.gross_pay, ss.total_deduction, ss.net_pay, ss.start_date,
@@ -134,10 +171,12 @@ def get_hrms_data(month=None, att_search=None, att_status=None, leave_search=Non
 			LEFT JOIN `tabEmployee` e ON e.name=ss.employee
 			WHERE {' AND '.join(conditions)}
 			ORDER BY ss.net_pay DESC
-			LIMIT 100
-		""", params, as_dict=True)
+			LIMIT %(page_size)s OFFSET %(pay_offset)s
+		""", {**params, "page_size": page_size, "pay_offset": pay_offset}, as_dict=True)
 	except Exception:
-		salary_slips = []
+		salary_slips, pay_total = [], 0
+		pay_submitted_count = pay_draft_count = 0
+		pay_submitted_net_total = 0
 
 	return {
 		"total_emp": int(total_emp),
@@ -149,8 +188,14 @@ def get_hrms_data(month=None, att_search=None, att_status=None, leave_search=Non
 		"payroll_submitted_count": payroll_submitted_count,
 		"payroll_is_draft": payroll_is_draft,
 		"attendance": attendance_list,
+		"attendance_total": attendance_total,
 		"leaves": leave_list,
+		"leave_total": leave_total,
 		"salary_slips": salary_slips,
+		"pay_total": pay_total,
+		"pay_submitted_count": pay_submitted_count,
+		"pay_draft_count": pay_draft_count,
+		"pay_submitted_net_total": pay_submitted_net_total,
 	}
 
 

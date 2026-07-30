@@ -159,7 +159,13 @@ class IBHrmsDashboard {
 		const req_month = this._month;
 		const opts = ib_guarded_call(this, {
 			method: "instabiz.instabiz.page.ib_hrms_dashboard.ib_hrms_dashboard.get_hrms_data",
-			args: { month: req_month, ...this._filters },
+			args: {
+				month: req_month, ...this._filters,
+				att_offset: (this._page.att - 1) * this._page_size,
+				leave_offset: (this._page.leave - 1) * this._page_size,
+				pay_offset: (this._page.pay - 1) * this._page_size,
+				page_size: this._page_size,
+			},
 			callback: (r) => {
 				if (!r.message || this._month !== req_month) return;
 				this._data = r.message;
@@ -273,12 +279,14 @@ class IBHrmsDashboard {
 		}
 	}
 
-	// Slices `rows` to the current page for `prefix`; returns { page_rows, total_pages }
-	_paginate(rows, prefix) {
-		const total_pages = Math.max(1, Math.ceil(rows.length / this._page_size));
+	// `rows` already arrives as exactly one page from the server (LIMIT/OFFSET
+	// there, not here) — `total` is the real unbounded count for that tab's
+	// filters, so page count reflects what's actually in the DB, not just
+	// what happened to be in a hard-capped batch.
+	_paginate(rows, prefix, total) {
+		const total_pages = Math.max(1, Math.ceil((total || 0) / this._page_size));
 		if (this._page[prefix] > total_pages) this._page[prefix] = total_pages;
-		const start = (this._page[prefix] - 1) * this._page_size;
-		return { page_rows: rows.slice(start, start + this._page_size), total_pages };
+		return { page_rows: rows, total_pages };
 	}
 
 	_pagination_html(prefix, total_pages) {
@@ -294,10 +302,10 @@ class IBHrmsDashboard {
 
 	_bind_pagination(prefix) {
 		this.$wrap.find(`.ib-hr-page-prev[data-prefix="${prefix}"]`).on("click", () => {
-			if (this._page[prefix] > 1) { this._page[prefix]--; this._render_tab(); }
+			if (this._page[prefix] > 1) { this._page[prefix]--; this.refresh(); }
 		});
 		this.$wrap.find(`.ib-hr-page-next[data-prefix="${prefix}"]`).on("click", () => {
-			this._page[prefix]++; this._render_tab();
+			this._page[prefix]++; this.refresh();
 		});
 	}
 
@@ -309,8 +317,9 @@ class IBHrmsDashboard {
 			return `<span class="ib-hr-status-badge ib-hr-status-${cls}">${s}</span>`;
 		};
 
-		let html = this._filter_bar_html("att", "Search employee…", ["Present", "Absent", "Half Day", "On Leave"], rows.length);
-		const { page_rows, total_pages } = this._paginate(rows, "att");
+		const total = this._data.attendance_total || 0;
+		let html = this._filter_bar_html("att", "Search employee…", ["Present", "Absent", "Half Day", "On Leave"], total);
+		const { page_rows, total_pages } = this._paginate(rows, "att", total);
 
 		if (!rows.length) {
 			html += `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">No matching attendance records</div>`;
@@ -346,8 +355,9 @@ class IBHrmsDashboard {
 		};
 		const is_mgr = frappe.user.has_role("HR Manager") || frappe.user.has_role("System Manager");
 
-		let html = this._filter_bar_html("leave", "Search employee…", ["Open", "Approved", "Rejected"], rows.length);
-		const { page_rows, total_pages } = this._paginate(rows, "leave");
+		const total = this._data.leave_total || 0;
+		let html = this._filter_bar_html("leave", "Search employee…", ["Open", "Approved", "Rejected"], total);
+		const { page_rows, total_pages } = this._paginate(rows, "leave", total);
 		if (!rows.length) {
 			html += `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">No matching leave applications</div>`;
 		} else {
@@ -355,7 +365,7 @@ class IBHrmsDashboard {
 				<thead><tr><th>Employee</th><th>Leave Type</th><th>From</th><th>To</th><th>Days</th><th>Status</th>${is_mgr ? "<th>Actions</th>" : ""}</tr></thead>
 				<tbody>${page_rows.map(r => `
 					<tr data-leave="${frappe.utils.escape_html(r.name)}">
-						<td>${frappe.utils.escape_html(r.employee_name || r.employee || "")}</td>
+						<td><a href="#" class="ib-hr-leave-link" data-leave="${frappe.utils.escape_html(r.name)}">${frappe.utils.escape_html(r.employee_name || r.employee || "")}</a></td>
 						<td>${frappe.utils.escape_html(r.leave_type || "")}</td>
 						<td>${frappe.datetime.str_to_user(r.from_date) || r.from_date}</td>
 						<td>${frappe.datetime.str_to_user(r.to_date) || r.to_date}</td>
@@ -371,6 +381,10 @@ class IBHrmsDashboard {
 			html += this._pagination_html("leave", total_pages);
 		}
 		this.$wrap.find("#ib-hr-content").html(html);
+		this.$wrap.find(".ib-hr-leave-link").on("click", function (e) {
+			e.preventDefault();
+			frappe.set_route("Form", "Leave Application", $(this).data("leave"));
+		});
 
 		if (is_mgr) {
 			this.$wrap.find(".ib-hr-approve-btn").on("click", (e) => {
@@ -413,19 +427,24 @@ class IBHrmsDashboard {
 	_render_payroll() {
 		const slips = this._data.salary_slips || [];
 		const fmt = (v) => "₹" + Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
-		const submitted = slips.filter(r => r.slip_status === "Submitted");
-		const drafts    = slips.filter(r => r.slip_status !== "Submitted");
-		const total = submitted.reduce((s, r) => s + (r.net_pay || 0), 0);
 		const month_start = this._month;
 		const is_mgr = frappe.user.has_role("HR Manager") || frappe.user.has_role("System Manager");
+
+		// Real totals across the whole filtered set (server-aggregated) — slips
+		// here is just the current page, so these can't be derived from it once
+		// pagination is real instead of "cap at 100, sum in JS".
+		const total_records = this._data.pay_total || 0;
+		const submitted_count = this._data.pay_submitted_count || 0;
+		const draft_count = this._data.pay_draft_count || 0;
+		const submitted_net_total = this._data.pay_submitted_net_total || 0;
 
 		const mgr_btns = is_mgr ? `
 			<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
 				<button class="btn btn-sm btn-default ib-hr-gen-slips">⚙ Generate Payroll (All)</button>
 				<button class="btn btn-sm btn-default ib-hr-gen-single">+ Generate Slip for Employee</button>
-				${drafts.length ? `<button class="btn btn-sm btn-primary ib-hr-submit-all">✓ Submit All Drafts (${drafts.length})</button>` : ""}
+				${draft_count ? `<button class="btn btn-sm btn-primary ib-hr-submit-all">✓ Submit All Drafts (${draft_count})</button>` : ""}
 			</div>` : "";
-		const filter_bar = this._filter_bar_html("pay", "Search employee…", ["Draft", "Submitted"], slips.length);
+		const filter_bar = this._filter_bar_html("pay", "Search employee…", ["Draft", "Submitted"], total_records);
 
 		if (!slips.length) {
 			this.$wrap.find("#ib-hr-content").html(`
@@ -434,17 +453,17 @@ class IBHrmsDashboard {
 				<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">
 					No matching salary slips for this month.
 				</div>`);
-			this._bind_payroll_btns(month_start, drafts.length);
+			this._bind_payroll_btns(month_start, draft_count);
 			this._bind_filter_bar("pay");
 			return;
 		}
-		const draftInfo = drafts.length ? ` &nbsp;·&nbsp; <span style="color:#f59e0b;font-weight:500">${drafts.length} draft${drafts.length > 1 ? "s" : ""} pending submit</span>` : "";
-		const { page_rows, total_pages } = this._paginate(slips, "pay");
+		const draftInfo = draft_count ? ` &nbsp;·&nbsp; <span style="color:#f59e0b;font-weight:500">${draft_count} draft${draft_count > 1 ? "s" : ""} pending submit</span>` : "";
+		const { page_rows, total_pages } = this._paginate(slips, "pay", total_records);
 		this.$wrap.find("#ib-hr-content").html(`
 			${mgr_btns}
 			${filter_bar}
 			<div style="margin-bottom:10px;font-size:13px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-				<span><strong>${submitted.length}</strong> submitted · Net Pay: <strong style="color:var(--ib-primary)">${fmt(total)}</strong>${draftInfo}</span>
+				<span><strong>${submitted_count}</strong> submitted · Net Pay: <strong style="color:var(--ib-primary)">${fmt(submitted_net_total)}</strong>${draftInfo}</span>
 				<a href="#" class="ib-hr-view-all-slips" style="margin-left:auto;font-size:11px;color:var(--ib-primary)">View all in list →</a>
 			</div>
 			<table class="ib-hr-table">
@@ -471,7 +490,7 @@ class IBHrmsDashboard {
 			frappe.route_options = { start_date: month_start };
 			frappe.set_route("List", "Salary Slip");
 		});
-		this._bind_payroll_btns(month_start, drafts.length);
+		this._bind_payroll_btns(month_start, draft_count);
 		this._bind_filter_bar("pay");
 		this._bind_pagination("pay");
 	}
