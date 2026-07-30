@@ -1,0 +1,104 @@
+{% macro fd(d) %}{% if d %}{{ frappe.utils.formatdate(d, "dd-MMM-yyyy") }}{% endif %}{% endmacro %}
+{% macro fm(v) %}{{ frappe.utils.fmt_money(v|float, precision=2, currency=doc.currency) }}{% endmacro %}
+
+<style>
+  body    { font-family: Arial, sans-serif; font-size: 11px; color: #000; margin: 0; }
+  table   { width: 100%; border-collapse: collapse; }
+  td, th  { padding: 4px 6px; vertical-align: top; }
+  strong  { font-weight: bold; }
+
+  .box    { border: 1.5px solid #000; margin-bottom: 2px; }
+  .bb     { border-bottom: 1px solid #000; }
+  .bt     { border-top: 1px solid #000; }
+  .br     { border-right: 1px solid #000; }
+
+  .ta-r   { text-align: right; }
+  .ta-c   { text-align: center; }
+  .lbl    { color: #444; font-size: 10px; }
+
+  .sh     { font-weight: bold; padding: 4px 6px; background: #f2f2f2;
+            border-top: 1px solid #000; border-bottom: 1px solid #000; }
+
+  .gross-pay-box {
+    background: #eef7f2; border: 1.5px solid #1a7a4c; padding: 8px;
+    text-align: center; font-size: 15px; font-weight: bold; color: #1a7a4c;
+  }
+</style>
+
+<div class="box">
+
+  {# ── Letter Head ──────────────────────────────────────────────────────────── #}
+  <div class="bb" style="padding:4px 6px; text-align:center">
+    <img src="/files/Instabiz_LH_v2.png" style="width:58px; height:auto; max-height:50px; object-fit:contain">
+  </div>
+
+  {# ── Title bar ────────────────────────────────────────────────────────────── #}
+  <div class="bb" style="text-align:center; padding:4px 6px">
+    <strong style="font-size:14px">PAYSLIP</strong><br>
+    <span class="lbl">For the period {{ fd(doc.start_date) }} to {{ fd(doc.end_date) }}</span>
+  </div>
+
+  {# ── Employee info ────────────────────────────────────────────────────────── #}
+  <table class="bb">
+    <tr>
+      <td class="br lbl" style="width:20%">Employee ID</td>
+      <td class="br" style="width:30%"><strong>{{ doc.employee }}</strong></td>
+      <td class="br lbl" style="width:20%">Employee Name</td>
+      <td style="width:30%"><strong>{{ doc.employee_name }}</strong></td>
+    </tr>
+    <tr class="bt">
+      <td class="br lbl">Designation</td>
+      <td class="br">{{ doc.designation or "—" }}</td>
+      <td class="br lbl">Department</td>
+      <td>{{ doc.department or "—" }}</td>
+    </tr>
+  </table>
+
+  {# ── Earnings / Deductions ────────────────────────────────────────────────── #}
+  <table class="bb">
+    <tr>
+      <td class="br" style="width:50%; padding:0; vertical-align:top">
+        <div class="sh">EARNINGS</div>
+        <table>
+          <tr class="bb"><td class="lbl">Component</td><td class="lbl ta-r">Amount</td></tr>
+          {% for row in doc.earnings %}
+          <tr><td>{{ row.salary_component }}</td><td class="ta-r">{{ fm(row.amount) }}</td></tr>
+          {% endfor %}
+        </table>
+      </td>
+      <td style="width:50%; padding:0; vertical-align:top">
+        <div class="sh">DEDUCTIONS</div>
+        <table>
+          <tr class="bb"><td class="lbl">Component</td><td class="lbl ta-r">Amount</td></tr>
+          {% for row in doc.deductions %}
+          <tr><td>{{ row.salary_component }}</td><td class="ta-r">{{ fm(row.amount) }}</td></tr>
+          {% endfor %}
+          {% if not doc.deductions %}
+          <tr><td colspan="2" class="lbl">No deductions</td></tr>
+          {% endif %}
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  {# ── Gross Pay ─────────────────────────────────────────────────────────────── #}
+  <div class="gross-pay-box">
+    GROSS PAY : {{ fm(doc.gross_pay) }}
+  </div>
+
+  {# ── Stamp / signature ────────────────────────────────────────────────────── #}
+  <table style="margin-top:18px">
+    <tr>
+      <td style="width:60%" class="lbl">
+        This is a computer-generated payslip and does not require a signature.
+      </td>
+      <td style="width:40%; text-align:right">
+        <img src="/files/IB_Stamp.jpeg" style="height:55px; width:auto; display:inline-block">
+        <div class="bt" style="padding-top:4px; text-align:center">
+          Authorized Signatory
+        </div>
+      </td>
+    </tr>
+  </table>
+
+</div>

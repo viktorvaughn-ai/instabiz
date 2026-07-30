@@ -44,7 +44,20 @@
   .lbl   { color: #555; font-size: 10px; }
   .italic{ font-style: italic; }
   .rej   { color: #c0392b; font-weight: bold; }
+  .watermark { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+               display: flex; align-items: center; justify-content: center;
+               pointer-events: none; z-index: 99999; overflow: hidden; }
+  .watermark span { display: block; font-size: 110px; font-weight: 900;
+                    color: rgba(211,47,47,.15); letter-spacing: 10px;
+                    text-transform: uppercase; white-space: nowrap;
+                    transform: rotate(-40deg); font-family: Arial, sans-serif;
+                    border: 12px solid rgba(211,47,47,.12);
+                    padding: 10px 30px; border-radius: 8px; }
 </style>
+
+{% if doc.docstatus == 2 %}
+<div class="watermark"><span>CANCELLED</span></div>
+{% endif %}
 
 <div class="box">
 
@@ -57,10 +70,8 @@
   <table class="bb">
     <tr>
       <td class="br" style="width:55%">
-        {% if co.company_logo %}
-        <img src="{{ co.company_logo }}" style="height:40px; float:left; margin-right:8px; margin-bottom:4px">
-        {% endif %}
-        <strong>{{ doc.company }}</strong><br>
+        <img src="/files/Instabiz_LH_v2.png" style="width:58px; height:auto; max-height:50px; object-fit:contain; float:left; margin-right:8px; margin-bottom:4px">
+        <strong>{{ doc.company | upper }}</strong><br>
         {% if co_addr %}
           {{ co_addr.address_line1 or "" }}{% if co_addr.address_line2 %}, {{ co_addr.address_line2 }}{% endif %}<br>
           {% if co_addr.city %}{{ co_addr.city }}{% endif %}{% if co_addr.pincode %} {{ co_addr.pincode }}{% endif %}<br>
@@ -254,9 +265,12 @@
       <td style="width:25%; text-align:center; padding:30px 6px 4px; border-left:1px solid #000">
         <strong>Checked By</strong>
       </td>
-      <td style="text-align:right; padding:30px 6px 4px; border-left:1px solid #000">
-        <strong>for {{ doc.company }}</strong><br><br>
-        <strong>Authorised Signatory</strong>
+      <td style="text-align:right; padding:6px; border-left:1px solid #000">
+        <div><strong>for {{ doc.company | upper }}</strong></div>
+        <div style="text-align:right; margin-top:4px">
+          <img src="/files/IB_Stamp.jpeg" style="height:55px; width:auto; display:inline-block">
+        </div>
+        <div style="margin-top:6px"><strong>Authorised Signatory</strong></div>
       </td>
     </tr>
   </table>
