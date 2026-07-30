@@ -849,23 +849,26 @@ class IBProductionStages {
 						${["All", "Urgent", "High", "Normal", "Low"].map((p) => `<option value="${p}" ${p === this.os_priority_filter ? "selected" : ""}>${p}</option>`).join("")}
 					</select>
 				</div>
-				<button class="ib-ps-btn-primary btn btn-primary btn-sm" id="ib-new-os-btn">+ New Order Sheet</button>
+				<button class="ib-ps-btn-primary btn btn-primary btn-sm" id="ib-new-os-btn">+ Start Production</button>
 			</div>`;
 
 		let table_html = "";
 		let pager_html = "";
 		if (!rows.length) {
-			table_html = '<div class="ib-ps-empty">No order sheets found.</div>';
+			table_html = '<div class="ib-ps-empty">No production started yet.</div>';
 		} else {
 			const rows_html = pageRows.map((os) => {
 				const pm = IB_PRIORITY_META[os.priority] || IB_PRIORITY_META["Normal"];
 				const pct = os.progress_pct || 0;
+				// Sales Order is the only identifier shown — the underlying Order
+				// Sheet id (os.name) still drives the detail-view click via the row
+				// and View button's data-os, it's just never displayed as its own
+				// column so it can't be confused with a Work Order number.
 				const so_cell = os.sales_order
 					? `<a class="ib-ps-os-link" data-so="${frappe.utils.escape_html(os.sales_order)}">${frappe.utils.escape_html(os.sales_order)}</a>`
 					: `<span style="color:var(--text-muted)">—</span>`;
 				return `
 					<tr class="ib-ps-os-row" data-os="${frappe.utils.escape_html(os.name)}">
-						<td><a class="ib-ps-os-link" data-os="${frappe.utils.escape_html(os.name)}">${frappe.utils.escape_html(os.name)}</a></td>
 						<td>${so_cell}</td>
 						<td>${frappe.utils.escape_html(os.customer_name || os.customer || "")}</td>
 						<td style="text-align:center">${os.item_count || 0}</td>
@@ -888,7 +891,7 @@ class IBProductionStages {
 					<table class="ib-ps-table">
 						<thead>
 							<tr>
-								<th>OS#</th><th>Sales Order</th><th>Customer</th><th style="text-align:center">Items</th><th>Progress</th><th>Priority</th><th>Status</th><th>Actions</th>
+								<th>Sales Order</th><th>Customer</th><th style="text-align:center">Items</th><th>Progress</th><th>Priority</th><th>Status</th><th>Actions</th>
 							</tr>
 						</thead>
 						<tbody>${rows_html}</tbody>
@@ -971,15 +974,14 @@ class IBProductionStages {
 		const pm = IB_PRIORITY_META[os.priority] || IB_PRIORITY_META["Normal"];
 
 		const so_link = os.sales_order
-			? `<a class="ib-ps-os-link" style="font-size:12px;cursor:pointer" data-so-nav="${frappe.utils.escape_html(os.sales_order)}">${frappe.utils.escape_html(os.sales_order)}</a>`
-			: `<span style="color:var(--text-muted);font-size:12px">No SO</span>`;
+			? `<a class="ib-ps-os-link" style="cursor:pointer" data-so-nav="${frappe.utils.escape_html(os.sales_order)}">${frappe.utils.escape_html(os.sales_order)}</a>`
+			: `<span style="color:var(--text-muted)">No SO</span>`;
 		const date_fmt = (d) => d ? frappe.datetime.str_to_user(d) : "—";
 		const header = `
 			<div class="ib-ps-detail-header">
 				<button class="ib-ps-back-btn" id="ib-os-back">← Back</button>
 				<div class="ib-ps-detail-meta">
-					<span class="ib-ps-detail-name">${frappe.utils.escape_html(os.name || "")}</span>
-					<span style="font-size:12px;color:var(--text-muted)">SO:</span>${so_link}
+					<span class="ib-ps-detail-name">${so_link}</span>
 					<span class="ib-ps-detail-customer">${frappe.utils.escape_html(os.customer || "")}</span>
 					<span style="font-size:11px;color:var(--text-muted)">Order: ${date_fmt(os.order_date)}</span>
 					${os.delivery_date ? `<span style="font-size:11px;color:#dc2626">Deliver: ${date_fmt(os.delivery_date)}</span>` : ""}
@@ -1206,11 +1208,11 @@ class IBProductionStages {
 	}
 
 	// -----------------------------------------------------------------------
-	// New Order Sheet dialog
+	// Start Production dialog
 	// -----------------------------------------------------------------------
 	_show_new_os_dialog() {
 		const d = new frappe.ui.Dialog({
-			title: "New Order Sheet",
+			title: "Start Production",
 			fields: [
 				{
 					fieldname: "sales_order",
@@ -1236,10 +1238,10 @@ class IBProductionStages {
 					args: values,
 					callback: (r) => {
 						if (r.exc) {
-							frappe.show_alert({ message: "Failed to create Order Sheet.", indicator: "red" });
+							frappe.show_alert({ message: "Failed to start production.", indicator: "red" });
 							return;
 						}
-						frappe.show_alert({ message: `Order Sheet ${r.message || ""} created.`, indicator: "green" });
+						frappe.show_alert({ message: `Production started for ${values.sales_order}.`, indicator: "green" });
 						d.hide();
 						this._load_order_sheets();
 					},

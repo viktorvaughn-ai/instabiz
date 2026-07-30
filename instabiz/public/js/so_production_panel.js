@@ -119,7 +119,7 @@ function _ib_build_prod_panel(data) {
 					font-size:10px;font-weight:700;color:#9ca3af">NOT STARTED</span>
 			</div>
 			<div style="font-size:12px;color:var(--text-muted);margin-top:5px">
-				No Order Sheet yet. Will be scheduled automatically.
+				Production not started yet. Will be scheduled automatically.
 			</div>
 		</div>`;
 	}
