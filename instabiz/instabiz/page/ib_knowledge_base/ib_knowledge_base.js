@@ -917,7 +917,7 @@ const KB_SECTIONS = [
 		items: [
 			{
 				num: "ACC-1", title: "Who Sees What — Workspace Shortcuts by Role",
-				desc: "Each Instabiz workspace shortcut is filtered by role. You only see shortcuts your role allows.<br><br><b>Sales User</b> (operational CRM): Customer Board, Leads Pipeline, Sales Incentives, Quotation, Sales Order, Customer Master, IB Rate Card, Lead, Sales Invoice, Sample Request, Delivery Note, Live Stock Balance, Stock Ledger, Main Dashboard, Knowledge Base.<br><br><b>Sales Manager</b> (all of Sales User + management tools): Business Pulse, Analytics Hub, Customer Health, Assignment Admin, WA Broadcast. Plus all Sales Reports: Daily Sales, Sales KPIs, Sales Person, Lost Deals, Territory, SKU Sales, Gross Margin, Collections, Credit Notes, Debit Notes, Activity Log, Stock Ageing, Dispatch Report.<br><br><b>Accounts User / Accounts Manager</b>: Finance Dashboard, Procurement Dashboard, Bank Import, Purchase Invoice, Payment Entry, PDC Cheques, Purchase Order, Purchase Receipt, Credit Note, Debit Note, Collections Page. Finance Reports: AR Aging, AP Aging, Cash Flow, Bank Recon, Purchase Pipeline.<br><br><b>HR Manager</b>: HR Dashboard, Employees, Attendance Terminal, Org Chart, Leave Applications, Salary Slips, Overtime Requests, F&amp;F Settlement. HR Reports: Payroll Summary.<br><br><b>Factory Management</b>: Production Dashboard, Production Stages, DPR Report, Work Orders, Machines, Order Sheets. Production Reports: Production Report.<br><br><b>System Manager</b>: AI Inbox, AI Actions, Agent Logs, n8n Console. Plus everything else.<br><br><b>Knowledge Base</b>: visible to all roles.",
+				desc: "Each Instabiz workspace shortcut is filtered by role. You only see shortcuts your role allows.<br><br><b>Sales User</b> (operational CRM): Customer Board, Sales Incentives, Quotation, Sales Order, Customer Master, IB Rate Card, Lead, Sales Invoice, Sample Request, Delivery Note, Live Stock Balance, Stock Ledger, Main Dashboard, Knowledge Base.<br><br><b>Sales Manager</b> (all of Sales User + management tools): Business Pulse, Analytics Hub, Customer Health, Assignment Admin. Plus all Sales Reports: Daily Sales, Sales KPIs, Sales Person, Lost Deals, Territory, SKU Sales, Gross Margin, Collections, Credit Notes, Debit Notes, Activity Log, Stock Ageing, Dispatch Report.<br><br><b>Accounts User / Accounts Manager</b>: Finance Dashboard, Procurement Dashboard, Bank Import, Purchase Invoice, Payment Entry, PDC Cheques, Purchase Order, Purchase Receipt, Credit Note, Debit Note, Collections Page. Finance Reports: AR Aging, AP Aging, Cash Flow, Bank Recon, Purchase Pipeline.<br><br><b>HR Manager</b>: HR Dashboard, Employees, Attendance Terminal, Org Chart, Leave Applications, Salary Slips, Overtime Requests, F&amp;F Settlement. HR Reports: Payroll Summary.<br><br><b>Factory Management</b>: Production Dashboard, Production Stages, DPR Report, Work Orders, Machines, Order Sheets. Production Reports: Production Report.<br><br><b>System Manager</b>: AI Inbox, AI Actions, Agent Logs. Plus everything else.<br><br><b>Knowledge Base</b>: visible to all roles.",
 				tags: "roles access workspace shortcuts who sees what sales manager user accounts hr factory production",
 			},
 			{
@@ -927,7 +927,7 @@ const KB_SECTIONS = [
 			},
 			{
 				num: "ACC-3", title: "Role Reference — Who Can Do What",
-				desc: "<b>Sales User:</b> Create and manage own Quotations, Sales Orders, Leads, Delivery Notes, Sales Invoices, Sample Requests. View Rate Card and Stock.<br><b>Sales Manager:</b> All of Sales User + view all reps' documents + Reports + Assignment Admin + WA Broadcast + set Sales Targets.<br><b>Accounts User:</b> Finance shortcuts + Finance Reports. Create Payment Entries, Purchase Invoices, PDC records. Bank Import and Reconciliation.<br><b>Accounts Manager:</b> All of Accounts User + full Finance access.<br><b>HR Manager:</b> Employees, Attendance, Leave, Payroll, Overtime, F&amp;F Settlement. Approve/reject leave applications inline from HR Dashboard.<br><b>Factory Management:</b> Work Orders, Machines, Order Sheets, Production Dashboard, DPR, Production Stages.<br><b>System Manager:</b> Full access including AI Inbox/Actions, n8n Console, workspace management, user administration.",
+				desc: "<b>Sales User:</b> Create and manage own Quotations, Sales Orders, Leads, Delivery Notes, Sales Invoices, Sample Requests. View Rate Card and Stock.<br><b>Sales Manager:</b> All of Sales User + view all reps' documents + Reports + Assignment Admin + set Sales Targets.<br><b>Accounts User:</b> Finance shortcuts + Finance Reports. Create Payment Entries, Purchase Invoices, PDC records. Bank Import and Reconciliation.<br><b>Accounts Manager:</b> All of Accounts User + full Finance access.<br><b>HR Manager:</b> Employees, Attendance, Leave, Payroll, Overtime, F&amp;F Settlement. Approve/reject leave applications inline from HR Dashboard.<br><b>Factory Management:</b> Work Orders, Machines, Order Sheets, Production Dashboard, DPR, Production Stages.<br><b>System Manager:</b> Full access including AI Inbox/Actions, workspace management, user administration.",
 				tags: "role reference what can do sales accounts hr factory system manager permissions",
 			},
 		],
@@ -991,7 +991,7 @@ const KB_SECTIONS = [
 					"Click <b>Make, Sales Invoice</b>.",
 					"Optionally enter <b>Transport Charges</b> — GST on transport is auto-calculated.",
 					"Submit. Click <b>Generate e-Invoice</b> button to create the IRN after submission.",
-					"Print using <b>IB Tax Invoice</b> format for the 2-page output with IRN / QR code.",
+					"Print using <b>IB GST Tax Invoice</b> format for the 2-page output with IRN / QR code.",
 				],
 			},
 			{
@@ -1089,6 +1089,23 @@ const KB_SECTIONS = [
 					"When a Delivery Note is submitted, select <b>IB Packing List</b> as the print format.",
 					"Output includes: item, qty, UOM, rolls/box, number of boxes, carton weight, total weight, carton marking, LR number in header, totals row, and three signature lines.",
 				],
+			},
+			{
+				num: "28", title: "Sales Incentives — How Commission Is Calculated",
+				updated: "2026-07-29",
+				desc: "Open the <b>Sales Incentives</b> page and pick a sales person from the dropdown — nothing calculates until you do. Sales Managers/System Managers can also pick <b>All Sales Reps</b> for a team-wide leaderboard. Sales Users are locked to their own number automatically, no picker needed.",
+				link: "/app/ib-sales-incentives", linkLabel: "Sales Incentives",
+				tags: "incentive commission slab target collected achievement designation sales manager user calculation formula",
+				steps: [
+					"<b>Collected</b> for the month = SUM(grand_total) − SUM(outstanding) across that rep's Sales Orders in the selected month (dev mode) — switches to Sales Invoice automatically once real billing goes live (see billing-mode FAQ). \"Outstanding\" here means grand_total minus any advance already paid.",
+					"<b>Achievement %</b> = Collected ÷ Target × 100, where Target comes from that rep's <b>IB Sales Target</b> record for the month (set via the Set Targets / per-row ✎ button).",
+					"<b>Designation</b> is auto-detected from the rep's Frappe roles: has <b>Sales Manager</b> role → uses the Sales Manager slab table; otherwise → Sales User slab table.",
+					"<b>Slab match</b>: the rep's Achievement % is matched against that designation's <b>IB Incentive Slab</b> rows (from_pct ≤ achievement % &lt; to_pct, 0 = no upper bound). The matching row's Commission % applies.",
+					"<b>Commission</b> = Collected × matching slab's Commission % ÷ 100. Zero if no slab matches (e.g. no target set, or achievement below the lowest slab's from_pct).",
+					"A rep with a target but zero billing this month still shows up (zero-billing row), so a stalled rep is visible rather than silently missing.",
+				],
+				note: "Slabs and targets are managed by Sales Manager/System Manager via the page's <b>Slabs</b> and <b>Set Targets</b> buttons — both write to real doctypes (IB Incentive Slab, IB Sales Target), not page-local state.",
+				tip: "Everything lives in <code>instabiz/instabiz/page/ib_sales_incentives/</code> (ib_sales_incentives.py has the calc: <code>_apply_slab()</code>, <code>_get_slab_designation()</code>, <code>get_incentives_data()</code>) plus <code>instabiz/overrides/sales_target.py</code> (slab/target CRUD) and <code>instabiz/overrides/billing_mode.py</code> (the Sales-Order-vs-Sales-Invoice toggle every figure here respects).",
 			},
 		],
 	},
@@ -1376,7 +1393,7 @@ const KB_SECTIONS = [
 				tags: "gstr2b purchase reconciliation input tax credit itc",
 			},
 			{
-				num: "70", title: "IB Tax Invoice Print Format",
+				num: "70", title: "IB GST Tax Invoice Print Format",
 				desc: "2-page print format on Sales Invoice: Page 1 = Tax Invoice with IRN and QR code, bank details, amount in words. Page 2 = E-Way Bill with EWB QR, goods, transport, vehicle details.",
 				tags: "print tax invoice format irn qr eway",
 			},
@@ -1907,20 +1924,9 @@ const KB_SECTIONS = [
 	{
 		id: "broadcast", cat: "comms",
 		icon: '<iconify-icon icon="lucide:bell" width="17" height="17"></iconify-icon>', color: "#e0f0ff", iconColor: "#1a60b0",
-		title: "Broadcast and Team Chat",
+		title: "Team Chat",
 		roles: _SALES,
 		items: [
-			{
-				num: "87", title: "System Broadcast (In-App)",
-				desc: "System Managers send announcements to all or specific users. Real-time via WebSocket. Offline users see broadcasts on next login (last 48 hours shown).",
-				tags: "broadcast announce message users notification bell",
-				steps: [
-					"Go to <b>Workspace, WA Broadcast</b>.",
-					"Enter Title and Message. Optionally attach an image.",
-					"Select Target: All Users or Specific Users.",
-					"Click Send. Message appears immediately for logged-in users.",
-				],
-			},
 			{
 				num: "RAVEN-1", title: "Raven — Internal Team Chat",
 				desc: "Raven is the internal team chat app for Instabiz staff. Direct messages, channels, and file sharing between colleagues.",
@@ -2050,7 +2056,6 @@ const KB_SECTIONS = [
 					"<b>Method 3 — Auto-scheduler:</b> Daily midnight job scans submitted SOs without an Order Sheet and auto-creates them. Priority is set by delivery date: ≤2 days = Urgent, ≤5 = High, ≤10 = Normal, >10 = Low.",
 					"After creation: Work Orders are auto-created per stage per item based on item group routing.",
 					"Set <b>Priority</b> (Urgent/High/Normal/Low) and optional <b>Delivery Date</b>.",
-					"n8n webhook fires on Order Sheet creation if configured.",
 				],
 				note: "One SO = one Order Sheet. Attempting to create a second Order Sheet for the same SO will show an error.",
 			},
@@ -2066,15 +2071,15 @@ const KB_SECTIONS = [
 					"<b>On Hold</b> — Pause mid-stage (machine breakdown, end of shift). Click On Hold. Resume: click Start again.",
 					"<b>Completed</b> — Click Complete. Enter completed_qty + wastage_qty. System auto-creates next-stage WO and activates it in the pipeline.",
 					"Completing the last applicable stage (per item group routing) marks the entire item as production-complete.",
-					"n8n webhook fires on every status change.",
+					"Status changes are governed by the IB Work Order Workflow (native ERPNext Workflow builder) — only valid transitions for your role are allowed, same rules as before, just enforced natively instead of by ad-hoc checks.",
 				],
 				note: "WO names follow pattern IB-WO-{STAGE}-{YYYY}-{#####}. WOs can also be viewed in the standard IB Work Order list with filters.",
 			},
 			{
 				num: "PROD-5", title: "Production Dashboard — All Sections",
-				desc: "Workspace → Production Dashboard. Real-time factory floor overview. 4 KPI cards, pipeline summary, priority strip, wastage card, AI actions panel, active plan table, recent entries, and n8n status bar.",
+				desc: "Workspace → Production Dashboard. Real-time factory floor overview. 4 KPI cards, pipeline summary, priority strip, wastage card, AI actions panel, active plan table, recent entries.",
 				link: "/app/ib-production-dashboard", linkLabel: "Open Production Dashboard",
-				tags: "production dashboard kpi active pending completed today machines wastage ai actions plan entries n8n pipeline priority strip",
+				tags: "production dashboard kpi active pending completed today machines wastage ai actions plan entries pipeline priority strip",
 				steps: [
 					"<b>KPI Card 1 — Active Work Orders:</b> all WOs not Completed/Cancelled. Click → filtered IB Work Order list.",
 					"<b>KPI Card 2 — Pending:</b> WOs not yet started. Click → filtered list.",
@@ -2087,7 +2092,6 @@ const KB_SECTIONS = [
 					"<b>Active Production Plan Table:</b> current Order Sheets with SO#, customer, items, current stage, stage chip progress row, priority, overall progress bar.",
 					"<b>Recent Entries:</b> last 10 Production Entries — date, stage, machine, output qty, wastage %.",
 					"<b>Quick Buttons:</b> Production Stages →, Order Sheets →, DPR Report →.",
-					"<b>n8n Status Bar:</b> shows Connected / Not Configured + Test Webhook button.",
 					"<b>Toolbar:</b> Refresh button top-right.",
 				],
 			},
@@ -2269,7 +2273,6 @@ const KB_SECTIONS = [
 					"  → ≤ 10 days: <b>Normal</b>",
 					"  → > 10 days (or no delivery date): <b>Low</b>",
 					"WOs are auto-created per stage per item based on item group routing — same as before, unchanged.",
-					"n8n webhook fires for each newly created Order Sheet (background job — see PROD-20 for current n8n status).",
 				],
 				note: "No more 30-day backlog gap for NEW SOs going forward — every submitted SO gets an Order Sheet within moments, always, regardless of how old the deployment is. Manual creation from the SO or Order-wise tab still exists as a fallback (e.g. if the background job errors — check Error Log for 'Production Auto-Create (on-submit)'). Pre-existing old SOs that predate this change and never got an Order Sheet are NOT retroactively picked up by this — that's a one-time backfill question, not something this trigger solves.",
 			},
@@ -2318,21 +2321,17 @@ const KB_SECTIONS = [
 				],
 			},
 			{
-				num: "PROD-20", title: "n8n Webhook Integration — Production Triggers",
-				desc: "n8n runs locally on the same server as Frappe (http://localhost:5678, PM2-managed). Frappe fires webhooks to n8n on key production events; n8n workflows can call back into Frappe's REST API to act on the data.",
-				tags: "n8n webhook integration work order order sheet update creation workflow trigger production automation config offline not running status",
+				num: "PROD-20", title: "Work Order Status — Native Workflow Builder (n8n removed 2026-07-30)",
+				desc: "n8n was fully removed — PM2 process stopped, n8n_hooks.py deleted, webhook config gone. Work Order status transitions (Start/Resume/Complete/Hold/Cancel) now run through a native Frappe Workflow instead of an external webhook integration.",
+				tags: "n8n removed workflow builder work order status transition start complete hold resume cancel automation production",
 				steps: [
-					"<b>Current status (checked 2026-07-15) — n8n is NOT running.</b> No process found (pm2/ps show nothing on port 5678). Its own workflow database shows both saved workflows set to inactive, with 4182 historical executions from 2026-07-01 to 2026-07-09 (nothing since) at a 90%+ failure rate (3763 errored, 5 crashed, only 414 succeeded) — it was tested, mostly failed, and abandoned. Treat everything below as how to build/revive the integration, not a description of something currently working.",
-					"<b>Config keys (sites/frontend/site_config.json):</b> <code>n8n_webhook_url</code> — n8n's Webhook node production URL, e.g. <code>http://localhost:5678/webhook/&lt;path&gt;</code>. Blank = webhooks silently skip.",
-					"<b>Events fired</b> (instabiz/overrides/n8n_hooks.py, wired via doc_events in hooks.py): <code>work_order_started</code>, <code>work_order_stage_completed</code>, <code>work_order_rtd</code>, <code>work_order_updated</code> (all from IB Work Order on_update) and <code>order_sheet_created</code> / <code>order_sheet_completed</code> (from IB Order Sheet).",
-					"<b>Payload shape:</b> <code>{ event, payload: {...doc fields...}, site }</code> — sent via <code>notify_n8n(event, payload)</code> in ai_agents.py.",
-					"<b>Build a workflow in n8n:</b> add a <b>Webhook</b> node (POST, responseMode = <i>responseNode</i> if you add an explicit Respond node), branch on <code>$json.body.event</code>, call back into Frappe with an <b>HTTP Request</b> node.",
-					"<b>Auth for the callback:</b> create a dedicated Frappe service user (e.g. <code>n8n-automation@instabiz.local</code>) with only the roles it needs (Factory Production for read/write on IB Work Order; add a Manager role like Manufacturing Manager only if it must call agent-approval endpoints). Generate api_key/api_secret on that user, then in n8n create an <b>HTTP Header Auth</b> credential: header <code>Authorization</code>, value <code>token &lt;api_key&gt;:&lt;api_secret&gt;</code>. Never use the Administrator account for this.",
-					"<b>Same-host rule:</b> n8n and Frappe run on the same box — HTTP Request nodes should call <code>http://localhost:8000/api/...</code>, not the public tunnel domain. The public URL (e.g. Cloudflare tunnel to instabizdev.qzz.io) only matters for browser/external traffic into Frappe; it is not needed for n8n↔Frappe calls and adds an unnecessary external hop.",
-					"Activate the workflow (POST <code>/api/v1/workflows/{id}/activate</code> via n8n's REST API, or the UI toggle) — inactive workflows will 404 on their production webhook path.",
-					"Test end-to-end: trigger a real doc save (e.g. update an IB Work Order's status) and check n8n's execution list, or use the n8n Console page (see PROD-22) which surfaces recent executions and webhook errors inline.",
+					"Go to <b>Workflow List</b> (search-bar → \"Workflow\") → <b>IB Work Order Workflow</b> to see the full state/transition map, or open any IB Work Order doc directly — native workflow action buttons appear top-right.",
+					"States: Pending → In Progress → Completed, with On Hold reachable from Pending or In Progress, and Cancel reachable from Pending/In Progress/On Hold.",
+					"Each transition is role-gated to Factory Management, Factory Production, or System Manager — same roles as before, just enforced by the Workflow engine instead of a hand-rolled permission check.",
+					"The existing Production Stages Kanban / Job Bundles buttons still work exactly as before — they call the same whitelisted methods (start_work_order, complete_work_order, put_on_hold, advance_to_next_stage), which now apply the workflow transition internally instead of writing the status field directly.",
+					"Bell notifications (25/50/75/100% progress to the sales person, On Hold alerts) are unchanged — they fire from the same IB Work Order.on_update hook, which now fires reliably on every transition since it's a real doc.save() under the hood.",
 				],
-				note: "Webhook POSTs are backgrounded from Frappe's side (fixed 2026-07-15: was a synchronous inline requests.post with a 5s timeout on every single WO status change — every Start/Complete/Hold/Next-Stage click paid up to 5 dead seconds whenever n8n wasn't reachable, confirmed that's been happening this whole time. notify_n8n() in ai_agents.py now does frappe.enqueue(..., queue='short', enqueue_after_commit=True) instead of calling requests.post directly — the actual HTTP call runs in a background worker via a new _post_to_n8n() function, so a slow or down n8n can never block a user action again, confirmed live: call now returns in ~0.007s instead of ~5s).",
+				note: "If you need cross-system automation again in future (e.g. calling out to a courier API on dispatch), prefer Frappe's own Server Script / Webhook doctypes over reviving n8n — no separate process to keep alive.",
 			},
 			{
 				num: "PROD-21", title: "End-to-End Production Workflow",
@@ -2354,29 +2353,14 @@ const KB_SECTIONS = [
 				],
 			},
 			{
-				num: "PROD-22", title: "n8n Console — Workflow Monitor and Control",
-				desc: "Workspace shortcut, n8n Console (System Manager only). Proxies n8n's REST API so you can see workflow/execution health without leaving Frappe.",
-				link: "/app/ib-n8n-console", linkLabel: "n8n Console",
-				tags: "n8n console monitor workflows executions api key status webhook errors toggle",
+				num: "PROD-23", title: "Automation Testing Guide — Wiring an Agent Action via API",
+				desc: "How to drive a real Instabiz AI agent action end-to-end using nothing but HTTP calls (curl/POST) against Frappe's whitelisted API — useful for testing or for wiring any external automation tool.",
+				tags: "automation testing guide agent istix_enforcer run_agent approve_action curl post whitelisted api dummy test",
 				steps: [
-					"<b>Config keys:</b> <code>n8n_base_url</code> (defaults to <code>http://localhost:5678</code> if unset), <code>n8n_api_key</code> (n8n API key — n8n UI → Settings → API → create one, or via n8n's REST API), <code>n8n_webhook_url</code> (see PROD-20).",
-					"Console shows: online/offline status (n8n <code>/healthz</code>), full workflow list (id, name, active flag, trigger type, node count), recent executions (status, mode, timestamps), and recent webhook failures pulled from Frappe's Error Log (method LIKE '%n8n%').",
-					"<b>Activate/Deactivate</b> a workflow directly from the console (System Manager only) — calls n8n's <code>/api/v1/workflows/{id}/activate|deactivate</code>.",
-					"Click an execution to drill into full input/output data per node (useful for debugging a failed callback).",
-					"If the console shows \"API key invalid or not set\": add/update <code>n8n_api_key</code> in site_config.json, then <code>bench --site frontend clear-cache</code> — no restart needed, config is read live per request.",
-				],
-				note: "n8n_api_key (console monitoring) and the per-user api_key/api_secret used for callback auth (PROD-20) are two separate credentials serving two different directions of the integration — don't confuse them. As of 2026-07-15 this console will correctly show n8n as offline — the process isn't running (see PROD-20) — that's accurate, not a console bug.",
-			},
-			{
-				num: "PROD-23", title: "Automation Testing Guide — Wiring an Agent Action Through n8n",
-				desc: "How to prove an n8n workflow can drive a real Instabiz AI agent action end-to-end using nothing but HTTP calls (curl/POST) against Frappe's whitelisted API — no custom n8n node code required.",
-				tags: "automation testing guide n8n agent istix_enforcer run_agent approve_action curl post whitelisted api dummy test",
-				steps: [
-					"<b>Why this pattern:</b> the 6 AI agents (feature 89) are human-in-the-loop by design — an agent run only queues a draft <code>IB AI Action</code>; nothing happens to real data until a manager approves it. n8n can legitimately stand in for that manager by calling the same whitelisted endpoints a human would trigger from the AI Inbox UI — it does not bypass the approval step, it performs it.",
+					"<b>Why this pattern:</b> the 6 AI agents (feature 89) are human-in-the-loop by design — an agent run only queues a draft <code>IB AI Action</code>; nothing happens to real data until a manager approves it. Any caller can legitimately stand in for that manager by calling the same whitelisted endpoints a human would trigger from the AI Inbox UI — it does not bypass the approval step, it performs it.",
 					"<b>Chain:</b> POST <code>/api/method/instabiz.overrides.ai_agents.run_agent</code> with <code>{agent_code: '&lt;code&gt;'}</code> → GET <code>/api/method/instabiz.overrides.ai_agents.get_ai_actions?status=pending&agent=&lt;code&gt;</code> → match the row by <code>reference_name</code> → POST <code>/api/method/instabiz.overrides.ai_agents.approve_action</code> with <code>{name: '&lt;action name&gt;'}</code> → verify the resulting side-effect (e.g. GET <code>/api/resource/Notification Log</code> filtered by <code>document_name</code>).",
-					"<b>Auth:</b> <code>run_agent</code> / <code>approve_action</code> / <code>get_ai_actions</code> all require one of System Manager, Sales Manager, Accounts Manager, HR Manager, Purchase Manager, or Manufacturing Manager on the calling user (see <code>_ALL_MANAGER_ROLES</code> in ai_agents.py) — the plain read-only service user from PROD-20 is not enough for this chain.",
+					"<b>Auth:</b> <code>run_agent</code> / <code>approve_action</code> / <code>get_ai_actions</code> all require one of System Manager, Sales Manager, Accounts Manager, HR Manager, Purchase Manager, or Manufacturing Manager on the calling user (see <code>_ALL_MANAGER_ROLES</code> in ai_agents.py). Generate a dedicated service user's api_key/api_secret and send <code>Authorization: token &lt;api_key&gt;:&lt;api_secret&gt;</code> — never use the Administrator account for this.",
 					"<b>Always test against a disposable record</b>, never live data: e.g. for <code>istix_enforcer</code> (stalled Work Order escalation), insert a throwaway IB Work Order with <code>status='In Progress'</code> and <code>started_at</code> backdated 9+ hours so it trips the &gt;=8h stalled condition, run the chain, confirm the Notification Log fired, then delete the dummy Work Order, its IB AI Action row, and the Notification Log row it produced. <code>IB Agent Run Log</code> rows from the test run are harmless history and don't need cleanup.",
-					"Build the n8n side as: <b>Webhook</b> node (manual test trigger, POST) → <b>HTTP Request</b> (run_agent) → <b>HTTP Request</b> (get_ai_actions) → <b>Code</b> node to pick the matching action → <b>HTTP Request</b> (approve_action) → <b>HTTP Request</b> (verify). All HTTP Request nodes use the same HTTP Header Auth credential described in PROD-20.",
 					"This same pattern generalizes to any agent: swap <code>agent_code</code> and the verification query for the agent's actual side-effect (smart_reorder → check Material Request created; collections → check IB AI Action status; prod_notify_ready → check Notification Log for the sales person).",
 				],
 				note: "Claude-dependent agents (auto_quote, collections, demand_forecast, etc.) still run and queue actions even with no Anthropic credit balance — llm.py falls back to a deterministic message when the Claude call fails, so the test chain works whether or not the API key has credit.",
@@ -2632,18 +2616,16 @@ const KB_SECTIONS = [
 				steps: [
 					"Seat Map showed cutting/slitting machine width occupancy as a movie-seat-style grid.",
 					"Live Floor showed real-time occupancy across all 7 stages.",
-					"Both were reviewed and explicitly removed from the page. The backend endpoints they used still exist in production.py (get_cutting_slot_map, get_cutting_fit_suggestions, get_live_floor_status) but are unwired — cheap to bring back if needed.",
+					"Both were reviewed and explicitly removed from the page.",
 				],
 			},
 			{
-				num: "FAQ-3", title: "Is the n8n automation actually running?",
-				desc: "No. Checked live 2026-07-15: the n8n process isn't running, and even when it was, its own workflows were inactive with a 90%+ historical failure rate.",
-				tags: "faq n8n working running automation broken status offline console",
-				link: "/app/ib-n8n-console", linkLabel: "n8n Console",
+				num: "FAQ-3", title: "Whatever happened to n8n?",
+				desc: "Removed entirely 2026-07-30 — it was tested, mostly failed (90%+ historical error rate), and sat unused. Work Order status automation now runs on a native Frappe Workflow instead (see PROD-20).",
+				tags: "faq n8n removed automation workflow builder",
 				steps: [
-					"n8n Console (see PROD-22) will correctly show it offline — that's accurate, not a bug.",
-					"Frappe still fires the webhook events (PROD-20) but they now run in the background and can't slow down your clicks anymore, even though nothing is listening on the other end yet.",
-					"If you need this working, someone needs to actually start the n8n process and rebuild/activate a real workflow — the plumbing on the Frappe side is ready.",
+					"No process to check, no config to set — the Workflow-based replacement is part of the app itself, no external service to keep running.",
+					"If something that used to depend on n8n seems to have stopped, it didn't lose functionality — the same Start/Complete/Hold/Cancel actions on IB Work Order work the same as before, just through the native Workflow engine.",
 				],
 			},
 			{
@@ -2685,6 +2667,55 @@ const KB_SECTIONS = [
 					"Once real Sales/Purchase Invoicing goes live, flipping the config key to <code>prod</code> switches every one of these reports back to genuine Invoice-based figures — a one-line config change, no code changes needed.",
 				],
 				note: "Not yet switched: overdue_alert.py (7/15/30-day overdue reminders + the 30-day new-order block) still reads Sales Invoice, since flipping it has real behavioral consequences — it can block new Sales Order submission for a customer. Needs its own sign-off before switching, unlike the read-only reports/dashboards above.",
+			},
+			{
+				num: "FAQ-9", title: "Sales Incentives is blank when I open it — is that broken?",
+				desc: "No — as of 2026-07-29 the page never calculates automatically. Managers must pick a sales person (or \"All Sales Reps\") from the dropdown first; Sales Users see their own number load automatically with no picker. See SALES-28 for the full calculation breakdown.",
+				tags: "faq sales incentives blank empty not loading dropdown select",
+			},
+		],
+	},
+	{
+		id: "dev-map", cat: "reference",
+		icon: '<iconify-icon icon="lucide:map" width="17" height="17"></iconify-icon>', color: "#eef2ff", iconColor: "#4338ca",
+		title: "Custom Pages — What's Where",
+		roles: _ALL,
+		items: [
+			{
+				num: "REF-1", title: "Every custom page and its backend file",
+				updated: "2026-07-29",
+				desc: "All 30 custom pages live under <code>instabiz/instabiz/page/&lt;name&gt;/</code> (each has a matching <code>.py</code> + <code>.js</code>). Shared cross-cutting overrides live in <code>instabiz/overrides/</code>. Use this as a quick index — search this Knowledge Base by topic for the how-to, use this table for the where.",
+				tags: "reference file location where is code lives page map developer index backend frontend",
+				steps: [
+					"<b>Business Pulse</b> (ib-business-pulse) — real per-domain metrics + deep links, no synthetic score. <code>page/ib_business_pulse/</code>",
+					"<b>Sales Incentives</b> (ib-sales-incentives) — gated commission calc. <code>page/ib_sales_incentives/</code> + <code>overrides/sales_target.py</code>",
+					"<b>Customer Board</b> (ib-customer-board) — My Accounts / Today / Tomorrow kanban. <code>page/ib_customer_board/</code> + <code>overrides/customer_assignment.py</code>",
+					"<b>Assignment Admin</b> (ib-assignment-admin) — manager roster + view-as board. <code>page/ib_assignment_admin/</code> + <code>overrides/customer_assignment.py</code>",
+						"<b>Analytics Hub</b> (ib-analytics-hub) — Sales/Finance/HR/Production/Inventory/Me tabs. <code>page/ib_analytics_hub/</code>",
+					"<b>Customer Health</b> (ib-customer-health) — weighted customer score. <code>page/ib_customer_health/</code> + <code>overrides/customer_score.py</code>",
+					"<b>IB Rate Card</b> (ib-price-list) — Jumbo Roll / Cut Pack pricing. <code>page/ib_price_list/</code>",
+					"<b>Item Price History</b> (ib-item-price-history) — per-item SO price trend. <code>page/ib_item_price_history/</code>",
+					"<b>Main Dashboard</b> (ib-main-dashboard) — top-level KPI overview. <code>page/ib_main_dashboard/</code>",
+					"<b>AI Inbox</b> (ib-ai-inbox) — AI agent action review queue. <code>page/ib_ai_inbox/</code> + <code>overrides/ai_agents.py</code>",
+					"<b>Live Stock Balance</b> (ib-stock-dashboard) — cross-warehouse stock. <code>page/ib_stock_dashboard/</code>",
+					"<b>Stock Ledger</b> (ib-stock-ledger) — full SLE browser with deep-links. <code>page/ib_stock_ledger/</code>",
+					"<b>Finance Dashboard</b> (ib-finance-dashboard) — AR/overdue/cash overview. <code>page/ib_finance_dashboard/</code>",
+					"<b>Collections Dashboard</b> (ib-collections-dashboard) — customer-level outstanding + payment logging. <code>page/ib_collections_dashboard/</code>",
+					"<b>Procurement Dashboard</b> (ib-procurement-dashboard) — open PO / vendor spend. <code>page/ib_procurement_dashboard/</code>",
+					"<b>Bank Import</b> (ib-bank-statement-import) — CSV-to-Bank-Transaction mapper. <code>page/ib_bank_statement_import/</code>",
+					"<b>HR Dashboard</b> (ib-hrms-dashboard) — attendance/leave/payroll tabs + Payroll Audit. <code>page/ib_hrms_dashboard/</code>",
+					"<b>My HR</b> (ib-my-hr) — employee self-service (own leave/attendance/payslips). <code>page/ib_my_hr/</code>",
+					"<b>Attendance Terminal</b> (attendance-terminal) — bulk daily check-in/out console. <code>page/attendance_terminal/</code>",
+					"<b>Biometric Import</b> (ib-biometric-import) — device CSV → Employee Checkin mapper. <code>page/ib_biometric_import/</code>",
+					"<b>Org Chart</b> (ib-org-chart) — D3 employee tree. <code>page/ib_org_chart/</code>",
+					"<b>Production Dashboard</b> (ib-production-dashboard) — plan + recent completions. <code>page/ib_production_dashboard/</code> + <code>overrides/production.py</code>",
+					"<b>Production Stages</b> (ib-production-stages) — pipeline/item-wise/order-wise/machine-wise/job-bundles tabs. <code>page/ib_production_stages/</code> + <code>overrides/production.py</code>",
+					"<b>Production Tracker</b> (ib-production-tracker) — sales-facing production visibility. <code>page/ib_production_tracker/</code>",
+					"<b>DPR Report</b> (ib-dpr) — daily/weekly production report. <code>page/ib_dpr/</code> + <code>overrides/production.py</code>",
+					"<b>System Health</b> (ib-system-health) — infra health-check grid. <code>page/ib_system_health/</code>",
+					"<b>Knowledge Base</b> (ib-knowledge-base) — this page. <code>page/ib_knowledge_base/</code>",
+				],
+				note: "Standard-doctype UI adjustments (custom fields, property setters, form.js hooks) are NOT pages — they live in <code>instabiz/fixtures/custom_field.json</code>, <code>instabiz/fixtures/property_setter.json</code>, and <code>instabiz/public/js/*.js</code> (form scripts per doctype, e.g. lead.js, employee.js). Doc-event side effects (schedulers, on_submit/on_cancel hooks) live in <code>instabiz/overrides/*.py</code> and are wired in <code>instabiz/hooks.py</code>.",
 			},
 		],
 	},
@@ -2750,7 +2781,7 @@ const KB_WORKFLOWS = {
   <li>SI inherits the same number as the DN (DC-00005 becomes INV-00005).</li>
   <li>Optional: enter Transport Charges — GST on transport is auto-calculated per GST row rate.</li>
   <li>Submit. Then click <b>Generate e-Invoice</b> button to create the IRN from the NIC portal.</li>
-  <li>Print using IB Tax Invoice format: 2-page output with IRN / QR code and E-Way Bill.</li>
+  <li>Print using IB GST Tax Invoice format: 2-page output with IRN / QR code and E-Way Bill.</li>
 </ul>
 <div class="ib-kb-note">SI cancellation requires a Cancellation Reason. Credit Notes (returns) get a separate CN naming series.</div>`,
 	},
@@ -2850,7 +2881,7 @@ const SYNONYMS = {
 	"smart reorder": ["smart_reorder", "reorder agent", "material request agent"],
 	"buying dna": ["buying_dna", "customer followup", "repeat customer"],
 	"wastage": ["waste", "wastage pct", "waste norm"],
-	"n8n": ["automation", "webhook", "workflow builder"],
+	"n8n": ["removed", "automation", "workflow builder"],
 	"seat map": ["live floor", "machine visualization", "roll slot map"],
 };
 
@@ -2909,7 +2940,7 @@ const CAT_LABELS = {
 	all: "All", sales: "Sales", finance: "Finance", crm: "CRM",
 	gst: "GST", reports: "Reports", stock: "Stock",
 	hr: "HR", ai: "AI", production: "Production", comms: "Comms",
-	dashboard: "Dashboards", faq: "FAQ",
+	dashboard: "Dashboards", faq: "FAQ", reference: "Reference",
 };
 
 function _render_cats($w, visible) {
