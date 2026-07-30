@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"prod-h0\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>PRODUCTION</b></span>\",\"col\":12}},{\"id\":\"prod-pd\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Production Dashboard\",\"col\":3}},{\"id\":\"prod-ps\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Production Stages\",\"col\":3}},{\"id\":\"prod-dpr\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"DPR Report\",\"col\":3}},{\"id\":\"prod-h1\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>WORK MANAGEMENT</b></span>\",\"col\":12}},{\"id\":\"prod-mach\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Machines\",\"col\":3}},{\"id\":\"prod-os\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Order Sheets\",\"col\":3}},{\"id\":\"prod-h2\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>INVENTORY</b></span>\",\"col\":12}},{\"id\":\"prod-sb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Live Stock Balance\",\"col\":3}},{\"id\":\"prod-sl\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Stock Ledger\",\"col\":3}},{\"id\":\"prod-h3\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>REPORTS</b></span>\",\"col\":12}},{\"id\":\"prod-rpt\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Production Report\",\"col\":3}},{\"id\":\"prod-h4\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\",\"col\":12}},{\"id\":\"prod-kb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Knowledge Base\",\"col\":3}}]",
+ "content": "[{\"id\": \"prod-h0\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>PRODUCTION</b></span>\", \"col\": 12}}, {\"id\": \"prod-pd\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Production Dashboard\", \"col\": 3}}, {\"id\": \"prod-ps\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Production Stages\", \"col\": 3}}, {\"id\": \"prod-dpr\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"DPR Report\", \"col\": 3}}, {\"id\": \"prod-analytics-hub\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Analytics Hub\", \"col\": 3}}, {\"id\": \"prod-h1\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>WORK MANAGEMENT</b></span>\", \"col\": 12}}, {\"id\": \"prod-mach\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Machines\", \"col\": 3}}, {\"id\": \"prod-os\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Order Sheets\", \"col\": 3}}, {\"id\": \"prod-h2\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>INVENTORY</b></span>\", \"col\": 12}}, {\"id\": \"prod-sb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Live Stock Balance\", \"col\": 3}}, {\"id\": \"prod-sl\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Stock Ledger\", \"col\": 3}}, {\"id\": \"prod-h3\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>REPORTS</b></span>\", \"col\": 12}}, {\"id\": \"prod-rpt\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Production Report\", \"col\": 3}}, {\"id\": \"prod-h4\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\", \"col\": 12}}, {\"id\": \"prod-kb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Knowledge Base\", \"col\": 3}}]",
  "creation": "2026-07-15 06:19:47.853353",
  "custom_blocks": [],
  "docstatus": 0,
@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz Production",
  "links": [],
- "modified": "2026-07-24 20:42:07.934507",
+ "modified": "2026-07-30 15:58:08.479149",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz Production",
@@ -97,6 +97,13 @@
    "doc_view": "",
    "label": "Knowledge Base",
    "link_to": "ib-knowledge-base",
+   "type": "Page"
+  },
+  {
+   "color": "Blue",
+   "doc_view": "",
+   "label": "Analytics Hub",
+   "link_to": "ib-analytics-hub",
    "type": "Page"
   }
  ],
