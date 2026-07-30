@@ -132,7 +132,8 @@ fixtures = [
         "dt": "Property Setter",
         "filters": [["doc_type", "in", ["Quotation", "Sales Order", "Lead", "Delivery Note", "Customer",
                                           "IB Credit Note", "IB Debit Note", "Purchase Invoice",
-                                          "Purchase Order", "Purchase Receipt", "Sales Invoice"]]]
+                                          "Purchase Order", "Purchase Receipt", "Sales Invoice",
+                                          "Salary Slip"]]]
     },
     {
         "dt": "Purchase Taxes and Charges Template",
