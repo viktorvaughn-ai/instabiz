@@ -22,6 +22,11 @@ def _load_slabs():
 	return out
 
 
+def _is_manager():
+	roles = set(frappe.get_roles())
+	return "Sales Manager" in roles or "System Manager" in roles
+
+
 def _get_slab_designation(user):
 	"""Map a user to 'Sales Manager' or 'Sales User' based on their Frappe roles."""
 	roles = set(frappe.get_roles(user))
@@ -58,6 +63,8 @@ def _load_team_map():
 @frappe.whitelist()
 def get_sales_reps_for_targets(month=None):
 	"""All active Sales Users with team, current month target, last month target, MTD collected."""
+	if not _is_manager():
+		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
 	from frappe.utils import get_first_day, get_last_day, getdate, nowdate as _now, add_months
 
 	month_first = get_first_day(getdate(month) if month else getdate(_now()))
@@ -141,12 +148,64 @@ def get_sales_reps_for_targets(month=None):
 
 
 @frappe.whitelist()
-def get_incentives_data(month=None):
+def get_sales_person_options():
+	"""Active Sales Users for the incentives-page filter dropdown (name + team only, no calc)."""
+	if not _is_manager():
+		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+	team_map = _load_team_map()
+	users = frappe.db.sql(
+		"""
+		SELECT DISTINCT u.name AS user, u.full_name
+		FROM `tabUser` u
+		INNER JOIN `tabHas Role` hr ON hr.parent = u.name
+		WHERE hr.role = 'Sales User' AND u.enabled = 1 AND u.name != 'Administrator'
+		ORDER BY u.full_name
+		""",
+		as_dict=True,
+	)
+	out = []
+	for u in users:
+		team_info = team_map.get(u.user, {})
+		out.append({"user": u.user, "name": u.full_name or u.user, "team_name": team_info.get("team_name") or ""})
+	out.sort(key=lambda r: (r["team_name"] or "\xff", r["name"]))
+	return out
+
+
+ALL_REPS = "__all__"
+
+
+@frappe.whitelist()
+def get_incentives_data(month=None, sales_person=None):
+	"""Incentive calc only runs once a selection is made — page starts blank
+	otherwise. Sales User is locked to their own number always. Sales Manager+
+	picks either one rep (separately) or ALL_REPS (collectively, team table)."""
 	today = getdate(nowdate())
 	month_date = getdate(month) if month else today
 	month_start = get_first_day(month_date)
 	month_end = get_last_day(month_date)
 
+	# Non-managers can only ever calculate their own incentive, regardless of
+	# what sales_person the client sends — page now grants Sales User access,
+	# so this guards against one rep pulling another rep's commission via the API.
+	if not _is_manager():
+		sales_person = frappe.session.user
+
+	if not sales_person:
+		return {"month": str(month_start), "selected": False}
+
+	if sales_person == ALL_REPS:
+		if not _is_manager():
+			frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+		data = _team_incentives(month_start, month_end)
+	else:
+		data = _individual_incentive(sales_person, month_start, month_end)
+
+	data["month"] = str(month_start)
+	data["selected"] = True
+	return data
+
+
+def _individual_incentive(sales_person, month_start, month_end):
 	slabs_by_desig = _load_slabs()
 	team_map = _load_team_map()
 
@@ -158,7 +217,91 @@ def get_incentives_data(month=None):
 	outstanding_expr = sales_outstanding_expr("t")
 	return_cond = "" if dev_mode else "AND t.is_return=0"
 
-	# ── Per-salesperson billing ───────────────────────────────────────────────
+	# ── Selected rep's billing for the month ──────────────────────────────────
+	rows = frappe.db.sql(f"""
+		SELECT
+			t.custom_sales_person_user as sp_user,
+			COALESCE(u.full_name, t.custom_sales_person_user) as sp_name,
+			COUNT(t.name) as invoice_count,
+			COALESCE(SUM(t.grand_total), 0) as revenue,
+			COALESCE(SUM({outstanding_expr}), 0) as outstanding,
+			COALESCE(SUM(t.grand_total) - SUM({outstanding_expr}), 0) as collected
+		FROM `tab{doctype}` t
+		LEFT JOIN `tabUser` u ON u.name = t.custom_sales_person_user
+		WHERE t.docstatus=1 {return_cond}
+		AND t.{date_field} BETWEEN %s AND %s
+		AND t.custom_sales_person_user = %s
+		GROUP BY t.custom_sales_person_user, u.full_name
+	""", (month_start, month_end, sales_person), as_dict=True)
+
+	if rows:
+		row = rows[0]
+	else:
+		full_name = frappe.db.get_value("User", sales_person, "full_name") or sales_person
+		row = frappe._dict(
+			sp_user=sales_person, sp_name=full_name,
+			invoice_count=0, revenue=0, outstanding=0, collected=0,
+		)
+
+	target = flt(frappe.db.get_value(
+		"IB Sales Target", {"sales_user": sales_person, "month": month_start}, "target_amount"
+	) or 0)
+	row.target = target
+	row.pct = round(flt(row.collected) / target * 100, 1) if target else None
+	row.gap = max(0, target - flt(row.collected)) if target else None
+	row.collection_pct = round(flt(row.collected) / flt(row.revenue) * 100, 1) if row.revenue else 0
+
+	desig = _get_slab_designation(row.sp_user)
+	row.slab_designation = desig
+	commission, slab_label = _apply_slab(row.collected, row.pct, desig, slabs_by_desig)
+	row.commission = commission
+	row.slab_earned = slab_label
+
+	team_info = team_map.get(row.sp_user, {})
+	row.team_name = team_info.get("team_name") or ""
+	row.team_leader = team_info.get("team_leader") or ""
+
+	# ── This rep's own 6-month trend ──────────────────────────────────────────
+	trend = frappe.db.sql(f"""
+		SELECT
+			DATE_FORMAT(t.{date_field},'%%b %%Y') as label,
+			DATE_FORMAT(t.{date_field},'%%Y-%%m') as ym,
+			COALESCE(SUM(t.grand_total) - SUM({outstanding_expr}),0) as collected
+		FROM `tab{doctype}` t
+		WHERE t.docstatus=1 {return_cond}
+		AND t.custom_sales_person_user = %s
+		AND t.{date_field} >= DATE_SUB(%s, INTERVAL 5 MONTH)
+		GROUP BY ym, label
+		ORDER BY ym
+	""", (sales_person, month_start), as_dict=True)
+
+	# ── This rep's top 10 customers for the month ─────────────────────────────
+	top_customers = frappe.db.sql(f"""
+		SELECT t.customer_name,
+			   COALESCE(SUM(t.grand_total) - SUM({outstanding_expr}), 0) as collected
+		FROM `tab{doctype}` t
+		WHERE t.docstatus=1 {return_cond}
+		AND t.{date_field} BETWEEN %s AND %s
+		AND t.custom_sales_person_user = %s
+		GROUP BY t.customer_name
+		ORDER BY collected DESC LIMIT 10
+	""", (month_start, month_end, sales_person), as_dict=True)
+
+	return {"mode": "individual", "rep": row, "trend": trend, "top_customers": top_customers}
+
+
+def _team_incentives(month_start, month_end):
+	"""Collective view — every rep with billing or a target this month, grouped
+	by team, plus team totals and a top-3-reps 6-month trend. Manager only."""
+	slabs_by_desig = _load_slabs()
+	team_map = _load_team_map()
+
+	dev_mode = is_dev_billing_mode()
+	doctype  = sales_doctype()
+	date_field = "transaction_date" if dev_mode else "posting_date"
+	outstanding_expr = sales_outstanding_expr("t")
+	return_cond = "" if dev_mode else "AND t.is_return=0"
+
 	by_sp = frappe.db.sql(f"""
 		SELECT
 			t.custom_sales_person_user as sp_user,
@@ -177,7 +320,6 @@ def get_incentives_data(month=None):
 		ORDER BY revenue DESC
 	""", (month_start, month_end), as_dict=True)
 
-	# ── Targets ───────────────────────────────────────────────────────────────
 	targets = frappe.db.sql("""
 		SELECT sales_user, target_amount, month
 		FROM `tabIB Sales Target`
@@ -198,34 +340,27 @@ def get_incentives_data(month=None):
 	for row in by_sp:
 		target = target_map.get(row.sp_user, 0)
 		row.target = target
-
-		# Achievement % based on collected (not billed)
 		row.pct = round(flt(row.collected) / target * 100, 1) if target else None
 		row.gap = max(0, target - flt(row.collected)) if target else None
 		row.collection_pct = round(flt(row.collected) / flt(row.revenue) * 100, 1) if row.revenue else 0
 
-		# Incentive calculation
 		desig = _get_slab_designation(row.sp_user)
 		row.slab_designation = desig
 		commission, slab_label = _apply_slab(row.collected, row.pct, desig, slabs_by_desig)
 		row.commission = commission
 		row.slab_earned = slab_label
 
-		# Team context
 		team_info = team_map.get(row.sp_user, {})
 		row.team_name = team_info.get("team_name") or ""
 		row.team_leader = team_info.get("team_leader") or ""
 
-	# Sort: by team, then by collected desc within team
 	by_sp.sort(key=lambda r: (r.team_name or "\xff", -flt(r.collected)))
 
-	# ── Team totals ───────────────────────────────────────────────────────────
 	total_revenue = sum(flt(r.revenue) for r in by_sp)
 	total_target = sum(r.target for r in by_sp)
 	total_collected = sum(flt(r.collected) for r in by_sp)
 	total_commission = sum(flt(r.commission) for r in by_sp)
 
-	# ── Monthly trend per top 3 SPs ───────────────────────────────────────────
 	# Fetch top 3 SP users first — MariaDB doesn't support LIMIT in IN-subquery
 	top3_rows = frappe.db.sql(f"""
 		SELECT custom_sales_person_user FROM `tab{doctype}` t
@@ -255,7 +390,6 @@ def get_incentives_data(month=None):
 	else:
 		trend = []
 
-	# ── Customer-wise top 10 ──────────────────────────────────────────────────
 	top_customers = frappe.db.sql(f"""
 		SELECT t.custom_sales_person_user as sp_user,
 			   t.customer_name,
@@ -269,7 +403,7 @@ def get_incentives_data(month=None):
 	""", (month_start, month_end), as_dict=True)
 
 	return {
-		"month": str(month_start),
+		"mode": "team",
 		"by_sp": by_sp,
 		"total_revenue": total_revenue,
 		"total_target": total_target,

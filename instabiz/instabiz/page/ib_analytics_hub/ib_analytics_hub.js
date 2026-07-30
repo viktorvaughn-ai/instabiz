@@ -329,7 +329,7 @@ class IBAnalyticsHub {
 				<div class="ib-hub-nav" id="ib-hub-tabs">${tabs_html}</div>
 				<div class="ib-hub-topbar-right">
 					<div class="ib-hub-periods" id="ib-hub-periods">${periods_html}</div>
-					<button class="ib-hub-export-btn" id="ib-hub-export">↓ CSV</button>
+					<button class="ib-hub-export-btn btn btn-xs btn-default" id="ib-hub-export">↓ CSV</button>
 					<span class="ib-hub-ts" id="ib-hub-ts">—</span>
 				</div>
 			</div>

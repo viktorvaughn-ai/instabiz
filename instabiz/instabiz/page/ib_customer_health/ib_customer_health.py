@@ -2,6 +2,7 @@ import frappe
 from frappe.utils import nowdate, getdate, get_first_day, add_months, flt
 
 from instabiz.overrides.billing_mode import is_dev_billing_mode, sales_doctype, sales_outstanding_expr
+from instabiz.overrides.utils import build_multi_token_where
 
 
 def get_context(context):
@@ -41,9 +42,10 @@ def get_customer_health(search=None, territory=None, limit=50, offset=0):
 		conditions.append("c.custom_sales_person_user = %s")
 		params.append(user)
 
-	if search:
-		conditions.append("(c.customer_name LIKE %s OR c.name LIKE %s)")
-		params += [f"%{search}%", f"%{search}%"]
+	search_cond, search_params = build_multi_token_where(["c.customer_name", "c.name"], search)
+	if search_cond:
+		conditions.append(search_cond)
+		params += search_params
 
 	if territory:
 		conditions.append("c.territory = %s")

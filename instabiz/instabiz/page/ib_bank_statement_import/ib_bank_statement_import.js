@@ -15,13 +15,14 @@ class IBBankStatementImport {
 		this._csv_text = null;
 		this._preview_rows = [];
 		this._bank_account = null;
+		this._profile = null;
 		this._render();
 	}
 
 	_render() {
 		this.$main.empty().append(`
 			<div class="ib-bsi-wrap">
-				<div class="ib-bsi-card ib-card" style="max-width:760px;margin:0 auto;padding:28px 32px;">
+				<div class="ib-bsi-card ib-card" style="max-width:820px;margin:0 auto;padding:28px 32px;">
 
 					<!-- Bank account selector -->
 					<div class="ib-bsi-field" style="margin-bottom:20px;">
@@ -35,10 +36,25 @@ class IBBankStatementImport {
 							<path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M16 12l-4-4-4 4M12 8v8"/>
 						</svg>
 						<p style="margin:12px 0 4px;font-weight:600;color:var(--text-color);">
-							Drop HDFC CSV here or <label for="ib-bsi-file" style="color:var(--ib-primary);cursor:pointer;text-decoration:underline;">browse</label>
+							Drop any bank's CSV here or <label for="ib-bsi-file" style="color:var(--ib-primary);cursor:pointer;text-decoration:underline;">browse</label>
 						</p>
-						<p style="font-size:12px;color:var(--text-muted);">Supports HDFC NetBanking CSV export</p>
+						<p style="font-size:12px;color:var(--text-muted);">Works with any bank's export — you'll map the columns once per bank account</p>
 						<input type="file" id="ib-bsi-file" accept=".csv,.txt" style="display:none;">
+					</div>
+
+					<!-- Column mapping -->
+					<div class="ib-bsi-mapping" style="display:none;margin-top:24px;">
+						<h5 style="margin-bottom:4px;">Map Columns</h5>
+						<p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">This bank account has no saved mapping yet — tell us which column is which.</p>
+						<div class="ib-bsi-map-form"></div>
+						<div style="margin-top:14px;">
+							<label style="font-size:13px;font-weight:normal;">
+								<input type="checkbox" class="ib-bsi-save-profile" checked> Remember this mapping for this bank account
+							</label>
+						</div>
+						<div style="margin-top:16px;">
+							<button class="btn btn-primary btn-sm ib-bsi-map-continue">Continue</button>
+						</div>
 					</div>
 
 					<!-- Preview -->
@@ -107,21 +123,13 @@ class IBBankStatementImport {
 			if (e.target.files[0]) this._load_file(e.target.files[0]);
 		});
 
+		this.$main.on("click", ".ib-bsi-map-continue", () => this._on_mapping_continue());
 		this.$main.on("click", ".ib-bsi-import-btn", () => this._do_import());
 		this.$main.on("click", ".ib-bsi-reset-btn", () => this._reset());
 	}
 
 	_load_file(file) {
 		if (!file) return;
-		const reader = new FileReader();
-		reader.onload = (e) => {
-			this._csv_text = e.target.result;
-			this._preview();
-		};
-		reader.readAsText(file);
-	}
-
-	_preview() {
 		const bank_account = this._bank_ctrl.get_value();
 		if (!bank_account) {
 			frappe.msgprint("Select a bank account first.");
@@ -129,9 +137,122 @@ class IBBankStatementImport {
 		}
 		this._bank_account = bank_account;
 
+		const reader = new FileReader();
+		reader.onload = (e) => {
+			this._csv_text = e.target.result;
+			this._resolve_mapping();
+		};
+		reader.readAsText(file);
+	}
+
+	_resolve_mapping() {
+		frappe.call({
+			method: "instabiz.instabiz.page.ib_bank_statement_import.ib_bank_statement_import.get_saved_profile",
+			args: { bank_account: this._bank_account },
+			callback: (r) => {
+				if (r.message) {
+					this._profile = r.message;
+					this._preview();
+				} else {
+					this._show_mapping_form();
+				}
+			},
+		});
+	}
+
+	_show_mapping_form() {
+		frappe.call({
+			method: "instabiz.instabiz.page.ib_bank_statement_import.ib_bank_statement_import.get_csv_headers",
+			args: { csv_text: this._csv_text },
+			freeze: true,
+			freeze_message: "Reading file…",
+			callback: (r) => {
+				if (r.exc) return;
+				this._render_mapping_form(r.message.headers, r.message.samples);
+			},
+		});
+	}
+
+	_render_mapping_form(headers, samples) {
+		const opts = ["", ...headers].map((h) => `<option value="${frappe.utils.escape_html(h)}">${frappe.utils.escape_html(h || "— none —")}</option>`).join("");
+		const $form = this.$main.find(".ib-bsi-map-form").empty();
+
+		const row = (label, cls, required) => `
+			<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+				<label style="width:180px;font-size:13px;margin:0;">${label}${required ? " *" : ""}</label>
+				<select class="form-control input-sm ${cls}" style="max-width:260px;">${opts}</select>
+			</div>
+		`;
+
+		$form.append(`
+			<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+				<label style="width:180px;font-size:13px;margin:0;">Column Layout *</label>
+				<select class="form-control input-sm ib-bsi-map-mode" style="max-width:260px;">
+					<option value="Separate Debit/Credit Columns">Separate Debit/Credit columns</option>
+					<option value="Single Amount Column">Single Amount column</option>
+				</select>
+			</div>
+		`);
+		$form.append(row("Date Column", "ib-bsi-map-date", true));
+		$form.append(row("Description Column", "ib-bsi-map-desc", false));
+		$form.append(row("Reference No. Column", "ib-bsi-map-ref", false));
+		$form.append(`<div class="ib-bsi-map-dc">${row("Debit/Withdrawal Column", "ib-bsi-map-debit", false)}${row("Credit/Deposit Column", "ib-bsi-map-credit", false)}</div>`);
+		$form.append(`<div class="ib-bsi-map-single" style="display:none;">${row("Amount Column", "ib-bsi-map-amount", false)}${row("Type Column (Dr/Cr)", "ib-bsi-map-type", false)}`
+			+ `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><label style="width:180px;font-size:13px;margin:0;">Credit Indicator Value</label>`
+			+ `<input type="text" class="form-control input-sm ib-bsi-map-credit-indicator" style="max-width:260px;" placeholder="e.g. CR"></div></div>`);
+
+		if (samples && samples.length) {
+			$form.append(`<p style="font-size:11px;color:var(--text-muted);margin-top:6px;">Sample row: ${frappe.utils.escape_html(JSON.stringify(samples[0]))}</p>`);
+		}
+
+		$form.find(".ib-bsi-map-mode").on("change", (e) => {
+			const single = e.target.value === "Single Amount Column";
+			$form.find(".ib-bsi-map-dc").toggle(!single);
+			$form.find(".ib-bsi-map-single").toggle(single);
+		});
+
+		this.$main.find(".ib-bsi-mapping").show();
+		this.$main.find(".ib-bsi-preview").hide();
+		this.$main.find(".ib-bsi-result").hide().empty();
+	}
+
+	_on_mapping_continue() {
+		const $form = this.$main.find(".ib-bsi-map-form");
+		const mode = $form.find(".ib-bsi-map-mode").val();
+		const col_date = $form.find(".ib-bsi-map-date").val();
+		if (!col_date) {
+			frappe.msgprint("Date column is required.");
+			return;
+		}
+		const profile = {
+			mode,
+			col_date,
+			col_description: $form.find(".ib-bsi-map-desc").val() || null,
+			col_reference: $form.find(".ib-bsi-map-ref").val() || null,
+			col_debit: $form.find(".ib-bsi-map-debit").val() || null,
+			col_credit: $form.find(".ib-bsi-map-credit").val() || null,
+			col_amount: $form.find(".ib-bsi-map-amount").val() || null,
+			col_type: $form.find(".ib-bsi-map-type").val() || null,
+			credit_indicator: $form.find(".ib-bsi-map-credit-indicator").val() || null,
+		};
+		this._profile = profile;
+
+		const save = this.$main.find(".ib-bsi-save-profile").is(":checked");
+		if (save) {
+			frappe.call({
+				method: "instabiz.instabiz.page.ib_bank_statement_import.ib_bank_statement_import.save_profile",
+				args: { bank_account: this._bank_account, profile },
+			});
+		}
+
+		this.$main.find(".ib-bsi-mapping").hide();
+		this._preview();
+	}
+
+	_preview() {
 		frappe.call({
 			method: "instabiz.instabiz.page.ib_bank_statement_import.ib_bank_statement_import.preview_statement",
-			args: { bank_account, csv_text: this._csv_text },
+			args: { bank_account: this._bank_account, csv_text: this._csv_text, profile: this._profile },
 			freeze: true,
 			freeze_message: "Parsing statement…",
 			callback: (r) => {
@@ -146,7 +267,6 @@ class IBBankStatementImport {
 	_render_preview(d) {
 		const fmt = (n) => frappe.format(n, { fieldtype: "Currency" });
 
-		// Summary chips
 		const $sum = this.$main.find(".ib-bsi-summary").empty();
 		[
 			["Transactions", d.count, "#2d6a4f"],
@@ -161,7 +281,6 @@ class IBBankStatementImport {
 			`);
 		});
 
-		// Table rows
 		const $tbody = this.$main.find(".ib-bsi-table tbody").empty();
 		d.rows.forEach((r) => {
 			const desc = frappe.utils.escape_html(r.description || "");
@@ -189,7 +308,7 @@ class IBBankStatementImport {
 
 		frappe.call({
 			method: "instabiz.instabiz.page.ib_bank_statement_import.ib_bank_statement_import.import_statement",
-			args: { bank_account: this._bank_account, csv_text: this._csv_text },
+			args: { bank_account: this._bank_account, csv_text: this._csv_text, profile: this._profile },
 			freeze: true,
 			freeze_message: "Creating Bank Transactions…",
 			callback: (r) => {
@@ -207,6 +326,7 @@ class IBBankStatementImport {
 		let html = `
 			<div class="alert alert-${res.created ? "success" : "warning"}" style="border-radius:8px;">
 				<strong>${res.created} transaction${res.created !== 1 ? "s" : ""} imported.</strong>
+				${res.auto_matched ? `&nbsp; ${res.auto_matched} auto-matched to an open document and reconciled with a Payment Entry.` : ""}
 				${res.skipped ? `&nbsp; ${res.skipped} skipped (duplicates).` : ""}
 				${has_errors ? `&nbsp; <span class="text-danger">${res.errors.length} errors.</span>` : ""}
 			</div>
@@ -237,6 +357,8 @@ class IBBankStatementImport {
 	_reset() {
 		this._csv_text = null;
 		this._preview_rows = [];
+		this._profile = null;
+		this.$main.find(".ib-bsi-mapping").hide();
 		this.$main.find(".ib-bsi-preview").hide();
 		this.$main.find(".ib-bsi-result").hide().empty();
 		this.$main.find("#ib-bsi-file").val("");

@@ -86,9 +86,7 @@ class IBAssignmentAdmin {
 		const _is_full_manager = frappe.user.has_role("Sales Manager") || frappe.user.has_role("System Manager");
 		if (_is_full_manager) {
 			this.page.add_inner_button("+ Create New Team", () => self._show_create_team_modal());
-			this.page.add_inner_button("Config", () => self._show_config_modal());
 			this.page.add_inner_button("Incentive Slabs", () => self._show_slab_dialog());
-			this.page.add_inner_button("Fix Excess Assignments", () => self._run_cleanup());
 			this.page.add_inner_button("View Incentives ↗", () => frappe.set_route("ib-sales-incentives"));
 		}
 		this.page.add_inner_button("Refresh", () => self.refresh());
@@ -104,7 +102,7 @@ class IBAssignmentAdmin {
 				<section class="ib-aa-section">
 					<div class="ib-aa-section-head">
 						<span class="ib-aa-section-title">Team Overview</span>
-						<input class="ib-aa-roster-search" id="ib-aa-roster-search" type="text" placeholder="Search users…">
+						<input class="ib-aa-roster-search form-control" id="ib-aa-roster-search" type="text" placeholder="Search users…">
 						<span class="ib-aa-section-date" id="ib-aa-date-label"></span>
 					</div>
 					<div id="ib-aa-hidden-strip" style="display:none;" class="ib-aa-hidden-strip"></div>
@@ -152,7 +150,10 @@ class IBAssignmentAdmin {
 
 	refresh() {
 		const self = this;
-		$("#ib-aa-date-label").text(frappe.datetime.str_to_user(this._date));
+		const is_hist = this._date !== frappe.datetime.get_today();
+		$("#ib-aa-date-label")
+			.text(frappe.datetime.str_to_user(this._date) + (is_hist ? " · Historical" : ""))
+			.toggleClass("ib-aa-section-date--hist", is_hist);
 		frappe.call({
 			method: "instabiz.overrides.customer_assignment.get_admin_overview",
 			args: { date: this._date, territory: this._territory },
@@ -173,7 +174,7 @@ class IBAssignmentAdmin {
 		const isLeader = !this._is_manager && !!this._leader_team;
 		// Hide manager-only controls for team leaders
 		this.page.inner_toolbar.find("button").filter((_, el) =>
-			["+ Create New Team", "Config"].includes($(el).text().trim())
+			["+ Create New Team"].includes($(el).text().trim())
 		).toggle(!isLeader);
 		this.page.fields_dict?.admin_territory?.$wrapper?.toggle(!isLeader);
 	}
@@ -528,7 +529,7 @@ class IBAssignmentAdmin {
 			if (!slabs.length) return `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px">
 				No slabs configured. Add tiers below.
 			</div>`;
-			return `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px">
+			return `<table class="table table-bordered" style="font-size:12px;margin-bottom:12px">
 				<thead>
 					<tr style="background:var(--bg-color)">
 						<th style="padding:7px 10px;text-align:left;border-bottom:1px solid var(--border-color);font-size:11px;color:var(--text-muted)">Label</th>
@@ -813,7 +814,7 @@ class IBAssignmentAdmin {
 					<div class="ib-tm-section">
 						<div class="ib-tm-section-label">Add Member</div>
 						<div class="ib-tm-picker-head">
-							<input class="ib-tm-picker-search" id="ib-tm-member-search" placeholder="Search users…" autocomplete="off">
+							<input class="ib-tm-picker-search form-control" id="ib-tm-member-search" placeholder="Search users…" autocomplete="off">
 						</div>
 						<div class="ib-tm-picker-list" id="ib-tm-picker-list">${picker_rows}</div>
 						<div class="ib-tm-section-label ib-tm-section-label--sub">In Team <span class="ib-tm-count">${team.members.length}</span></div>
@@ -826,7 +827,7 @@ class IBAssignmentAdmin {
 					<div class="ib-tm-section">
 						<div class="ib-tm-section-label">Add Territory</div>
 						<div class="ib-tm-picker-head">
-							<input class="ib-tm-picker-search" id="ib-tm-territory-search" placeholder="Search territories…" autocomplete="off">
+							<input class="ib-tm-picker-search form-control" id="ib-tm-territory-search" placeholder="Search territories…" autocomplete="off">
 						</div>
 						<div class="ib-tm-picker-list" id="ib-tm-territory-picker-list">${territory_picker_rows}</div>
 						<div class="ib-tm-section-label ib-tm-section-label--sub">Assigned <span class="ib-tm-count">${team.territories.length}</span></div>
@@ -837,21 +838,21 @@ class IBAssignmentAdmin {
 			</div>
 		`);
 
-		// Member search filter
+		// Member search filter (multi-token: every word must match)
 		$body.find("#ib-tm-member-search").on("input", function() {
-			const q = this.value.trim().toLowerCase();
+			const q = this.value;
 			$body.find("#ib-tm-picker-list .ib-tm-picker-row").each(function() {
 				const hay = $(this).data("search") || "";
-				$(this).toggle(!q || hay.includes(q));
+				$(this).toggle(window.ib_multi_token_match({ hay }, ["hay"], q));
 			});
 		});
 
-		// Territory search filter
+		// Territory search filter (multi-token: every word must match)
 		$body.find("#ib-tm-territory-search").on("input", function() {
-			const q = this.value.trim().toLowerCase();
+			const q = this.value;
 			$body.find("#ib-tm-territory-picker-list .ib-tm-picker-row").each(function() {
 				const hay = $(this).data("tsearch") || "";
-				$(this).toggle(!q || hay.includes(q));
+				$(this).toggle(window.ib_multi_token_match({ hay }, ["hay"], q));
 			});
 		});
 
@@ -1012,21 +1013,48 @@ class IBAssignmentAdmin {
 
 	// Render a va column and bind multi-token local search to it.
 	// card_fn(row) → jQuery element. empty_msg shown when no data (not when search has no results).
-	_va_render_col(col, rows, card_fn, empty_msg) {
+	_va_render_col(col, rows, card_fn, empty_msg, total) {
 		const $cards = $(`#ib-va-${col}-cards`).empty();
 		$(`#ib-va-${col}-search`).val("");
-		$(`#ib-va-${col}-count`).text(rows.length);
+		let real_total = total !== undefined ? total : rows.length;
+		$(`#ib-va-${col}-count`).text(real_total > rows.length ? `${rows.length} / ${real_total}` : rows.length);
 
 		const render = (filtered, is_search) => {
 			$cards.empty();
 			$(`#ib-va-${col}-count`).text(
-				is_search ? `${filtered.length}/${rows.length}` : rows.length
+				is_search ? `${filtered.length}/${rows.length}`
+					: (real_total > rows.length ? `${rows.length} / ${real_total}` : rows.length)
 			);
 			if (!filtered.length) {
 				$cards.html(`<div class="ib-va-empty">${is_search ? "No results" : empty_msg}</div>`);
 			} else {
 				filtered.forEach(r => $cards.append(card_fn(r)));
 			}
+			// "My Accounts" pages past its initial 50 instead of hard-capping —
+			// only relevant on the unfiltered view (search already narrows client-side).
+			if (col === "dormant" && !is_search && real_total > rows.length) {
+				appendLoadMore();
+			}
+		};
+
+		const appendLoadMore = () => {
+			const $more = $(`<div class="ib-va-more" style="text-align:center;padding:6px;font-size:11px;color:var(--ib-primary,#d97757);cursor:pointer;border:1px dashed var(--border-color);border-radius:6px">Load more (${real_total - rows.length})</div>`);
+			$more.on("click", () => {
+				$more.text("Loading…");
+				frappe.call({
+					method: "instabiz.overrides.customer_assignment.load_more_my_accounts_admin",
+					args: { user: this._view_as_user, offset: rows.length, limit: 50 },
+					callback: (r) => {
+						const { rows: more_rows, total: new_total } = r.message || { rows: [], total: real_total };
+						$more.remove();
+						more_rows.forEach(row => { rows.push(row); $cards.append(card_fn(row)); });
+						real_total = new_total;
+						$(`#ib-va-${col}-count`).text(real_total > rows.length ? `${rows.length} / ${real_total}` : rows.length);
+						if (real_total > rows.length) appendLoadMore();
+					},
+				});
+			});
+			$cards.append($more);
 		};
 
 		render(rows, false);
@@ -1049,13 +1077,18 @@ class IBAssignmentAdmin {
 
 	_va_tmrw_card(r) {
 		const last = r.last_so_date ? frappe.datetime.str_to_user(r.last_so_date) : "No orders";
-		return $(`
+		const $card = $(`
 			<div class="ib-va-card ib-va-card--tmrw">
 				<div class="ib-va-card-name">${frappe.utils.escape_html(r.customer_name || r.customer)}</div>
 				<div class="ib-va-card-meta">${frappe.utils.escape_html(r.territory || "")}</div>
 				<div class="ib-va-card-last">${last}</div>
 			</div>
 		`);
+		$card.find(".ib-va-card-name").addClass("ib-va-card-name--link").on("click", (e) => {
+			e.stopPropagation();
+			frappe.set_route("Form", "Customer", r.customer);
+		});
+		return $card;
 	}
 
 	_render_board_view(data) {
@@ -1086,7 +1119,7 @@ class IBAssignmentAdmin {
 							${IB_ICONS.svg("user", 13)}<span class="ib-va-col-title">My Accounts</span>
 							<span class="ib-va-badge" id="ib-va-dormant-count">0</span>
 						</div>
-						<input class="ib-va-col-search" id="ib-va-dormant-search" placeholder="Search…" autocomplete="off">
+						<input class="ib-va-col-search form-control" id="ib-va-dormant-search" placeholder="Search…" autocomplete="off">
 						<div class="ib-va-cards" id="ib-va-dormant-cards"></div>
 					</div>
 					<div class="ib-va-col">
@@ -1094,7 +1127,7 @@ class IBAssignmentAdmin {
 							${IB_ICONS.svg("map_pin", 13)}<span class="ib-va-col-title">Territory</span>
 							<span class="ib-va-badge" id="ib-va-regular-count">0</span>
 						</div>
-						<input class="ib-va-col-search" id="ib-va-regular-search" placeholder="Search…" autocomplete="off">
+						<input class="ib-va-col-search form-control" id="ib-va-regular-search" placeholder="Search…" autocomplete="off">
 						<div class="ib-va-cards" id="ib-va-regular-cards"></div>
 					</div>
 					<div class="ib-va-col ib-va-col--today">
@@ -1104,7 +1137,7 @@ class IBAssignmentAdmin {
 							<span class="ib-va-badge ib-va-badge--today" id="ib-va-today-count">0</span>
 							${this._is_manager ? `<button class="ib-va-remove-all-btn" id="ib-va-remove-all" title="Remove all pending">${IB_ICONS.svg("trash", 11)}</button>` : ""}
 						</div>
-						<input class="ib-va-col-search" id="ib-va-today-search" placeholder="Search…" autocomplete="off">
+						<input class="ib-va-col-search form-control" id="ib-va-today-search" placeholder="Search…" autocomplete="off">
 						<div class="ib-va-cards" id="ib-va-today-cards"></div>
 					</div>
 					<div class="ib-va-col ib-va-col--tomorrow">
@@ -1113,7 +1146,7 @@ class IBAssignmentAdmin {
 							<span class="ib-va-col-date">${frappe.datetime.str_to_user(data.tomorrow_date)}</span>
 							<span class="ib-va-badge ib-va-badge--tmrw" id="ib-va-tomorrow-count">0</span>
 						</div>
-						<input class="ib-va-col-search" id="ib-va-tomorrow-search" placeholder="Search…" autocomplete="off">
+						<input class="ib-va-col-search form-control" id="ib-va-tomorrow-search" placeholder="Search…" autocomplete="off">
 						<div class="ib-va-cards" id="ib-va-tomorrow-cards"></div>
 					</div>
 				</div>
@@ -1127,7 +1160,7 @@ class IBAssignmentAdmin {
 			</div>
 		`);
 
-		this._va_render_col("dormant", data.dormant || [], r => self._va_pool_card(r, user), "Empty");
+		this._va_render_col("dormant", data.dormant || [], r => self._va_pool_card(r, user), "Empty", data.dormant_total);
 		this._va_render_col("regular", data.regular || [], r => self._va_pool_card(r, user), "Empty");
 		this._va_render_col("today",   data.today   || [], r => self._va_today_card(r),       "No assignments");
 		this._va_render_col("tomorrow",data.tomorrow|| [], r => self._va_tmrw_card(r),        "Scheduler runs at midnight");
@@ -1177,6 +1210,12 @@ class IBAssignmentAdmin {
 				</div>` : ""}
 			</div>
 		`);
+		// Deep-link: was a dead end before — no navigation existed from this
+		// board's cards at all, only in-place action buttons.
+		$card.find(".ib-va-card-name, .ib-va-card-code").addClass("ib-va-card-name--link").on("click", (e) => {
+			e.stopPropagation();
+			frappe.set_route("Form", "Customer", r.customer);
+		});
 		$card.find(".ib-va-add-btn").on("click", function () {
 			const customer = $(this).data("customer");
 			const $btn = $(this);
@@ -1237,6 +1276,10 @@ class IBAssignmentAdmin {
 				${is_pending && this._is_manager ? `<button class="ib-va-remove-btn" data-id="${frappe.utils.escape_html(r.name)}">${IB_ICONS.svg("trash", 11)} Remove</button>` : ""}
 			</div>
 		`);
+		$card.find(".ib-va-card-name").addClass("ib-va-card-name--link").on("click", (e) => {
+			e.stopPropagation();
+			frappe.set_route("Form", "Customer", r.customer);
+		});
 
 		if (is_pending) {
 			$card.find(".ib-va-remove-btn").on("click", function () {
@@ -1378,64 +1421,6 @@ class IBAssignmentAdmin {
 		frappe.new_doc("Lead Sales Team");
 	}
 
-	// ── Config modal ──────────────────────────────────────────────────────────
-
-	_show_config_modal() {
-		frappe.call({
-			method: "instabiz.overrides.customer_assignment.get_assignment_config",
-			callback(r) {
-				if (!r.message) return;
-				const cfg = r.message;
-				const d = new frappe.ui.Dialog({
-					title: "Assignment Config",
-					fields: [
-						{ fieldname: "assignments_per_day", fieldtype: "Int", label: "Assignments Per Day", default: cfg.assignments_per_day, reqd: 1 },
-						{ fieldname: "dormant_threshold_days", fieldtype: "Int", label: "Dormant Threshold (Days)", default: cfg.dormant_threshold_days, reqd: 1 },
-						{ fieldname: "dormant_ratio", fieldtype: "Percent", label: "Dormant Mix Ratio (%)", default: cfg.dormant_ratio, reqd: 1 },
-					],
-					primary_action_label: "Save",
-					primary_action(values) {
-						frappe.call({
-							method: "instabiz.overrides.customer_assignment.save_assignment_config",
-							args: values,
-							callback(r) {
-								if (r.message && r.message.status === "ok") {
-									d.hide();
-									frappe.show_alert({ message: "Config saved", indicator: "green" });
-								}
-							},
-						});
-					},
-				});
-				d.show();
-			},
-		});
-	}
-
-	_run_cleanup() {
-		const self = this;
-		frappe.confirm(
-			"This will trim Pending assignments exceeding the daily quota for today and tomorrow. Continue?",
-			() => {
-				frappe.call({
-					method: "instabiz.overrides.customer_assignment.cleanup_excess_assignments",
-					freeze: true,
-					freeze_message: "Cleaning up excess assignments…",
-					callback(r) {
-						if (r.message != null) {
-							const { removed_excess, total_removed } = r.message;
-							frappe.show_alert({
-								message: `Cleanup done: ${removed_excess} excess assignment${removed_excess !== 1 ? "s" : ""} removed`,
-								indicator: total_removed > 0 ? "green" : "blue",
-							});
-							self.refresh();
-						}
-					},
-				});
-			}
-		);
-	}
-
 	// ── Styles ────────────────────────────────────────────────────────────────
 
 	_inject_styles() {
@@ -1471,6 +1456,9 @@ class IBAssignmentAdmin {
 				font-size: 11px; font-weight: 600;
 				background: var(--ib-primary); color: #fff;
 				padding: 2px 10px; border-radius: 20px;
+			}
+			.ib-aa-section-date--hist {
+				background: #b45309;
 			}
 			.ib-aa-hidden-strip {
 				display: flex; align-items: center; gap: 6px;
@@ -1901,6 +1889,8 @@ class IBAssignmentAdmin {
 			.ib-va-card--done  { opacity: 0.5; }
 			.ib-va-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
 			.ib-va-card-name { font-weight: 600; font-size: 12.5px; line-height: 1.3; }
+			.ib-va-card-name--link, .ib-va-card-code.ib-va-card-name--link { cursor: pointer; }
+			.ib-va-card-name--link:hover { color: var(--ib-primary, #d97757); text-decoration: underline; }
 			.ib-va-card-code { font-size: 10px; color: var(--text-muted); font-family: monospace; margin-top: 1px; }
 			.ib-va-card-meta { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
 			.ib-va-card-last { font-size: 11px; color: var(--text-muted); margin-top: 2px; }

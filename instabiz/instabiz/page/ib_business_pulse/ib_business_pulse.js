@@ -18,15 +18,9 @@ frappe.pages["ib-business-pulse"].on_page_hide = function (wrapper) {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-
-const IB_PULSE_DOMAINS = [
-	{ key: "Revenue",     icon: "lucide:indian-rupee", color: "#d97757", route: "ib-main-dashboard" },
-	{ key: "Sales",       icon: "lucide:file-text",    color: "#3b82f6", route: "ib-customer-board" },
-	{ key: "Inventory",   icon: "lucide:package",      color: "#8b5cf6", route: "ib-stock-dashboard" },
-	{ key: "Procurement", icon: "lucide:shopping-cart",color: "#f59e0b", route: "List/Purchase Order" },
-	{ key: "HR",          icon: "lucide:users",         color: "#06b6d4", route: "ib-hrms-dashboard" },
-	{ key: "Production",  icon: "lucide:factory",       color: "#10b981", route: "ib-production-dashboard" },
-];
+// Each domain card shows real counts/amounts only — no synthetic 0-100 score.
+// Every metric routes to the actual filtered record list it was counted from;
+// the card footer routes to the domain's own dashboard page.
 
 class IBBusinessPulse {
 	constructor(wrapper) {
@@ -47,42 +41,30 @@ class IBBusinessPulse {
 		s.id = "ib-bp-styles";
 		s.textContent = `
 .ib-bp-wrap { padding: 16px; max-width: 1400px; }
-.ib-bp-header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
-.ib-bp-score-ring { width: 100px; height: 100px; flex-shrink: 0; }
-.ib-bp-score-info { flex: 1; }
-.ib-bp-score-num { font-size: 36px; font-weight: 800; line-height: 1; }
-.ib-bp-score-lbl { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 4px; }
-.ib-bp-score-status { display: inline-block; margin-top: 6px; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
-.ib-bp-score-status.good { background:#d1fae5; color:#065f46; }
-.ib-bp-score-status.warn { background:#fef3c7; color:#92400e; }
-.ib-bp-score-status.bad  { background:#fee2e2; color:#991b1b; }
-.ib-bp-progress-bar { height: 10px; border-radius: 5px; background: var(--border-color); overflow: hidden; margin-top: 8px; max-width: 300px; }
-.ib-bp-progress-fill { height: 100%; border-radius: 5px; transition: width .6s; }
-.ib-bp-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
-.ib-bp-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; }
+.ib-bp-domain-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+.ib-bp-domain { background: var(--card-bg); border: 1px solid var(--border-color);
+  border-radius: 8px; overflow: hidden; }
+.ib-bp-domain-top { display: flex; align-items: center; gap: 8px; padding: 12px 14px 10px; }
+.ib-bp-domain-icon { display: inline-flex; }
+.ib-bp-domain-name { font-size: 12.5px; font-weight: 600; color: var(--heading-color); }
+.ib-bp-metric-row { display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px; border-top: 1px solid var(--border-color); cursor: pointer; transition: background .12s; }
+.ib-bp-metric-row:hover { background: var(--subtle-fg, rgba(0,0,0,.03)); }
+.ib-bp-metric-lbl { font-size: 11.5px; color: var(--text-muted); }
+.ib-bp-metric-val { font-size: 14px; font-weight: 700; color: var(--heading-color); }
+.ib-bp-metric-badge { font-size: 10px; font-weight: 600; margin-left: 6px; }
+.ib-bp-metric-badge.up { color: #10b981; }
+.ib-bp-metric-badge.down { color: #ef4444; }
+.ib-bp-domain-footer { display: block; padding: 7px 14px; font-size: 10.5px; font-weight: 600;
+  color: var(--ib-primary, #d97757); text-align: right; border-top: 1px solid var(--border-color);
+  cursor: pointer; text-transform: uppercase; letter-spacing: .04em; }
+.ib-bp-domain-footer:hover { text-decoration: underline; }
+.ib-bp-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
 .ib-bp-card-title { font-size: 12px; font-weight: 600; color: var(--text-muted);
   text-transform: uppercase; letter-spacing: .5px; margin-bottom: 14px; }
-.ib-bp-domain-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
-.ib-bp-domain { background: var(--card-bg); border: 1px solid var(--border-color);
-  border-radius: 8px; padding: 14px; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
-.ib-bp-domain:hover { border-color: var(--ib-primary); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
-.ib-bp-domain-top { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.ib-bp-domain-icon { display: inline-flex; }
-.ib-bp-domain-name { font-size: 12px; font-weight: 600; color: var(--heading-color); }
-.ib-bp-domain-score { font-size: 22px; font-weight: 800; }
-.ib-bp-domain-bar { height: 6px; border-radius: 3px; background: var(--border-color); overflow: hidden; margin-top: 6px; }
-.ib-bp-domain-fill { height: 100%; border-radius: 3px; transition: width .5s; }
-.ib-bp-radar-wrap { display: flex; justify-content: center; align-items: center; }
 .ib-bp-trend-wrap { height: 180px; }
-.ib-bp-stat-row { display: flex; flex-wrap: wrap; gap: 16px; }
-.ib-bp-stat { flex: 1; min-width: 120px; }
-.ib-bp-stat-val { font-size: 20px; font-weight: 700; color: var(--heading-color); }
-.ib-bp-stat-lbl { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 .ib-bp-ts { font-size: 11px; color: var(--text-muted); text-align: right; margin-bottom: 12px; }
-@media(max-width:900px){
-  .ib-bp-domain-grid{grid-template-columns:1fr 1fr;}
-  .ib-bp-row2{grid-template-columns:1fr;}
-}
+@media(max-width:900px){ .ib-bp-domain-grid{grid-template-columns:1fr 1fr;} }
 @media(max-width:540px){ .ib-bp-domain-grid{grid-template-columns:1fr;} }
 		`;
 		document.head.appendChild(s);
@@ -93,37 +75,10 @@ class IBBusinessPulse {
 		this.$wrap = $(`<div class="ib-bp-wrap"></div>`).appendTo($pc);
 		this.$wrap.html(`
 			<div class="ib-bp-ts" id="ib-bp-ts">Loading…</div>
-			<div class="ib-bp-header" id="ib-bp-header">
-				<svg class="ib-bp-score-ring" viewBox="0 0 100 100" id="ib-bp-ring">
-					<circle cx="50" cy="50" r="42" fill="none" stroke="var(--border-color)" stroke-width="10"/>
-					<circle cx="50" cy="50" r="42" fill="none" stroke="#d97757" stroke-width="10"
-						stroke-dasharray="264" stroke-dashoffset="264"
-						stroke-linecap="round" transform="rotate(-90 50 50)"
-						id="ib-bp-ring-fill" style="transition:stroke-dashoffset .8s"/>
-				</svg>
-				<div class="ib-bp-score-info">
-					<div class="ib-bp-score-num" id="ib-bp-score-num">—</div>
-					<div class="ib-bp-score-lbl">Overall Business Health</div>
-					<div class="ib-bp-score-status" id="ib-bp-status">—</div>
-					<div class="ib-bp-progress-bar">
-						<div class="ib-bp-progress-fill" id="ib-bp-prog" style="width:0%"></div>
-					</div>
-				</div>
-			</div>
 			<div class="ib-bp-domain-grid" id="ib-bp-domains"></div>
-			<div class="ib-bp-row2">
-				<div class="ib-bp-card">
-					<div class="ib-bp-card-title">Health Radar</div>
-					<div class="ib-bp-radar-wrap" id="ib-bp-radar"></div>
-				</div>
-				<div class="ib-bp-card">
-					<div class="ib-bp-card-title">14-Day Revenue Trend</div>
-					<div class="ib-bp-trend-wrap" id="ib-bp-trend"></div>
-				</div>
-			</div>
-			<div class="ib-bp-card" style="margin-bottom:16px">
-				<div class="ib-bp-card-title">Snapshot</div>
-				<div class="ib-bp-stat-row" id="ib-bp-stats"></div>
+			<div class="ib-bp-card">
+				<div class="ib-bp-card-title">14-Day Revenue Trend</div>
+				<div class="ib-bp-trend-wrap" id="ib-bp-trend"></div>
 			</div>
 		`);
 	}
@@ -158,96 +113,125 @@ class IBBusinessPulse {
 		if (this._auto_timer) { clearInterval(this._auto_timer); this._auto_timer = null; }
 	}
 
+	_fmt(v) { return "₹" + Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 }); }
+
 	_render(d) {
-		this._render_header(d);
-		this._render_domains(d.scores || {});
-		this._render_radar(d.scores || {});
+		this._render_domains(d);
 		this._render_trend(d.trend_14 || []);
-		this._render_stats(d);
 	}
 
-	_render_header(d) {
-		const score = d.overall || 0;
-		const circ = 2 * Math.PI * 42;
-		const offset = circ - (score / 100 * circ);
-		const color = score >= 75 ? "#10b981" : score >= 50 ? "#f59e0b" : "#ef4444";
-		const status_text = score >= 75 ? "Healthy" : score >= 50 ? "Needs Attention" : "Critical Issues";
-		const status_cls = score >= 75 ? "good" : score >= 50 ? "warn" : "bad";
+	// Route filters below mirror the same date_field/doctype the backend just
+	// aggregated with (billing_mode toggle — Sales Order in dev, Sales Invoice
+	// in prod) so a click always lands on the exact rows that were counted.
+	_domains(d) {
+		const doctype = d.sales_doctype;
+		const date_field = d.date_field;
+		const between = [d.month_start, d.today];
+		const status_filter = d.dev_mode ? { status: ["!=", "Cancelled"] } : { is_return: 0 };
 
-		document.getElementById("ib-bp-ring-fill").setAttribute("stroke-dashoffset", offset);
-		document.getElementById("ib-bp-ring-fill").setAttribute("stroke", color);
-		document.getElementById("ib-bp-score-num").textContent = score;
-		document.getElementById("ib-bp-score-num").style.color = color;
-		const $st = document.getElementById("ib-bp-status");
-		$st.textContent = status_text;
-		$st.className = "ib-bp-score-status " + status_cls;
-		document.getElementById("ib-bp-prog").style.width = score + "%";
-		document.getElementById("ib-bp-prog").style.background = color;
+		return [
+			{
+				key: "Revenue", icon: "lucide:indian-rupee", route: "ib-main-dashboard",
+				metrics: [
+					{
+						label: "Revenue MTD", value: this._fmt(d.rev_mtd),
+						badge: d.rev_change_pct == null ? "" :
+							`<span class="ib-bp-metric-badge ${d.rev_change_pct >= 0 ? "up" : "down"}">${d.rev_change_pct >= 0 ? "▲" : "▼"} ${Math.abs(d.rev_change_pct)}% vs last mo</span>`,
+						route: () => frappe.set_route("List", doctype, Object.assign({ docstatus: 1, [`${date_field},Between`]: between }, status_filter)),
+					},
+					{
+						label: "Collection Rate", value: d.collection_rate + "%",
+						route: () => frappe.set_route("query-report", "IB Collections Report"),
+					},
+					{
+						label: "Outstanding AR", value: this._fmt(d.ar),
+						route: () => frappe.set_route("query-report", "IB AR Aging"),
+					},
+				],
+			},
+			{
+				key: "Sales", icon: "lucide:file-text", route: "ib-customer-board",
+				metrics: [
+					{
+						label: "Open Leads", value: d.open_leads,
+						route: () => frappe.set_route("List", "Lead", { status: ["not in", ["Converted", "Do Not Contact"]] }),
+					},
+					{
+						label: "Open Quotations", value: d.open_quotes,
+						route: () => frappe.set_route("List", "Quotation", { docstatus: 1, status: ["not in", ["Ordered", "Lost", "Cancelled", "Expired"]] }),
+					},
+				],
+			},
+			{
+				key: "Inventory", icon: "lucide:package", route: "ib-stock-dashboard",
+				metrics: [
+					{ label: "Items In Stock", value: d.total_items, route: () => frappe.set_route("ib-stock-dashboard") },
+					{ label: "Low / Reorder Stock", value: d.low_stock, route: () => frappe.set_route("ib-stock-dashboard") },
+				],
+			},
+			{
+				key: "Procurement", icon: "lucide:shopping-cart", route: "ib-procurement-dashboard",
+				metrics: [
+					{
+						label: "Open Purchase Orders", value: d.open_po,
+						route: () => frappe.set_route("List", "Purchase Order", { docstatus: 1, status: ["not in", ["Completed", "Cancelled", "Closed"]] }),
+					},
+				],
+			},
+			{
+				key: "HR", icon: "lucide:users", route: "ib-hrms-dashboard",
+				metrics: [
+					{ label: "Active Employees", value: d.total_emp, route: () => frappe.set_route("List", "Employee", { status: "Active" }) },
+					{
+						label: "Present Today", value: d.present_today,
+						route: () => frappe.set_route("List", "Attendance", { attendance_date: d.today, status: "Present", docstatus: 1 }),
+					},
+				],
+			},
+			{
+				key: "Production", icon: "lucide:factory", route: "ib-production-dashboard",
+				metrics: [
+					{
+						label: "Active Work Orders", value: d.wo_active,
+						route: () => frappe.set_route("List", "IB Work Order", { status: ["in", ["Pending", "In Progress", "On Hold"]] }),
+					},
+					{
+						label: "Completed This Month", value: d.wo_completed,
+						route: () => frappe.set_route("List", "IB Work Order", { status: "Completed", "completed_at,>=": d.month_start }),
+					},
+				],
+			},
+		];
 	}
 
-	_render_domains(scores) {
-		const html = IB_PULSE_DOMAINS.map(d => {
-			const score = scores[d.key] ?? 0;
-			const pct = Math.round(score);
-			const color = pct >= 70 ? d.color : pct >= 40 ? "#f59e0b" : "#ef4444";
-			return `
-				<div class="ib-bp-domain" data-route="${d.route}">
-					<div class="ib-bp-domain-top">
-						<iconify-icon icon="${d.icon}" width="20" height="20" class="ib-bp-domain-icon"></iconify-icon>
-						<span class="ib-bp-domain-name">${d.key}</span>
-					</div>
-					<div class="ib-bp-domain-score" style="color:${color}">${pct}</div>
-					<div class="ib-bp-domain-bar">
-						<div class="ib-bp-domain-fill" style="width:${pct}%;background:${color}"></div>
-					</div>
+	_render_domains(d) {
+		const domains = this._domains(d);
+		const html = domains.map((dom, di) => `
+			<div class="ib-bp-domain">
+				<div class="ib-bp-domain-top">
+					<iconify-icon icon="${dom.icon}" width="18" height="18" class="ib-bp-domain-icon"></iconify-icon>
+					<span class="ib-bp-domain-name">${dom.key}</span>
 				</div>
-			`;
-		}).join("");
+				${dom.metrics.map((m, mi) => `
+					<div class="ib-bp-metric-row" data-domain="${di}" data-metric="${mi}">
+						<span class="ib-bp-metric-lbl">${m.label}</span>
+						<span><span class="ib-bp-metric-val">${m.value}</span>${m.badge || ""}</span>
+					</div>
+				`).join("")}
+				<div class="ib-bp-domain-footer" data-route="${dom.route}">Open ${dom.key} Dashboard →</div>
+			</div>
+		`).join("");
+
 		const $el = this.$wrap.find("#ib-bp-domains").html(html);
-		$el.find(".ib-bp-domain").on("click", (e) => {
+		$el.find(".ib-bp-metric-row").on("click", (e) => {
+			const $row = $(e.currentTarget);
+			const dom = domains[$row.data("domain")];
+			const metric = dom.metrics[$row.data("metric")];
+			metric.route();
+		});
+		$el.find(".ib-bp-domain-footer").on("click", (e) => {
 			frappe.set_route($(e.currentTarget).data("route"));
 		});
-	}
-
-	_render_radar(scores) {
-		const keys = IB_PULSE_DOMAINS.map(d => d.key);
-		const vals = keys.map(k => (scores[k] ?? 0) / 100);
-		const n = keys.length;
-		const cx = 120, cy = 120, r = 90;
-		const angle = (i) => (i / n) * 2 * Math.PI - Math.PI / 2;
-		const pt = (i, scale) => {
-			const a = angle(i);
-			return [cx + r * scale * Math.cos(a), cy + r * scale * Math.sin(a)];
-		};
-
-		// Grid rings
-		const rings = [0.25, 0.5, 0.75, 1.0].map(scale => {
-			const pts = keys.map((_, i) => pt(i, scale).join(",")).join(" ");
-			return `<polygon points="${pts}" fill="none" stroke="var(--border-color)" stroke-width="1"/>`;
-		}).join("");
-
-		// Axes
-		const axes = keys.map((k, i) => {
-			const [x, y] = pt(i, 1.0);
-			const [lx, ly] = pt(i, 1.18);
-			return `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--border-color)" stroke-width="1"/>
-				<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle"
-					font-size="9" fill="var(--text-muted)">${k}</text>`;
-		}).join("");
-
-		// Data polygon
-		const data_pts = vals.map((v, i) => pt(i, v).join(",")).join(" ");
-		const d_color = "#d97757";
-
-		const svg = `<svg width="240" height="240" viewBox="0 0 240 240">
-			${rings}${axes}
-			<polygon points="${data_pts}" fill="${d_color}" fill-opacity=".25" stroke="${d_color}" stroke-width="2"/>
-			${vals.map((v, i) => {
-				const [x, y] = pt(i, v);
-				return `<circle cx="${x}" cy="${y}" r="3.5" fill="${d_color}"/>`;
-			}).join("")}
-		</svg>`;
-		this.$wrap.find("#ib-bp-radar").html(svg);
 	}
 
 	_render_trend(trend) {
@@ -273,25 +257,5 @@ class IBBusinessPulse {
 				formatTooltipY: (v) => "₹" + Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 }),
 			},
 		});
-	}
-
-	_render_stats(d) {
-		const fmt = (v) => "₹" + Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
-		const stats = [
-			{ val: fmt(d.rev_mtd),      lbl: "Revenue MTD" },
-			{ val: d.collection_rate + "%", lbl: "Collection Rate" },
-			{ val: fmt(d.ar),           lbl: "Outstanding AR" },
-			{ val: d.open_leads,        lbl: "Open Leads" },
-			{ val: d.open_quotes,       lbl: "Open Quotations" },
-			{ val: d.total_emp,         lbl: "Active Employees" },
-			{ val: d.present_today,     lbl: "Present Today" },
-			{ val: d.wo_active,         lbl: "Active Work Orders" },
-		];
-		this.$wrap.find("#ib-bp-stats").html(stats.map(s => `
-			<div class="ib-bp-stat">
-				<div class="ib-bp-stat-val">${s.val}</div>
-				<div class="ib-bp-stat-lbl">${s.lbl}</div>
-			</div>
-		`).join(""));
 	}
 }

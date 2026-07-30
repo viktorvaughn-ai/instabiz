@@ -373,6 +373,17 @@ def log_lead_activity(lead, activity_type, outcome, notes, next_follow_up_date=N
 		"owner": frappe.session.user,
 	}).insert(ignore_permissions=True)
 
+	# Comment.insert() doesn't touch the parent Lead's own modified timestamp,
+	# so the Lead list view (default sort: modified DESC) never reflected
+	# actual activity recency — only real field/status edits on the Lead
+	# itself. Bump it here so logging an activity surfaces the lead to the
+	# top, matching what reps actually expect "last touched" to mean.
+	frappe.db.set_value(
+		"Lead", lead,
+		{"modified": frappe.utils.now(), "modified_by": frappe.session.user},
+		update_modified=False,
+	)
+
 	frappe.db.set_value("Lead", lead, "custom_last_activity_at", frappe.utils.now(), update_modified=False)
 
 	if next_follow_up_date:

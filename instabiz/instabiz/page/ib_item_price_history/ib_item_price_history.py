@@ -158,10 +158,24 @@ def get_item_price_history(
 
 	agg = frappe.db.sql(
 		f"""
-		SELECT COUNT(*) AS cnt, MIN(soi.rate) AS min_rate, MAX(soi.rate) AS max_rate
+		SELECT COUNT(*) AS cnt, MAX(soi.rate) AS max_rate
 		FROM `tabSales Order Item` soi
 		INNER JOIN `tabSales Order` so ON so.name = soi.parent
 		WHERE {where}
+		""",
+		params,
+		as_dict=True,
+	)[0]
+
+	# min_rate excludes rate<=0 rows separately — a mis-entered 0-rate SO line
+	# should not make the "Lowest" KPI read ₹0 (the row itself still shows in
+	# the table/count above, only the lowest-price summary skips it).
+	min_row = frappe.db.sql(
+		f"""
+		SELECT MIN(soi.rate) AS min_rate
+		FROM `tabSales Order Item` soi
+		INNER JOIN `tabSales Order` so ON so.name = soi.parent
+		WHERE {where} AND soi.rate > 0
 		""",
 		params,
 		as_dict=True,
@@ -197,7 +211,7 @@ def get_item_price_history(
 	summary = {
 		"count": total,
 		"last_rate": last[0].rate if last else None,
-		"min_rate": agg.min_rate,
+		"min_rate": min_row.min_rate,
 		"max_rate": agg.max_rate,
 	}
 

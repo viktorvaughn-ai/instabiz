@@ -1,7 +1,7 @@
 {
  "charts": [],
- "content": "[{\"id\":\"stk-h0\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>INVENTORY</b></span>\",\"col\":12}},{\"id\":\"stk-sb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Live Stock Balance\",\"col\":3}},{\"id\":\"stk-sl\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Stock Ledger\",\"col\":3}},{\"id\":\"stk-jr\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Jumbo Rolls\",\"col\":3}},{\"id\":\"stk-h1\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>REPORTS</b></span>\",\"col\":12}},{\"id\":\"stk-sa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Stock Ageing\",\"col\":3}},{\"id\":\"stk-h2\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\",\"col\":12}},{\"id\":\"stk-kb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Knowledge Base\",\"col\":3}},{\"id\":\"stk-inward\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inward Stock Transfer\",\"col\":3}}]",
- "creation": "2026-07-15 06:19:50.587833",
+ "content": "[{\"id\":\"stk-h0\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>INVENTORY</b></span>\",\"col\":12}},{\"id\":\"stk-sb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Live Stock Balance\",\"col\":3}},{\"id\":\"stk-sl\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Stock Ledger\",\"col\":3}},{\"id\":\"stk-h1\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>REPORTS</b></span>\",\"col\":12}},{\"id\":\"stk-sa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Stock Ageing\",\"col\":3}},{\"id\":\"stk-h2\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\",\"col\":12}},{\"id\":\"stk-kb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Knowledge Base\",\"col\":3}},{\"id\":\"stk-inward\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inward Stock Transfer\",\"col\":3}}]",
+ "creation": "2026-07-29 01:54:13.924807",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz Stock",
  "links": [],
- "modified": "2026-07-24 20:48:05.832265",
+ "modified": "2026-07-29 01:59:26.578204",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz Stock",
@@ -48,15 +48,6 @@
    "type": "Page"
   },
   {
-   "color": "Grey",
-   "doc_view": "List",
-   "label": "Jumbo Rolls",
-   "link_to": "IB Jumbo Roll",
-   "restrict_to_role": "Stock Manager",
-   "stats_filter": "[]",
-   "type": "DocType"
-  },
-  {
    "color": "Orange",
    "doc_view": "",
    "label": "Stock Ageing",
@@ -75,12 +66,6 @@
    "doc_view": "List",
    "label": "Item",
    "link_to": "Item",
-   "type": "DocType"
-  },
-  {
-   "doc_view": "List",
-   "label": "Material Request",
-   "link_to": "Material Request",
    "type": "DocType"
   },
   {

@@ -1,4 +1,17 @@
 frappe.listview_settings["Purchase Invoice"] = {
+	button: {
+		show: (doc) => doc.status !== "Cancelled",
+		get_label: () => __("Print"),
+		get_description: () => __("Print Preview"),
+		action(doc) {
+			window.open(
+				"/printview?doctype=Purchase%20Invoice&name=" + encodeURIComponent(doc.name) +
+				"&format=IB%20Purchase%20Invoice&no_letterhead=1&letterhead=No%20Letterhead&settings=%7B%7D",
+				"_blank"
+			);
+		},
+	},
+
 	get_indicator(doc) {
 		const map = {
 			Draft:                "red",

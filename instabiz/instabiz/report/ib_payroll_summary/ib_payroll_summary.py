@@ -32,7 +32,7 @@ def _columns():
     ]
 
 
-def _calc(base, structure, pf_opt_in=True, esic_opt_in=True):
+def _calc(base, structure, gender, pf_opt_in=True, esic_opt_in=True):
     ctx = {"base": base}
 
     if structure == "IB Payroll":
@@ -43,7 +43,10 @@ def _calc(base, structure, pf_opt_in=True, esic_opt_in=True):
 
         PF = round((min(B + CA, 15000)) * 0.12) if pf_opt_in else 0
         ESIC = round((B + HRA) * 0.0075) if (esic_opt_in and base <= 21000) else 0
-        PT = 175 if base <= 10000 else 200
+        # Mirrors the real "Professional Tax" Salary Component condition exactly:
+        # (gender == "Male" and base >= 7500) or (gender == "Female" and base > 25000)
+        pt_eligible = (gender == "Male" and base >= 7500) or (gender == "Female" and base > 25000)
+        PT = (175 if base <= 10000 else 200) if pt_eligible else 0
 
     elif structure == "Astro Payroll":
         if base > 21000:
@@ -60,7 +63,8 @@ def _calc(base, structure, pf_opt_in=True, esic_opt_in=True):
 
         PF = round((min(B + HRA, 15000)) * 0.12) if pf_opt_in else 0
         ESIC = round((B + HRA) * 0.0075) if (esic_opt_in and base <= 21000) else 0
-        PT = 200
+        # Mirrors the real Salary Component condition: gender == "Male" and (B+HRA+CA) >= 10000
+        PT = 200 if (gender == "Male" and (B + HRA + CA) >= 10000) else 0
 
     else:
         return None
@@ -80,17 +84,27 @@ def _calc(base, structure, pf_opt_in=True, esic_opt_in=True):
 
 def _slip_absent_map(payroll_month):
     """Returns {employee: total_absent_days} for the given month.
-    Prefers submitted salary slips; falls back to raw Attendance records."""
+    Prefers existing salary slips (draft or submitted — a draft slip's
+    absent_days/leave_without_pay were already computed by HRMS at generation
+    time and are the authoritative figure for that month, not a placeholder);
+    falls back to a cruder raw-Attendance recount only when no slip exists yet.
+    Previously only docstatus=1 (submitted) was accepted — with payroll not
+    yet submitted this cycle, that silently fell through to the Attendance
+    fallback for every employee, which doesn't replicate HRMS's own
+    leave-vs-absence handling and produced a systematically higher gross than
+    the real (draft) slips — confirmed live: every one of 52 employees showed
+    a higher Payroll Summary gross than their actual Salary Slip, ~₹2.5L
+    aggregate gap, matching the reported Payroll Summary vs HR Dashboard
+    mismatch."""
     month_start = get_first_day(payroll_month)
     month_end = get_last_day(payroll_month)
 
-    # Try submitted salary slips first
     slips = frappe.db.sql(
         """
         SELECT employee,
                COALESCE(absent_days, 0) + COALESCE(leave_without_pay, 0) AS total_absent
         FROM `tabSalary Slip`
-        WHERE docstatus = 1
+        WHERE docstatus < 2
           AND start_date >= %(month_start)s
           AND start_date <= %(month_end)s
         """,
@@ -120,6 +134,32 @@ def _slip_absent_map(payroll_month):
     return {r.employee: flt(r.total_absent) for r in rows}
 
 
+def _slip_ratio_map(payroll_month):
+    """Returns {employee: payment_days/total_working_days} straight from an
+    existing (draft or submitted) Salary Slip for the month — this is HRMS's
+    own already-computed proration ratio, which accounts for holiday lists,
+    weekly offs, and leave-balance handling that this report's manual
+    absent-days-minus-leave-credit approximation (below) doesn't fully
+    replicate. Preferred over the manual estimate whenever a real slip
+    already exists; the manual estimate remains the fallback for employees
+    with no slip yet (a forward-looking preview)."""
+    month_start = get_first_day(payroll_month)
+    month_end = get_last_day(payroll_month)
+    rows = frappe.db.sql(
+        """
+        SELECT employee, payment_days, total_working_days
+        FROM `tabSalary Slip`
+        WHERE docstatus < 2
+          AND start_date >= %(month_start)s
+          AND start_date <= %(month_end)s
+          AND total_working_days > 0
+        """,
+        {"month_start": month_start, "month_end": month_end},
+        as_dict=True,
+    )
+    return {r.employee: flt(r.payment_days) / flt(r.total_working_days) for r in rows}
+
+
 def _absent_credit_label(total_absent, salary_structure):
     if total_absent == 0:
         return "-"
@@ -143,7 +183,7 @@ def _data(filters):
     rows = frappe.db.sql(f"""
         SELECT
             ssa.employee, ssa.employee_name, ssa.salary_structure, ssa.base,
-            e.designation, e.department,
+            e.designation, e.department, e.gender,
             e.provident_fund_account, e.health_insurance_no,
             ROW_NUMBER() OVER (PARTITION BY ssa.employee ORDER BY ssa.from_date DESC) AS rn
         FROM `tabSalary Structure Assignment` ssa
@@ -153,6 +193,7 @@ def _data(filters):
     """, filters, as_dict=True)
 
     slip_map = _slip_absent_map(filters["payroll_month"]) if filters.get("payroll_month") else {}
+    ratio_map = _slip_ratio_map(filters["payroll_month"]) if filters.get("payroll_month") else {}
 
     # Keep only latest assignment per employee
     seen = set()
@@ -163,7 +204,7 @@ def _data(filters):
         seen.add(r.employee)
 
         calc = _calc(
-            flt(r.base), r.salary_structure,
+            flt(r.base), r.salary_structure, r.gender,
             pf_opt_in=bool(r.provident_fund_account),
             esic_opt_in=bool(r.health_insurance_no),
         )
@@ -174,15 +215,21 @@ def _data(filters):
 
         # Prorate amounts based on present days when payroll_month provided
         if filters.get("payroll_month"):
-            month_start = get_first_day(filters["payroll_month"])
-            month_end = get_last_day(filters["payroll_month"])
-            days_in_month = (month_end - month_start).days + 1
-            # Apply IB leave credit where applicable
-            effective_absent = total_absent
-            if r.salary_structure == "IB Payroll":
-                effective_absent = max(0, total_absent - _IB_LEAVE_CREDIT)
-            present_days = max(0, days_in_month - effective_absent)
-            ratio = (present_days / days_in_month) if days_in_month else 1
+            if r.employee in ratio_map:
+                # Real slip already exists — use HRMS's own computed ratio
+                # rather than re-deriving one, so this report always agrees
+                # with the actual slip once one has been generated.
+                ratio = ratio_map[r.employee]
+            else:
+                month_start = get_first_day(filters["payroll_month"])
+                month_end = get_last_day(filters["payroll_month"])
+                days_in_month = (month_end - month_start).days + 1
+                # Apply IB leave credit where applicable
+                effective_absent = total_absent
+                if r.salary_structure == "IB Payroll":
+                    effective_absent = max(0, total_absent - _IB_LEAVE_CREDIT)
+                present_days = max(0, days_in_month - effective_absent)
+                ratio = (present_days / days_in_month) if days_in_month else 1
 
             # prorate base + calculated components
             base_pr = flt(round(flt(r.base) * ratio, 2))

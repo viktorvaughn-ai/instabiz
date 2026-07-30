@@ -4,6 +4,54 @@ from frappe import _
 from frappe.utils import flt
 
 
+def build_multi_token_where(fields, search):
+	"""Multi-token search condition: every whitespace-separated token in
+	`search` must match at least one of `fields` (LIKE), tokens ANDed together.
+	Same "AND of tokens, OR of fields" shape already used ad-hoc in several
+	custom-page search endpoints — use this instead of rewriting it per page.
+
+	    where, params = build_multi_token_where(["l.lead_name", "l.company_name"], "acme mum")
+	    # where  = "(l.lead_name LIKE %s OR l.company_name LIKE %s) AND (l.lead_name LIKE %s OR l.company_name LIKE %s)"
+	    # params = ["%acme%", "%acme%", "%mum%", "%mum%"]
+
+	Returns ("", []) if search is blank — caller should skip appending the
+	condition/params entirely in that case (don't AND onto an empty string).
+	"""
+	tokens = [t for t in (search or "").strip().split() if t]
+	if not tokens:
+		return "", []
+	clauses = []
+	params = []
+	for token in tokens:
+		like = f"%{token}%"
+		clauses.append("(" + " OR ".join(f"{f} LIKE %s" for f in fields) + ")")
+		params.extend([like] * len(fields))
+	return " AND ".join(clauses), params
+
+
+def build_multi_token_where_named(fields, search, prefix="tok"):
+	"""Same as build_multi_token_where, but for query sites that build params as
+	a dict with %(name)s placeholders instead of a positional list — merge the
+	returned dict into your existing params dict (keys are unique per call
+	given a distinct `prefix`, so multiple calls in one query won't collide).
+
+	    cond, extra = build_multi_token_where_named(["e.employee_name", "a.employee"], search, "att")
+	    if cond:
+	        conditions.append(cond)
+	        params.update(extra)
+	"""
+	tokens = [t for t in (search or "").strip().split() if t]
+	if not tokens:
+		return "", {}
+	clauses = []
+	out_params = {}
+	for i, token in enumerate(tokens):
+		key = f"{prefix}_{i}"
+		out_params[key] = f"%{token}%"
+		clauses.append("(" + " OR ".join(f"{f} LIKE %({key})s" for f in fields) + ")")
+	return " AND ".join(clauses), out_params
+
+
 # ── Location → company billing address + GSTIN ───────────────────────────────
 LOCATION_COMPANY_ADDRESS = {
     "maharashtra": "Instabiz Solutions India Pvt Ltd-Billing-1",

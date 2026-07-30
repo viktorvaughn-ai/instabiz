@@ -13,7 +13,9 @@
     "section_item",
     "item", "qty", "uom", "is_paid",
     "section_outcome",
-    "feedback", "outcome", "notes"
+    "feedback", "outcome", "notes",
+    "ib_documents_section",
+    "custom_document_attachments"
   ],
   "fields": [
     {"fieldname": "customer", "fieldtype": "Link", "in_list_view": 1, "label": "Customer", "options": "Customer", "reqd": 1, "search_index": 1},
@@ -32,7 +34,9 @@
     {"fieldname": "section_outcome", "fieldtype": "Section Break", "label": "Outcome"},
     {"fieldname": "feedback", "fieldtype": "Small Text", "label": "Customer Feedback"},
     {"fieldname": "outcome", "fieldtype": "Select", "in_list_view": 1, "label": "Outcome", "options": "\nConverted\nNot Interested\nFollow Up\nNo Response"},
-    {"fieldname": "notes", "fieldtype": "Text", "label": "Internal Notes"}
+    {"fieldname": "notes", "fieldtype": "Text", "label": "Internal Notes"},
+    {"fieldname": "ib_documents_section", "fieldtype": "Section Break", "label": "Documents", "collapsible": 1, "allow_on_submit": 1},
+    {"fieldname": "custom_document_attachments", "fieldtype": "Table", "label": "Attached Documents", "options": "IB Document Attachment", "allow_on_submit": 1}
   ],
   "icon": "fa fa-flask",
   "in_create": 0,

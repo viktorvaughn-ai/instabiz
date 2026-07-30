@@ -190,7 +190,7 @@ def get_incentive_slabs():
 
 
 @frappe.whitelist()
-def save_incentive_slab(name, slab_label, from_pct, to_pct, commission_pct, is_active=1):
+def save_incentive_slab(slab_label, from_pct, to_pct, commission_pct, name=None, is_active=1):
 	"""Create or update an IB Incentive Slab. Requires Sales Manager / System Manager."""
 	_require_manager()
 	from_pct = flt(from_pct)

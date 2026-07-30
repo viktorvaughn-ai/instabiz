@@ -78,10 +78,10 @@ class IBProcurementDashboard {
 		<div class="ib-proc-wrap">
 			<div class="ib-proc-toolbar">
 				<h2>Procurement Dashboard</h2>
-				<button class="ib-proc-btn" id="ib-proc-btn-po">Purchase Orders</button>
-				<button class="ib-proc-btn" id="ib-proc-btn-pi">Purchase Invoices</button>
-				<button class="ib-proc-btn" id="ib-proc-btn-grn">Receipts (GRN)</button>
-				<button class="ib-proc-btn" id="ib-proc-refresh">↻ Refresh</button>
+				<button class="ib-proc-btn btn btn-default btn-sm" id="ib-proc-btn-po">Purchase Orders</button>
+				<button class="ib-proc-btn btn btn-default btn-sm" id="ib-proc-btn-pi">Purchase Invoices</button>
+				<button class="ib-proc-btn btn btn-default btn-sm" id="ib-proc-btn-grn">Receipts (GRN)</button>
+				<button class="ib-proc-btn btn btn-default btn-sm" id="ib-proc-refresh">↻ Refresh</button>
 			</div>
 			<div id="ib-proc-kpis" class="ib-proc-kpis"></div>
 			<div class="ib-proc-grid">

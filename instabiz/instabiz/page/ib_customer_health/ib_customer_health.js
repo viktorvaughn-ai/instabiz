@@ -69,9 +69,9 @@ class IBCustomerHealth {
 		<div class="ib-ch-wrap">
 			<div class="ib-ch-toolbar">
 				<h2>Customer Health</h2>
-				<input class="ib-ch-input" id="ib-ch-search" placeholder="Search customer…" />
-				<select class="ib-ch-select" id="ib-ch-territory"><option value="">All Territories</option></select>
-				<button class="ib-ch-pg-btn" id="ib-ch-refresh">↻ Refresh</button>
+				<input class="ib-ch-input form-control" id="ib-ch-search" placeholder="Search customer…" />
+				<select class="ib-ch-select form-control" id="ib-ch-territory"><option value="">All Territories</option></select>
+				<button class="ib-ch-pg-btn btn btn-default btn-sm" id="ib-ch-refresh">↻ Refresh</button>
 			</div>
 			<div id="ib-ch-kpis" class="ib-ch-kpis"></div>
 			<div class="ib-ch-tbl-wrap">
@@ -168,8 +168,8 @@ class IBCustomerHealth {
 		this.$wrap.find("#ib-ch-pagination").html(`
 			<span>${total === 0 ? "No customers" : `Showing ${from}–${to} of ${total}`}</span>
 			<div style="display:flex;gap:6px">
-				<button class="ib-ch-pg-btn" id="ib-ch-prev" ${pg === 0 || total === 0 ? "disabled" : ""}>← Prev</button>
-				<button class="ib-ch-pg-btn" id="ib-ch-next" ${pg >= pages - 1 || total === 0 ? "disabled" : ""}>Next →</button>
+				<button class="ib-ch-pg-btn btn btn-default btn-sm" id="ib-ch-prev" ${pg === 0 || total === 0 ? "disabled" : ""}>← Prev</button>
+				<button class="ib-ch-pg-btn btn btn-default btn-sm" id="ib-ch-next" ${pg >= pages - 1 || total === 0 ? "disabled" : ""}>Next →</button>
 			</div>`);
 
 		this.$wrap.find("#ib-ch-prev").on("click", () => { if (this._page > 0) { this._page--; this.load(); } });

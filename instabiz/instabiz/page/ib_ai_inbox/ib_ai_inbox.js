@@ -175,7 +175,7 @@ class IBAIInbox {
 							<iconify-icon icon="lucide:plus" width="12" height="12"></iconify-icon>
 							New Agent
 						</a>
-						<button class="ib-agents-run-all-btn" id="ib-agents-run-all">
+						<button class="ib-agents-run-all-btn btn btn-sm btn-default" id="ib-agents-run-all">
 							<iconify-icon icon="lucide:play" width="12" height="12"></iconify-icon>
 							Run All
 						</button>
@@ -222,7 +222,7 @@ class IBAIInbox {
 											</div>
 											<div class="ib-agent-code">${code}</div>
 										</div>
-										<button class="ib-agent-run-btn" data-agent="${code}" title="Run ${frappe.utils.escape_html(meta.label)}" aria-label="Run ${frappe.utils.escape_html(meta.label)}">
+										<button class="ib-agent-run-btn btn btn-xs btn-default" data-agent="${code}" title="Run ${frappe.utils.escape_html(meta.label)}" aria-label="Run ${frappe.utils.escape_html(meta.label)}">
 											<iconify-icon icon="lucide:play" width="11" height="11"></iconify-icon>
 										</button>
 									</div>
@@ -430,13 +430,13 @@ class IBAIInbox {
 		} catch (_) {}
 
 		const pendingBtns = a.status === "pending" ? `
-			<button class="ib-ai-action-btn ib-ai-btn-approve ib-approve-btn"
+			<button class="ib-ai-action-btn ib-ai-btn-approve ib-approve-btn btn btn-xs btn-success"
 				data-name="${frappe.utils.escape_html(a.name)}">
 				<iconify-icon icon="lucide:check" width="11" height="11"
 					style="vertical-align:middle;margin-right:3px"></iconify-icon>
 				Approve &amp; Execute
 			</button>
-			<button class="ib-ai-action-btn ib-ai-btn-reject ib-reject-btn"
+			<button class="ib-ai-action-btn ib-ai-btn-reject ib-reject-btn btn btn-xs btn-danger"
 				data-name="${frappe.utils.escape_html(a.name)}">
 				<iconify-icon icon="lucide:x" width="11" height="11"
 					style="vertical-align:middle;margin-right:3px"></iconify-icon>
@@ -512,7 +512,7 @@ class IBAIInbox {
 
 		this.$pager.html(`
 			<div class="ib-ai-pager">
-				<button class="ib-ai-page-btn" id="ib-page-prev" ${current <= 1 ? "disabled" : ""}>
+				<button class="ib-ai-page-btn btn btn-xs btn-default" id="ib-page-prev" ${current <= 1 ? "disabled" : ""}>
 					<iconify-icon icon="lucide:chevron-left" width="14" height="14"
 						style="vertical-align:middle"></iconify-icon>
 					Prev
@@ -520,7 +520,7 @@ class IBAIInbox {
 				<span class="ib-ai-page-info">
 					${from}–${to} of ${total}
 				</span>
-				<button class="ib-ai-page-btn" id="ib-page-next" ${current >= pages ? "disabled" : ""}>
+				<button class="ib-ai-page-btn btn btn-xs btn-default" id="ib-page-next" ${current >= pages ? "disabled" : ""}>
 					Next
 					<iconify-icon icon="lucide:chevron-right" width="14" height="14"
 						style="vertical-align:middle"></iconify-icon>

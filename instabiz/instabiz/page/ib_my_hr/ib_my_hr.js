@@ -142,6 +142,10 @@ class IBMyHR {
 /* Empty state */
 .ib-myhr-empty { text-align:center; padding:40px 20px; color:var(--text-muted); font-size:13px; }
 
+/* Historical-month indicator (reuses the app's shared refresh-time look) */
+.ib-myhr-hist-badge { font-size:11px; color:var(--text-muted); }
+.ib-myhr-hist-badge--active { color:#b45309; font-weight:600; }
+
 @media(max-width:600px) {
   .ib-myhr-apply-form { grid-template-columns:1fr; }
   .ib-myhr-balance-row { gap:6px; }
@@ -192,12 +196,27 @@ class IBMyHR {
 				if (val) { this._month = val; this.refresh(); }
 			},
 		});
+		this.$hist_label = this.page.add_inner_message("").addClass("ib-myhr-hist-badge");
 		this.page.add_button(__("↻ Refresh"), () => this.refresh());
+	}
+
+	// Attendance tab is scoped to the selected month — flag it when that
+	// month isn't the live current one (Leaves/Payslips tabs use their own
+	// fixed recent-history windows, unaffected by this filter).
+	_update_hist_badge() {
+		if (!this.$hist_label) return;
+		const cur_month = frappe.datetime.get_today().slice(0, 7) + "-01";
+		const hist = this._month !== cur_month;
+		const label = hist
+			? `Viewing historical data for ${frappe.datetime.str_to_obj(this._month).toLocaleDateString("en-IN", { month: "long", year: "numeric" })}`
+			: "";
+		this.$hist_label.text(label).toggleClass("ib-myhr-hist-badge--active", hist);
 	}
 
 	// ── Data ──────────────────────────────────────────────────────────────────
 
 	refresh() {
+		this._update_hist_badge();
 		frappe.call({
 			method: "instabiz.instabiz.page.ib_my_hr.ib_my_hr.get_my_hr_data",
 			args: { month: this._month },
@@ -327,8 +346,8 @@ class IBMyHR {
 				<td style="white-space:nowrap;">${frappe.format(l.to_date, {fieldtype:"Date"})}</td>
 				<td style="text-align:center;">${flt(l.total_leave_days, 1)}</td>
 				<td>${badge(l.status)}</td>
-				<td>${l.status === "Open" ? `<button class="ib-myhr-btn-secondary ib-myhr-cancel-leave"
-					data-id="${esc(l.name)}" style="font-size:11px;padding:3px 9px;">Cancel</button>` : ""}</td>
+				<td>${l.status === "Open" ? `<button class="ib-myhr-btn-secondary ib-myhr-cancel-leave btn btn-xs btn-default"
+					data-id="${esc(l.name)}">Cancel</button>` : ""}</td>
 			</tr>
 		`).join("");
 		$c.html(`
@@ -373,16 +392,16 @@ class IBMyHR {
 						<div class="ib-myhr-apply-form">
 							<div class="ib-myhr-field">
 								<label>Leave Type *</label>
-								<select id="ib-myhr-lt">${opts}</select>
+								<select class="form-control" id="ib-myhr-lt">${opts}</select>
 							</div>
 							<div class="ib-myhr-field"></div>
 							<div class="ib-myhr-field">
 								<label>From Date *</label>
-								<input type="date" id="ib-myhr-from" value="${today}" min="${today}">
+								<input type="date" class="form-control" id="ib-myhr-from" value="${today}" min="${today}">
 							</div>
 							<div class="ib-myhr-field">
 								<label>To Date *</label>
-								<input type="date" id="ib-myhr-to" value="${today}" min="${today}">
+								<input type="date" class="form-control" id="ib-myhr-to" value="${today}" min="${today}">
 							</div>
 							<div class="ib-myhr-field ib-myhr-field-full">
 								<label>Reason</label>
@@ -397,8 +416,8 @@ class IBMyHR {
 							</div>
 						</div>
 						<div class="ib-myhr-apply-actions" style="margin-top:14px;">
-							<button class="ib-myhr-btn-primary" id="ib-myhr-submit">Submit Application</button>
-							<button class="ib-myhr-btn-secondary" id="ib-myhr-clear">Clear</button>
+							<button class="ib-myhr-btn-primary btn btn-primary btn-sm" id="ib-myhr-submit">Submit Application</button>
+							<button class="ib-myhr-btn-secondary btn btn-default btn-sm" id="ib-myhr-clear">Clear</button>
 						</div>
 						<p style="font-size:11px;color:var(--text-muted);margin-top:10px;">
 							Leave is subject to manager approval. You will receive a notification when approved or rejected.
@@ -520,8 +539,15 @@ class IBMyHR {
 	_render_payslips($c) {
 		const slips = this._data.payslips || [];
 		const fmt = (v) => "₹" + Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+
+		const gen_btn = `
+			<div style="margin-bottom:12px">
+				<button class="btn btn-sm btn-default" id="ib-myhr-gen-slip">Generate Last Month's Slip</button>
+			</div>`;
+
 		if (!slips.length) {
-			$c.html(`<div class="ib-myhr-empty">No salary slips available yet.</div>`);
+			$c.html(`${gen_btn}<div class="ib-myhr-empty">No salary slips available yet.</div>`);
+			this._bind_gen_slip($c);
 			return;
 		}
 		const cards = slips.map(s => {
@@ -539,7 +565,31 @@ class IBMyHR {
 				</a>
 			</div>`;
 		}).join("");
-		$c.html(`<div class="ib-myhr-payslip-list">${cards}</div>`);
+		$c.html(`${gen_btn}<div class="ib-myhr-payslip-list">${cards}</div>`);
+		this._bind_gen_slip($c);
+	}
+
+	_bind_gen_slip($c) {
+		const self = this;
+		$c.find("#ib-myhr-gen-slip").on("click", function () {
+			const $btn = $(this);
+			$btn.prop("disabled", true).text("Generating…");
+			frappe.call({
+				method: "instabiz.instabiz.page.ib_my_hr.ib_my_hr.generate_my_salary_slip",
+				callback(r) {
+					const res = r.message || {};
+					if (res.status === "exists") {
+						frappe.show_alert({ message: __("Slip already generated for last month"), indicator: "orange" });
+					} else if (res.status === "created") {
+						frappe.show_alert({ message: __("Salary slip generated"), indicator: "green" });
+					}
+					self.refresh();
+				},
+				error() {
+					$btn.prop("disabled", false).text("Generate Last Month's Slip");
+				},
+			});
+		});
 	}
 }
 

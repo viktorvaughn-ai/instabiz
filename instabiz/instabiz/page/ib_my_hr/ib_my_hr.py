@@ -1,6 +1,6 @@
 import frappe
 from frappe import _
-from frappe.utils import nowdate, getdate, get_first_day, get_last_day, flt, add_days
+from frappe.utils import nowdate, getdate, get_first_day, get_last_day, flt, add_days, add_months
 
 
 def get_context(context):
@@ -168,6 +168,41 @@ def apply_leave(leave_type, from_date, to_date, reason="", half_day=0, half_day_
 
 	frappe.db.commit()
 	return {"name": doc.name, "status": doc.status, "docstatus": doc.docstatus}
+
+
+@frappe.whitelist()
+def generate_my_salary_slip(month=None):
+	"""Employee self-service: generate my own Salary Slip for a completed
+	month — same generation logic as the HR-only
+	ib_hrms_dashboard.generate_single_slip, scoped strictly to the calling
+	user's own Employee record (no manager role required, and a different
+	user's employee id can never be passed in)."""
+	emp = _get_employee()
+	today = getdate(nowdate())
+	month_date = getdate(month) if month else add_months(today, -1)
+	month_start = get_first_day(month_date)
+	month_end = get_last_day(month_date)
+
+	if month_end >= today:
+		frappe.throw(_("You can only generate a salary slip after that month has ended."))
+
+	if not frappe.db.exists("Salary Structure Assignment", {"employee": emp.name, "docstatus": 1}):
+		frappe.throw(_("No active Salary Structure Assignment found for you — contact HR to set up your base salary first."))
+
+	existing = frappe.db.get_value("Salary Slip", {"employee": emp.name, "start_date": month_start})
+	if existing:
+		return {"status": "exists", "slip": existing}
+
+	doc = frappe.get_doc({
+		"doctype": "Salary Slip",
+		"employee": emp.name,
+		"posting_date": today,
+		"start_date": month_start,
+		"end_date": month_end,
+	})
+	doc.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"status": "created", "slip": doc.name, "net_pay": doc.net_pay}
 
 
 @frappe.whitelist()

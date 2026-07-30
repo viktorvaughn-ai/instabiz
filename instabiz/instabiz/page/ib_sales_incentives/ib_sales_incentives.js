@@ -7,12 +7,18 @@ frappe.pages["ib-sales-incentives"].on_page_show = function (wrapper) {
 	if (wrapper._ib_si) wrapper._ib_si.load();
 };
 
+const ALL_REPS = "__all__";
+
 class IBSalesIncentives {
 	constructor(wrapper) {
 		this.$wrap = $(wrapper).find(".layout-main-section");
 		this._month = frappe.datetime.get_today().slice(0, 7) + "-01";
 		this._is_manager = frappe.user.has_role("Sales Manager") || frappe.user.has_role("System Manager");
 		this._me = frappe.session.user;
+		// Incentive calc only ever runs once something is chosen — managers pick
+		// either one rep (separately) or "All Sales Reps" (collectively) from the
+		// dropdown, starting blank; non-managers are locked to themselves.
+		this._sales_person = this._is_manager ? null : this._me;
 		this._inject_styles();
 		this._build_layout();
 	}
@@ -180,43 +186,57 @@ class IBSalesIncentives {
 			<button class="ib-si-pill-btn" id="ib-si-goto-admin">Admin ↗</button>
 		` : "";
 
+		// Managers must pick something before anything calculates — either one
+		// rep (separately) or "All Sales Reps" (collectively); non-managers are
+		// locked to themselves, no dropdown, nothing to pick.
+		const person_picker = this._is_manager
+			? `<select class="ib-si-month" id="ib-si-sp" style="min-width:190px">
+					<option value="">Select sales person…</option>
+					<option value="${ALL_REPS}">— All Sales Reps (Team) —</option>
+				</select>`
+			: "";
+
 		this.$wrap.html(`<div class="ib-si">
 			<div class="ib-si-header">
 				<h2 class="ib-si-title">Sales Incentives</h2>
 				<input type="month" class="ib-si-month" id="ib-si-month" value="${month_val}" />
+				${person_picker}
 				<div class="ib-si-action-group">
 					<button class="ib-si-pill-btn" id="ib-si-refresh">↻ Refresh</button>
 					${mgr_actions}
 				</div>
 			</div>
-			<div id="ib-si-kpis" class="ib-si-kpis" style="display:none"></div>
-			<div class="ib-si-grid">
-				<div class="ib-si-card">
-					<div class="ib-si-card-hdr">
-						<span class="ib-si-card-hdr-title">6-Month Trend</span>
-						<span id="ib-si-trend-label" style="font-size:11px;color:#6b7280"></span>
+			<div id="ib-si-empty-state" class="ib-si-empty" style="display:none;padding:60px 20px">
+				${this._is_manager
+					? "Select a sales person above — or “All Sales Reps” — to calculate incentives for the month."
+					: "Loading your incentive…"}
+			</div>
+			<div id="ib-si-body-wrap">
+				<div id="ib-si-kpis" class="ib-si-kpis" style="display:none"></div>
+				<div class="ib-si-grid">
+					<div class="ib-si-card">
+						<div class="ib-si-card-hdr">
+							<span class="ib-si-card-hdr-title">6-Month Trend</span>
+							<span id="ib-si-trend-label" style="font-size:11px;color:#6b7280"></span>
+						</div>
+						<div class="ib-si-card-body">
+							<div class="ib-si-chart-wrap" id="ib-si-chart"></div>
+						</div>
 					</div>
-					<div class="ib-si-card-body">
-						<div class="ib-si-chart-wrap" id="ib-si-chart"></div>
-					</div>
-				</div>
-				<div class="ib-si-card">
-					<div class="ib-si-card-hdr">
-						<span class="ib-si-card-hdr-title">Leaderboard</span>
-						<span id="ib-si-lb-meta" style="font-size:11px;color:#6b7280"></span>
-					</div>
-					<div style="overflow-x:auto">
-						<table class="ib-si-lb">
-							<thead><tr>
-								<th style="width:28px"></th>
-								<th style="text-align:left">Rep</th>
-								<th>Collected</th>
-								<th>vs Target</th>
-								<th>Slab</th>
-								${this._is_manager ? "<th>Commission</th>" : ""}
-							</tr></thead>
-							<tbody id="ib-si-body"></tbody>
-						</table>
+					<div class="ib-si-card">
+						<div class="ib-si-card-hdr">
+							<span class="ib-si-card-hdr-title" id="ib-si-panel2-title">Top Customers</span>
+							<span id="ib-si-lb-meta" style="font-size:11px;color:#6b7280"></span>
+						</div>
+						<div style="overflow-x:auto" id="ib-si-panel2-body">
+							<table class="ib-si-lb">
+								<thead id="ib-si-thead"><tr>
+									<th style="text-align:left">Customer</th>
+									<th>Collected</th>
+								</tr></thead>
+								<tbody id="ib-si-body"></tbody>
+							</table>
+						</div>
 					</div>
 				</div>
 			</div>
@@ -231,17 +251,43 @@ class IBSalesIncentives {
 			this.$wrap.find("#ib-si-target").on("click", () => this._show_bulk_target_dialog());
 			this.$wrap.find("#ib-si-slabs").on("click", () => this._show_slab_dialog());
 			this.$wrap.find("#ib-si-goto-admin").on("click", () => frappe.set_route("ib-assignment-admin"));
+			this.$wrap.find("#ib-si-sp").on("change", e => {
+				this._sales_person = e.target.value || null;
+				this.load();
+			});
+			this._load_sales_person_options();
 		}
 		this.load();
 	}
 
+	_load_sales_person_options() {
+		frappe.call({
+			method: "instabiz.instabiz.page.ib_sales_incentives.ib_sales_incentives.get_sales_person_options",
+			callback: r => {
+				const reps = r.message || [];
+				const $sel = this.$wrap.find("#ib-si-sp");
+				let last_team;
+				reps.forEach(rep => {
+					if (rep.team_name !== last_team) {
+						last_team = rep.team_name;
+						$sel.append(`<optgroup label="${frappe.utils.escape_html(rep.team_name || "No Team")}"></optgroup>`);
+					}
+					$sel.find("optgroup").last().append(
+						`<option value="${frappe.utils.escape_html(rep.user)}">${frappe.utils.escape_html(rep.name)}</option>`
+					);
+				});
+			},
+		});
+	}
+
 	load() {
 		const req_month = this._month;
+		const req_sp = this._sales_person;
 		frappe.call({
 			method: "instabiz.instabiz.page.ib_sales_incentives.ib_sales_incentives.get_incentives_data",
-			args: { month: req_month },
+			args: { month: req_month, sales_person: req_sp },
 			callback: r => {
-				if (r.message && this._month === req_month) {
+				if (r.message && this._month === req_month && this._sales_person === req_sp) {
 					this._data = r.message;
 					this._render(r.message);
 				}
@@ -250,20 +296,132 @@ class IBSalesIncentives {
 	}
 
 	_render(d) {
-		this._render_kpis(d);
-		const rows = this._is_manager
-			? (d.by_sp || [])
-			: (d.by_sp || []).filter(r => r.sp_user === this._me);
-		this._render_leaderboard(rows);
-		this._render_chart(d.trend || []);
-		this.$wrap.find("#ib-si-lb-meta").text(
-			`${rows.length} rep${rows.length !== 1 ? "s" : ""} · ${this._month_label(false)}`
-		);
+		const has_selection = !!d.selected;
+		this.$wrap.find("#ib-si-empty-state").toggle(!has_selection);
+		this.$wrap.find("#ib-si-body-wrap").toggle(has_selection);
+		if (!has_selection) return;
+
+		if (d.mode === "team") this._render_team(d);
+		else this._render_individual(d);
 	}
 
-	// ── KPI cards ──────────────────────────────────────────────────────────────
-	_render_kpis(d) {
-		if (!this._is_manager) return;
+	// ── individual rep view ─────────────────────────────────────────────────────
+	_render_individual(d) {
+		const rep = d.rep;
+		this.$wrap.find("#ib-si-panel2-title").text("Top Customers");
+		this.$wrap.find("#ib-si-thead").html(`<tr>
+			<th style="text-align:left">Customer</th>
+			<th>Collected</th>
+		</tr>`);
+
+		this._render_kpis(rep);
+
+		const $body = this.$wrap.find("#ib-si-body");
+		this.$wrap.find("#ib-si-lb-meta").text(`${rep.sp_name} · ${this._month_label(false)}`);
+		const rows = d.top_customers || [];
+		if (!rows.length) {
+			$body.html(`<tr><td colspan="2"><div class="ib-si-empty">No billed customers for ${this._month_label(true)}</div></td></tr>`);
+		} else {
+			$body.html(rows.map(r => `
+				<tr>
+					<td>${frappe.utils.escape_html(r.customer_name || "")}</td>
+					<td style="text-align:right"><span class="ib-amount">${this._fmt(r.collected)}</span></td>
+				</tr>
+			`).join(""));
+		}
+
+		this._render_chart_single(d.trend || [], rep.sp_name);
+	}
+
+	// ── KPI cards (single rep) ──────────────────────────────────────────────────
+	_render_kpis(rep) {
+		const $kpis = this.$wrap.find("#ib-si-kpis").show();
+		const pct = rep.pct || 0;
+		const bar_c = pct >= 100 ? "#10b981" : pct >= 70 ? "#d97757" : "#ef4444";
+		const slab_html = rep.slab_earned
+			? `<span class="ib-chip ib-chip-green">${frappe.utils.escape_html(rep.slab_earned)}</span>`
+			: `<span class="ib-chip ib-chip-ghost">No slab earned</span>`;
+
+		$kpis.html(`
+			<div class="ib-si-kpi c-rev">
+				<div class="ib-si-kpi-label">Revenue</div>
+				<div class="ib-si-kpi-value">${this._fmt(rep.revenue)}</div>
+			</div>
+			<div class="ib-si-kpi c-col">
+				<div class="ib-si-kpi-label">Collected</div>
+				<div class="ib-si-kpi-value">${this._fmt(rep.collected)}</div>
+				${rep.target ? `
+				<div class="ib-si-kpi-sub">
+					<div class="ib-si-prog-track"><div class="ib-si-prog-fill" style="width:${Math.min(100,pct)}%;background:${bar_c}"></div></div>
+					<div class="ib-si-prog-label">${pct}% of target</div>
+				</div>` : ""}
+			</div>
+			<div class="ib-si-kpi c-tgt">
+				<div class="ib-si-kpi-label">Target</div>
+				<div class="ib-si-kpi-value">
+					${rep.target ? this._fmt(rep.target) : `<span style="color:#d1d5db;font-size:1rem">Not set</span>`}
+					${this._is_manager ? `<button class="ib-set-tgt" id="ib-si-set-tgt-btn" title="Set target">✎</button>` : ""}
+				</div>
+			</div>
+			<div class="ib-si-kpi c-com">
+				<div class="ib-si-kpi-label">Commission</div>
+				<div class="ib-si-kpi-value" style="color:#8b5cf6">${this._fmt(rep.commission)}</div>
+				<div class="ib-si-kpi-sub">${slab_html}</div>
+			</div>
+		`);
+
+		if (this._is_manager) {
+			const self = this;
+			$kpis.find("#ib-si-set-tgt-btn").on("click", () => {
+				self._show_set_target_dialog(rep.sp_user, rep.sp_name, parseFloat(rep.target || 0), parseFloat(rep.collected || 0), parseFloat(rep.pct || 0));
+			});
+		}
+	}
+
+	// ── chart: single rep, 1 line ───────────────────────────────────────────────
+	_render_chart_single(trend, rep_name) {
+		const el = this.$wrap.find("#ib-si-chart")[0];
+		if (!el) return;
+		if (this._chart) { this._chart.destroy && this._chart.destroy(); this._chart = null; $(el).empty(); }
+		if (!trend.length) {
+			$(el).html(`<div class="ib-si-empty" style="padding:60px 0">No trend data</div>`);
+			return;
+		}
+
+		this.$wrap.find("#ib-si-trend-label").text(rep_name || "");
+
+		this._chart = new frappe.Chart(el, {
+			type: "line",
+			height: 190,
+			colors: ["#d97757"],
+			data: {
+				labels: trend.map(r => r.label),
+				datasets: [{ name: "Collected", values: trend.map(r => Number(r.collected || 0)) }],
+			},
+			lineOptions: { spline: 1, hideDots: 0, regionFill: 1 },
+			axisOptions: { xIsSeries: true },
+			tooltipOptions: { formatTooltipY: v => "₹" + Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 }) },
+		});
+	}
+
+	// ── team / collective view (manager only) ───────────────────────────────────
+	_render_team(d) {
+		this.$wrap.find("#ib-si-panel2-title").text("Leaderboard");
+		this.$wrap.find("#ib-si-thead").html(`<tr>
+			<th style="width:28px"></th>
+			<th style="text-align:left">Rep</th>
+			<th>Collected</th>
+			<th>vs Target</th>
+			<th>Slab</th>
+			<th>Commission</th>
+		</tr>`);
+
+		this._render_team_kpis(d);
+		this._render_leaderboard(d.by_sp || []);
+		this._render_chart_team(d.trend || []);
+	}
+
+	_render_team_kpis(d) {
 		const $kpis = this.$wrap.find("#ib-si-kpis").show();
 		const tp = d.team_pct || 0;
 		const bar_c = tp >= 100 ? "#10b981" : tp >= 70 ? "#d97757" : "#ef4444";
@@ -292,13 +450,12 @@ class IBSalesIncentives {
 		`);
 	}
 
-	// ── leaderboard ────────────────────────────────────────────────────────────
+	// ── leaderboard (team mode) ──────────────────────────────────────────────────
 	_render_leaderboard(rows) {
 		const $body = this.$wrap.find("#ib-si-body");
+		this.$wrap.find("#ib-si-lb-meta").text(`${rows.length} rep${rows.length !== 1 ? "s" : ""} · ${this._month_label(false)}`);
 		if (!rows.length) {
-			$body.html(`<tr><td colspan="${this._is_manager ? 6 : 5}">
-				<div class="ib-si-empty">No data for ${this._month_label(true)}</div>
-			</td></tr>`);
+			$body.html(`<tr><td colspan="6"><div class="ib-si-empty">No data for ${this._month_label(true)}</div></td></tr>`);
 			return;
 		}
 
@@ -306,9 +463,9 @@ class IBSalesIncentives {
 		let last_team, rank = 0;
 
 		rows.forEach(r => {
-			if (this._is_manager && r.team_name !== last_team) {
+			if (r.team_name !== last_team) {
 				last_team = r.team_name;
-				html.push(`<tr class="ib-team-row"><td colspan="${this._is_manager ? 6 : 5}">${frappe.utils.escape_html(r.team_name || "No Team")}</td></tr>`);
+				html.push(`<tr class="ib-team-row"><td colspan="6">${frappe.utils.escape_html(r.team_name || "No Team")}</td></tr>`);
 			}
 
 			rank++;
@@ -316,7 +473,6 @@ class IBSalesIncentives {
 			const av_color = this._avatar_color(r.team_name || r.sp_user);
 			const initials = this._initials(r.sp_name || r.sp_user);
 
-			// progress cell
 			const pct = r.pct;
 			let target_cell;
 			if (!r.target) {
@@ -330,7 +486,6 @@ class IBSalesIncentives {
 				</div>`;
 			}
 
-			// slab chip
 			let slab_cell;
 			if (!r.slab_earned) {
 				slab_cell = `<span class="ib-chip ib-chip-ghost">None</span>`;
@@ -340,30 +495,19 @@ class IBSalesIncentives {
 				slab_cell = `<span class="ib-chip ${cls}">${frappe.utils.escape_html(r.slab_earned)}</span>`;
 			}
 
-			// commission
-			const comm_cell = this._is_manager
-				? (r.commission > 0
-					? `<span class="ib-amount accent">${this._fmt(r.commission)}</span>`
-					: `<span class="ib-chip ib-chip-ghost">None</span>`)
-				: "";
+			const comm_cell = r.commission > 0
+				? `<span class="ib-amount accent">${this._fmt(r.commission)}</span>`
+				: `<span class="ib-chip ib-chip-ghost">None</span>`;
 
-			// rep name cell
-			let rep_name_html;
-			if (this._is_manager) {
-				rep_name_html = `
-					<span class="ib-rep-name clickable ib-rep-link"
-						data-user="${frappe.utils.escape_html(r.sp_user)}"
-						data-name="${frappe.utils.escape_html(r.sp_name || r.sp_user)}"
-						data-target="${r.target || 0}" data-actual="${r.collected || 0}" data-pct="${r.pct || 0}"
-					>${frappe.utils.escape_html(r.sp_name || r.sp_user)}</span>
-					<button class="ib-set-tgt"
-						data-user="${frappe.utils.escape_html(r.sp_user)}"
-						data-name="${frappe.utils.escape_html(r.sp_name || r.sp_user)}"
-						data-target="${r.target || 0}" data-actual="${r.collected || 0}" data-pct="${r.pct || 0}"
-						title="Set target">✎</button>`;
-			} else {
-				rep_name_html = `<span class="ib-rep-name">${frappe.utils.escape_html(r.sp_name || r.sp_user)}</span>`;
-			}
+			const rep_name_html = `
+				<span class="ib-rep-name clickable ib-rep-link"
+					data-user="${frappe.utils.escape_html(r.sp_user)}"
+				>${frappe.utils.escape_html(r.sp_name || r.sp_user)}</span>
+				<button class="ib-set-tgt"
+					data-user="${frappe.utils.escape_html(r.sp_user)}"
+					data-name="${frappe.utils.escape_html(r.sp_name || r.sp_user)}"
+					data-target="${r.target || 0}" data-actual="${r.collected || 0}" data-pct="${r.pct || 0}"
+					title="Set target">✎</button>`;
 
 			html.push(`<tr>
 				<td><span class="ib-rank ${rank_cls}">${rank}</span></td>
@@ -376,24 +520,27 @@ class IBSalesIncentives {
 				<td style="text-align:right"><span class="ib-amount">${this._fmt(r.collected)}</span></td>
 				<td>${target_cell}</td>
 				<td>${slab_cell}</td>
-				${this._is_manager ? `<td style="text-align:right">${comm_cell}</td>` : ""}
+				<td style="text-align:right">${comm_cell}</td>
 			</tr>`);
 		});
 
 		$body.html(html.join(""));
 
-		if (this._is_manager) {
-			const self = this;
-			$body.find(".ib-rep-link").on("click", () => frappe.set_route("ib-assignment-admin"));
-			$body.find(".ib-set-tgt").on("click", function () {
-				const u = $(this).data();
-				self._show_set_target_dialog(u.user, u.name, parseFloat(u.target || 0), parseFloat(u.actual || 0), parseFloat(u.pct || 0));
-			});
-		}
+		const self = this;
+		$body.find(".ib-rep-link").on("click", function () {
+			// Drill into that rep's own separate view instead of the team table.
+			self._sales_person = $(this).data("user");
+			self.$wrap.find("#ib-si-sp").val(self._sales_person);
+			self.load();
+		});
+		$body.find(".ib-set-tgt").on("click", function () {
+			const u = $(this).data();
+			self._show_set_target_dialog(u.user, u.name, parseFloat(u.target || 0), parseFloat(u.actual || 0), parseFloat(u.pct || 0));
+		});
 	}
 
-	// ── chart ──────────────────────────────────────────────────────────────────
-	_render_chart(trend) {
+	// ── chart: team mode, top-3 reps ────────────────────────────────────────────
+	_render_chart_team(trend) {
 		const el = this.$wrap.find("#ib-si-chart")[0];
 		if (!el) return;
 		if (this._chart) { this._chart.destroy && this._chart.destroy(); this._chart = null; $(el).empty(); }

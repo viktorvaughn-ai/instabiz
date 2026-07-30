@@ -22,41 +22,65 @@ def get_analytics_data(tab="sales", period="monthly"):
 		frappe.only_for(["System Manager", "Sales Manager", "Accounts Manager", "Factory Management"])
 	today = getdate(nowdate())
 
+	# `since`/date_fmt/group_fmt drive the trend chart's window+bucketing.
+	# `period_start`/`prev_start`/`prev_end`/`period_label` drive the headline
+	# KPI cards — previously those were hardcoded to calendar-month-to-date
+	# regardless of which period tab was selected, so clicking Daily/Weekly
+	# only ever changed the trend chart underneath while every number on the
+	# page stayed exactly the same (confirmed: "Revenue MTD" was still MTD
+	# after clicking Daily). Both now derive from the same period selector.
 	if period == "daily":
 		since = frappe.utils.add_days(today, -30)
 		date_fmt = "%%d %%b"
 		group_fmt = "%%Y-%%m-%%d"
+		period_start = today
+		prev_start = prev_end = frappe.utils.add_days(today, -1)
+		period_label = "Today"
 	elif period == "weekly":
 		since = frappe.utils.add_days(today, -84)
 		date_fmt = "Week %%U"
 		group_fmt = "%%Y-%%U"
+		period_start = frappe.utils.add_days(today, -today.weekday())  # Monday this week
+		prev_start = frappe.utils.add_days(period_start, -7)
+		prev_end = frappe.utils.add_days(period_start, -1)
+		period_label = "WTD"
 	else:
 		since = get_first_day(add_months(today, -11))
 		date_fmt = "%%b %%Y"
 		group_fmt = "%%Y-%%m"
+		period_start = get_first_day(today)
+		prev_start = get_first_day(add_months(today, -1))
+		prev_end = frappe.utils.get_last_day(add_months(today, -1))
+		period_label = "MTD"
+
+	pw = {
+		"period_start": period_start, "period_end": today,
+		"prev_start": prev_start, "prev_end": prev_end,
+		"period_label": period_label,
+	}
 
 	if tab == "sales":
-		return _sales_data(today, since, date_fmt, group_fmt)
+		return _sales_data(today, since, date_fmt, group_fmt, pw)
 	elif tab == "inventory":
 		return _inventory_data(today, since, date_fmt, group_fmt)
 	elif tab == "production":
-		return _production_data(today, since, date_fmt, group_fmt)
+		return _production_data(today, since, date_fmt, group_fmt, pw)
 	elif tab == "hr":
-		return _hr_data(today, since, date_fmt, group_fmt)
+		return _hr_data(today, since, date_fmt, group_fmt, pw)
 	elif tab == "finance":
-		return _finance_data(today, since, date_fmt, group_fmt)
+		return _finance_data(today, since, date_fmt, group_fmt, pw)
 	elif tab == "me":
-		return _my_work_data(frappe.session.user, today, since, date_fmt, group_fmt)
+		return _my_work_data(frappe.session.user, today, since, date_fmt, group_fmt, pw)
 	return {}
 
 
-def _sales_data(today, since, date_fmt, group_fmt):
+def _sales_data(today, since, date_fmt, group_fmt, pw):
 	# Basis controlled by instabiz.overrides.billing_mode — was 100%
 	# hardcoded to Sales Invoice, so this whole tab read zero (billing isn't
 	# live in ERP yet).
-	month_start = get_first_day(today)
-	last_start = get_first_day(add_months(today, -1))
-	last_end = frappe.utils.get_last_day(add_months(today, -1))
+	period_start, period_end = pw["period_start"], pw["period_end"]
+	prev_start, prev_end = pw["prev_start"], pw["prev_end"]
+	period_label = pw["period_label"]
 
 	dev_mode = is_dev_billing_mode()
 	sales_dt = sales_doctype()
@@ -67,22 +91,22 @@ def _sales_data(today, since, date_fmt, group_fmt):
 	outstanding_expr = sales_outstanding_expr("t")
 	item_dt = f"{sales_dt} Item"
 
-	rev_mtd = flt(frappe.db.sql(f"""
+	rev_period = flt(frappe.db.sql(f"""
 		SELECT COALESCE(SUM(grand_total),0) FROM `tab{sales_dt}` t
 		WHERE docstatus=1 {sales_cond} AND {sales_date} BETWEEN %s AND %s
-	""", (month_start, today))[0][0])
+	""", (period_start, period_end))[0][0])
 
-	rev_last = flt(frappe.db.sql(f"""
+	rev_prev = flt(frappe.db.sql(f"""
 		SELECT COALESCE(SUM(grand_total),0) FROM `tab{sales_dt}` t
 		WHERE docstatus=1 {sales_cond} AND {sales_date} BETWEEN %s AND %s
-	""", (last_start, last_end))[0][0])
+	""", (prev_start, prev_end))[0][0])
 
 	invoice_count = flt(frappe.db.sql(f"""
 		SELECT COUNT(*) FROM `tab{sales_dt}` t
 		WHERE docstatus=1 {sales_cond} AND {sales_date} BETWEEN %s AND %s
-	""", (month_start, today))[0][0])
+	""", (period_start, period_end))[0][0])
 
-	avg_order = round(rev_mtd / invoice_count, 2) if invoice_count else 0
+	avg_order = round(rev_period / invoice_count, 2) if invoice_count else 0
 
 	ar = flt(frappe.db.sql(f"""
 		SELECT COALESCE(SUM({outstanding_expr}),0)
@@ -104,7 +128,7 @@ def _sales_data(today, since, date_fmt, group_fmt):
 		FROM `tab{sales_dt}` t
 		WHERE docstatus=1 {sales_cond} AND {sales_date} BETWEEN %s AND %s
 		GROUP BY customer_name ORDER BY amount DESC LIMIT 10
-	""", (month_start, today), as_dict=True)
+	""", (period_start, period_end), as_dict=True)
 
 	try:
 		by_item = frappe.db.sql(f"""
@@ -113,15 +137,15 @@ def _sales_data(today, since, date_fmt, group_fmt):
 			JOIN `tab{sales_dt}` t ON t.name=i.parent
 			WHERE t.docstatus=1 {sales_cond} AND t.{sales_date} BETWEEN %s AND %s
 			GROUP BY i.item_group ORDER BY amount DESC LIMIT 8
-		""", (month_start, today), as_dict=True)
+		""", (period_start, period_end), as_dict=True)
 	except Exception:
 		by_item = []
 
 	return {
 		"kpis": [
-			{"label": "Revenue MTD", "value": rev_mtd, "type": "currency",
-			 "delta": round((rev_mtd - rev_last) / rev_last * 100, 1) if rev_last else 0},
-			{"label": "Invoices MTD", "value": int(invoice_count), "type": "count", "delta": 0},
+			{"label": f"Revenue {period_label}", "value": rev_period, "type": "currency",
+			 "delta": round((rev_period - rev_prev) / rev_prev * 100, 1) if rev_prev else 0},
+			{"label": f"Invoices {period_label}", "value": int(invoice_count), "type": "count", "delta": 0},
 			{"label": "Avg Invoice", "value": avg_order, "type": "currency", "delta": 0},
 			{"label": "Outstanding AR", "value": ar, "type": "currency", "delta": 0},
 		],
@@ -204,8 +228,9 @@ def _inventory_data(today, since, date_fmt, group_fmt):
 	}
 
 
-def _production_data(today, since, date_fmt, group_fmt):
-	month_start = get_first_day(today)
+def _production_data(today, since, date_fmt, group_fmt, pw):
+	period_start = pw["period_start"]
+	period_label = pw["period_label"]
 
 	try:
 		wo_active = flt(frappe.db.sql("""
@@ -215,7 +240,7 @@ def _production_data(today, since, date_fmt, group_fmt):
 		wo_completed = flt(frappe.db.sql("""
 			SELECT COUNT(*) FROM `tabIB Work Order`
 			WHERE status='Completed' AND COALESCE(completed_at, modified) >= %s
-		""", (month_start,))[0][0])
+		""", (period_start,))[0][0])
 		wo_total = flt(frappe.db.sql(
 			"SELECT COUNT(*) FROM `tabIB Work Order`"
 		)[0][0])
@@ -259,14 +284,14 @@ def _production_data(today, since, date_fmt, group_fmt):
 			SELECT COALESCE(AVG(wastage_qty / NULLIF(target_qty, 0)) * 100, 0)
 			FROM `tabIB Work Order`
 			WHERE status='Completed' AND COALESCE(completed_at, modified) >= %s
-		""", (month_start,))[0][0])
+		""", (period_start,))[0][0])
 	except Exception:
 		avg_wastage = 0
 
 	return {
 		"kpis": [
 			{"label": "Active WOs", "value": int(wo_active), "type": "count", "delta": 0},
-			{"label": "Completed MTD", "value": int(wo_completed), "type": "count", "delta": 0},
+			{"label": f"Completed {period_label}", "value": int(wo_completed), "type": "count", "delta": 0},
 			{"label": "Machines Active", "value": int(machines_active), "type": "count", "delta": 0},
 			{"label": "Avg Wastage %", "value": round(avg_wastage, 2), "type": "pct", "delta": 0},
 		],
@@ -276,7 +301,11 @@ def _production_data(today, since, date_fmt, group_fmt):
 	}
 
 
-def _hr_data(today, since, date_fmt, group_fmt):
+def _hr_data(today, since, date_fmt, group_fmt, pw):
+	# HR's headline KPIs (Active Employees, Present Today, Pending Leaves) are
+	# point-in-time snapshots and Payroll MTD is inherently monthly — none of
+	# them have a meaningful daily/weekly equivalent, so `pw` is intentionally
+	# unused here; the period selector still drives this tab's trend chart.
 	try:
 		total_emp = flt(frappe.db.sql(
 			"SELECT COUNT(*) FROM `tabEmployee` WHERE status='Active'"
@@ -332,6 +361,9 @@ def _hr_data(today, since, date_fmt, group_fmt):
 		by_dept = []
 
 	try:
+		# Payroll is inherently monthly (slips are generated once/month) — always
+		# calendar-MTD regardless of the daily/weekly/monthly period selector,
+		# since a daily/weekly window would just read 0 for most of the month.
 		_pr = frappe.db.sql("""
 			SELECT
 				COALESCE(SUM(CASE WHEN docstatus=1 THEN net_pay ELSE 0 END), 0) AS sub_pay,
@@ -369,22 +401,24 @@ def _detect_user_type(user):
 	return "sales"
 
 
-def _my_work_data(user, today, since, date_fmt, group_fmt):
+def _my_work_data(user, today, since, date_fmt, group_fmt, pw):
 	month_start = get_first_day(today)
 	user_type = _detect_user_type(user)
 
 	if user_type == "hr":
-		return _my_work_hr(user, today, since, date_fmt, group_fmt, month_start)
+		return _my_work_hr(user, today, since, date_fmt, group_fmt, month_start, pw)
 	if user_type == "production":
-		return _my_work_production(user, today, since, date_fmt, group_fmt, month_start)
+		return _my_work_production(user, today, since, date_fmt, group_fmt, month_start, pw)
 	if user_type == "finance":
-		return _my_work_finance(user, today, since, date_fmt, group_fmt, month_start)
-	return _my_work_sales(user, today, since, date_fmt, group_fmt, month_start)
+		return _my_work_finance(user, today, since, date_fmt, group_fmt, month_start, pw)
+	return _my_work_sales(user, today, since, date_fmt, group_fmt, month_start, pw)
 
 
 # ── Sales user view ────────────────────────────────────────────────────────────
 
-def _my_work_sales(user, today, since, date_fmt, group_fmt, month_start):
+def _my_work_sales(user, today, since, date_fmt, group_fmt, month_start, pw):
+	period_start, period_end = pw["period_start"], pw["period_end"]
+	period_label = pw["period_label"]
 	# ── Core billing metrics ───────────────────────────────────────────────────
 	# Basis controlled by instabiz.overrides.billing_mode — dev mode reads
 	# Sales Order (billing isn't live in ERP yet, so SI-based revenue always
@@ -399,19 +433,30 @@ def _my_work_sales(user, today, since, date_fmt, group_fmt, month_start):
 	sales_cond = "AND t.status != 'Cancelled'" if dev_mode else "AND t.is_return=0"
 	outstanding_expr = sales_outstanding_expr("t")
 
+	# Period-scoped (drives the headline KPI cards — daily/weekly/monthly).
 	billing_row = frappe.db.sql(f"""
 		SELECT
-			COALESCE(SUM(grand_total), 0)               as rev_mtd,
+			COALESCE(SUM(grand_total), 0)               as rev,
 			COUNT(*)                                     as invoice_count
 		FROM `tab{sales_dt}` t
 		WHERE docstatus=1 {sales_cond}
 		AND {sales_date} BETWEEN %s AND %s
 		AND custom_sales_person_user = %s
-	""", (month_start, today, user), as_dict=True)[0]
+	""", (period_start, period_end, user), as_dict=True)[0]
 
-	rev_mtd       = flt(billing_row.rev_mtd)
+	rev_period    = flt(billing_row.rev)
 	invoice_count  = int(billing_row.invoice_count or 0)
-	avg_invoice    = round(rev_mtd / invoice_count, 2) if invoice_count else 0
+	avg_invoice    = round(rev_period / invoice_count, 2) if invoice_count else 0
+
+	# Always-calendar-month (target attainment + incentive slabs are a strictly
+	# monthly concept — see ib_sales_incentives.py — so these stay MTD
+	# regardless of the daily/weekly/monthly period selector above).
+	rev_mtd = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM(grand_total), 0) FROM `tab{sales_dt}` t
+		WHERE docstatus=1 {sales_cond}
+		AND {sales_date} BETWEEN %s AND %s
+		AND custom_sales_person_user = %s
+	""", (month_start, today, user))[0][0])
 
 	collected = flt(frappe.db.sql("""
 		SELECT COALESCE(SUM(grand_total - outstanding_amount), 0)
@@ -421,14 +466,14 @@ def _my_work_sales(user, today, since, date_fmt, group_fmt, month_start):
 		AND custom_sales_person_user = %s
 	""", (month_start, today, user))[0][0])
 
-	# ── Orders MTD ─────────────────────────────────────────────────────────────
+	# ── Orders (period-scoped) ─────────────────────────────────────────────────
 	orders_mtd = int(flt(frappe.db.sql("""
 		SELECT COUNT(*) FROM `tabSales Order`
 		WHERE docstatus=1 AND transaction_date BETWEEN %s AND %s
 		AND custom_sales_person_user = %s
-	""", (month_start, today, user))[0][0]))
+	""", (period_start, period_end, user))[0][0]))
 
-	# ── Advance collections MTD (PEs linked to this user's SOs) ───────────────
+	# ── Advance collections (period-scoped; PEs linked to this user's SOs) ────
 	# Sum per-reference-row allocated_amount, not the PE parent's paid_amount —
 	# a PE split across multiple SOs would otherwise count its full paid_amount
 	# once per joined reference row (same fan-out fix already applied in
@@ -442,9 +487,9 @@ def _my_work_sales(user, today, since, date_fmt, group_fmt, month_start):
 		AND per.reference_doctype = 'Sales Order'
 		AND pe.posting_date BETWEEN %s AND %s
 		AND so.custom_sales_person_user = %s
-	""", (month_start, today, user))[0][0])
+	""", (period_start, period_end, user))[0][0])
 
-	# ── Target & commission ────────────────────────────────────────────────────
+	# ── Target & commission (always monthly — see rev_mtd note above) ─────────
 	target_row = frappe.db.sql("""
 		SELECT target_amount FROM `tabIB Sales Target`
 		WHERE sales_user = %s AND month = %s
@@ -554,11 +599,11 @@ def _my_work_sales(user, today, since, date_fmt, group_fmt, month_start):
 
 	return {
 		"kpis": [
-			{"label": "Revenue MTD",       "value": rev_mtd,          "type": "currency",
-			 "delta": round(tgt_pct - 100, 1) if tgt_pct else 0, "delta_label": "vs target"},
-			{"label": "Invoices Created",  "value": invoice_count,    "type": "count",    "delta": 0},
-			{"label": "Advance Collected", "value": advance_collected, "type": "currency", "delta": 0},
-			{"label": "Commission",        "value": commission,        "type": "currency", "delta": 0},
+			{"label": f"Revenue {period_label}", "value": rev_period,     "type": "currency",
+			 "delta": round(tgt_pct - 100, 1) if tgt_pct else 0, "delta_label": "vs month target"},
+			{"label": f"Invoices {period_label}", "value": invoice_count,  "type": "count",    "delta": 0},
+			{"label": f"Advance {period_label}",  "value": advance_collected, "type": "currency", "delta": 0},
+			{"label": "Commission (MTD)",         "value": commission,        "type": "currency", "delta": 0},
 		],
 		"trend": trend,
 		"breakdown": by_customer,
@@ -585,7 +630,9 @@ def _my_work_sales(user, today, since, date_fmt, group_fmt, month_start):
 
 # ── HR user view ───────────────────────────────────────────────────────────────
 
-def _my_work_hr(user, today, since, date_fmt, group_fmt, month_start):
+def _my_work_hr(user, today, since, date_fmt, group_fmt, month_start, pw):
+	# Same as the main HR tab: Active Employees/Present Today/Pending Leaves
+	# are point-in-time and Payroll MTD is inherently monthly — `pw` unused.
 	total_emp = flt(frappe.db.sql(
 		"SELECT COUNT(*) FROM `tabEmployee` WHERE status='Active'"
 	)[0][0])
@@ -676,7 +723,9 @@ def _my_work_hr(user, today, since, date_fmt, group_fmt, month_start):
 
 # ── Production user view ───────────────────────────────────────────────────────
 
-def _my_work_production(user, today, since, date_fmt, group_fmt, month_start):
+def _my_work_production(user, today, since, date_fmt, group_fmt, month_start, pw):
+	period_start = pw["period_start"]
+	period_label = pw["period_label"]
 	wo_active = flt(frappe.db.sql(
 		"SELECT COUNT(*) FROM `tabIB Work Order` WHERE status NOT IN ('Completed','Cancelled')"
 	)[0][0])
@@ -684,8 +733,8 @@ def _my_work_production(user, today, since, date_fmt, group_fmt, month_start):
 		"SELECT COUNT(*) FROM `tabIB Work Order` WHERE status = 'Pending'"
 	)[0][0])
 	wo_today = flt(frappe.db.sql(
-		"SELECT COUNT(*) FROM `tabIB Work Order` WHERE status='Completed' AND DATE(COALESCE(completed_at, modified)) = %s",
-		(today,)
+		"SELECT COUNT(*) FROM `tabIB Work Order` WHERE status='Completed' AND COALESCE(completed_at, modified) >= %s",
+		(period_start,)
 	)[0][0])
 	machines_active = flt(frappe.db.sql(
 		"SELECT COUNT(*) FROM `tabIB Machine` WHERE status='Active'"
@@ -724,7 +773,7 @@ def _my_work_production(user, today, since, date_fmt, group_fmt, month_start):
 		"kpis": [
 			{"label": "Active WOs",       "value": int(wo_active), "type": "count", "delta": 0},
 			{"label": "Pending",          "value": int(wo_pending), "type": "count", "delta": 0},
-			{"label": "Completed Today",  "value": int(wo_today), "type": "count", "delta": 0},
+			{"label": f"Completed {period_label}",  "value": int(wo_today), "type": "count", "delta": 0},
 			{"label": "Machines Active",  "value": int(machines_active), "type": "count", "delta": 0},
 		],
 		"trend": wo_trend,
@@ -736,11 +785,13 @@ def _my_work_production(user, today, since, date_fmt, group_fmt, month_start):
 
 # ── Finance/Accounts user view ─────────────────────────────────────────────────
 
-def _my_work_finance(user, today, since, date_fmt, group_fmt, month_start):
+def _my_work_finance(user, today, since, date_fmt, group_fmt, month_start, pw):
 	# Basis controlled by instabiz.overrides.billing_mode — was 100%
 	# hardcoded to Sales/Purchase Invoice, so every figure here except the
 	# real Payment Entry ones (collections_mtd/payments_mtd/recent_payments)
 	# read zero (billing isn't live in ERP yet).
+	period_start, period_end = pw["period_start"], pw["period_end"]
+	period_label = pw["period_label"]
 	dev_mode = is_dev_billing_mode()
 	sales_dt = sales_doctype()
 	purch_dt = purchase_doctype()
@@ -762,11 +813,11 @@ def _my_work_finance(user, today, since, date_fmt, group_fmt, month_start):
 	collections_mtd = flt(frappe.db.sql("""
 		SELECT COALESCE(SUM(paid_amount), 0) FROM `tabPayment Entry`
 		WHERE docstatus=1 AND payment_type='Receive' AND posting_date BETWEEN %s AND %s
-	""", (month_start, today))[0][0])
+	""", (period_start, period_end))[0][0])
 	payments_mtd = flt(frappe.db.sql("""
 		SELECT COALESCE(SUM(paid_amount), 0) FROM `tabPayment Entry`
 		WHERE docstatus=1 AND payment_type='Pay' AND posting_date BETWEEN %s AND %s
-	""", (month_start, today))[0][0])
+	""", (period_start, period_end))[0][0])
 
 	rev_trend = frappe.db.sql(f"""
 		SELECT DATE_FORMAT({sales_date}, '{date_fmt}') as label,
@@ -810,14 +861,14 @@ def _my_work_finance(user, today, since, date_fmt, group_fmt, month_start):
 		FROM `tabPayment Entry`
 		WHERE docstatus=1 AND posting_date BETWEEN %s AND %s
 		ORDER BY posting_date DESC, creation DESC LIMIT 15
-	""", (month_start, today), as_dict=True)
+	""", (period_start, period_end), as_dict=True)
 
 	return {
 		"kpis": [
-			{"label": "Outstanding AR",   "value": ar_total,       "type": "currency", "delta": 0},
-			{"label": "Outstanding AP",   "value": ap_total,       "type": "currency", "delta": 0},
-			{"label": "Collections MTD",  "value": collections_mtd,"type": "currency", "delta": 0},
-			{"label": "Payments MTD",     "value": payments_mtd,   "type": "currency", "delta": 0},
+			{"label": "Outstanding AR",            "value": ar_total,       "type": "currency", "delta": 0},
+			{"label": "Outstanding AP",            "value": ap_total,       "type": "currency", "delta": 0},
+			{"label": f"Collections {period_label}", "value": collections_mtd,"type": "currency", "delta": 0},
+			{"label": f"Payments {period_label}",    "value": payments_mtd,   "type": "currency", "delta": 0},
 		],
 		"trend": rev_trend,
 		"breakdown": overdue_by_cust,
@@ -830,13 +881,13 @@ def _my_work_finance(user, today, since, date_fmt, group_fmt, month_start):
 	}
 
 
-def _finance_data(today, since, date_fmt, group_fmt):
+def _finance_data(today, since, date_fmt, group_fmt, pw):
 	# Basis controlled by instabiz.overrides.billing_mode — was 100%
 	# hardcoded to Sales/Purchase Invoice, so this whole tab read zero
 	# (billing isn't live in ERP yet).
-	month_start = get_first_day(today)
-	last_start = get_first_day(add_months(today, -1))
-	last_end = frappe.utils.get_last_day(add_months(today, -1))
+	period_start, period_end = pw["period_start"], pw["period_end"]
+	prev_start, prev_end = pw["prev_start"], pw["prev_end"]
+	period_label = pw["period_label"]
 
 	dev_mode = is_dev_billing_mode()
 	sales_dt = sales_doctype()
@@ -857,26 +908,26 @@ def _finance_data(today, since, date_fmt, group_fmt):
 		f"SELECT COALESCE(SUM({ap_expr}),0) FROM `tab{purch_dt}` t WHERE docstatus=1 {purch_cond}"
 	)[0][0])
 
-	rev_mtd = flt(frappe.db.sql(f"""
+	rev_period = flt(frappe.db.sql(f"""
 		SELECT COALESCE(SUM(grand_total),0) FROM `tab{sales_dt}` t
 		WHERE docstatus=1 {sales_cond} AND {sales_date} BETWEEN %s AND %s
-	""", (month_start, today))[0][0])
+	""", (period_start, period_end))[0][0])
 
-	rev_last = flt(frappe.db.sql(f"""
+	rev_prev = flt(frappe.db.sql(f"""
 		SELECT COALESCE(SUM(grand_total),0) FROM `tab{sales_dt}` t
 		WHERE docstatus=1 {sales_cond} AND {sales_date} BETWEEN %s AND %s
-	""", (last_start, last_end))[0][0])
+	""", (prev_start, prev_end))[0][0])
 
-	rev_delta = round((rev_mtd - rev_last) / rev_last * 100, 1) if rev_last else 0
+	rev_delta = round((rev_period - rev_prev) / rev_prev * 100, 1) if rev_prev else 0
 
-	gst_mtd = flt(frappe.db.sql(f"""
+	gst_period = flt(frappe.db.sql(f"""
 		SELECT COALESCE(SUM(tx.tax_amount),0)
 		FROM `tabSales Taxes and Charges` tx
 		JOIN `tab{sales_dt}` t ON t.name=tx.parent AND tx.parenttype=%s
 		WHERE t.docstatus=1 AND t.{sales_date} BETWEEN %s AND %s
 		AND (tx.account_head LIKE '%%GST%%' OR tx.account_head LIKE '%%CGST%%'
 			OR tx.account_head LIKE '%%IGST%%' OR tx.account_head LIKE '%%SGST%%')
-	""", (sales_dt, month_start, today))[0][0])
+	""", (sales_dt, period_start, period_end))[0][0])
 
 	pl_trend = frappe.db.sql(f"""
 		SELECT DATE_FORMAT({sales_date},'{date_fmt}') as label,
@@ -898,10 +949,10 @@ def _finance_data(today, since, date_fmt, group_fmt):
 
 	return {
 		"kpis": [
-			{"label": "Revenue MTD", "value": rev_mtd, "type": "currency", "delta": rev_delta},
+			{"label": f"Revenue {period_label}", "value": rev_period, "type": "currency", "delta": rev_delta},
 			{"label": "Outstanding AR", "value": ar, "type": "currency", "delta": 0},
 			{"label": "Outstanding AP", "value": ap, "type": "currency", "delta": 0},
-			{"label": "GST Collected MTD", "value": gst_mtd, "type": "currency", "delta": 0},
+			{"label": f"GST Collected {period_label}", "value": gst_period, "type": "currency", "delta": 0},
 		],
 		"trend": pl_trend,
 		"breakdown": overdue,

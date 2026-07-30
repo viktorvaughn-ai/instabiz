@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"ib-h0\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>Dashboards</b></span>\",\"col\":12}},{\"id\":\"sc-dash\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Dashboard\",\"col\":3}},{\"id\":\"sc-pulse\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Business Pulse\",\"col\":3}},{\"id\":\"sc-anal\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Analytics Hub\",\"col\":3}},{\"id\":\"ib-h1\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>SALES &amp; CRM</b></span>\",\"col\":12}},{\"id\":\"sc-cb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Board\",\"col\":3}},{\"id\":\"sc-ch\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Health\",\"col\":3}},{\"id\":\"sc-lp\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Leads Pipeline\",\"col\":3}},{\"id\":\"sc-sinc\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Incentives\",\"col\":3}},{\"id\":\"sc-q\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Quotation\",\"col\":3}},{\"id\":\"sc-so\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Order\",\"col\":3}},{\"id\":\"sc-cm\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Master\",\"col\":3}},{\"id\":\"sc-rc\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"IB Rate Card\",\"col\":3}},{\"id\":\"m-iph\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Item Price History\",\"col\":3}},{\"id\":\"m-ptrk\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Production Tracker\",\"col\":3}},{\"id\":\"sc-aa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Assignment Admin\",\"col\":3}},{\"id\":\"sc-ld\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Lead\",\"col\":3}},{\"id\":\"sc-sinv\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Invoice\",\"col\":3}},{\"id\":\"sc-samp\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sample Request\",\"col\":3}},{\"id\":\"sc-dn\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Delivery Note\",\"col\":3}},{\"id\":\"ib-hm\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>MASTERS</b></span>\",\"col\":12}},{\"id\":\"sc-lst\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Lead Sales Team\",\"col\":3}},{\"id\":\"sc-tgt\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Target\",\"col\":3}},{\"id\":\"sc-brand\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Branding\",\"col\":3}},{\"id\":\"sc-transport\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Transport\",\"col\":3}},{\"id\":\"sc-cis\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Item Spec\",\"col\":3}},{\"id\":\"sc-csh\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Share\",\"col\":3}},{\"id\":\"ib-hwa\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>WHATSAPP</b></span>\",\"col\":12}},{\"id\":\"sc-wases\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"WA Sessions\",\"col\":3}},{\"id\":\"sc-watpl\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"WA Templates\",\"col\":3}},{\"id\":\"sc-walog\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"WA Log\",\"col\":3}},{\"id\":\"ib-h2\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>STOCK</b></span>\",\"col\":12}},{\"id\":\"sc-sb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Live Stock Balance\",\"col\":3}},{\"id\":\"6pkSAQ2wDd\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Item Master\",\"col\":3}},{\"id\":\"ib-h3\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>AI AGENTS</b></span>\",\"col\":12}},{\"id\":\"sc-ai\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"AI Inbox\",\"col\":3}},{\"id\":\"sc-aiact\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"AI Actions\",\"col\":3}},{\"id\":\"sc-alog\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Agent Logs\",\"col\":3}},{\"id\":\"sc-agdef\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Agent Definitions\",\"col\":3}},{\"id\":\"sc-n8n\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"n8n Console\",\"col\":3}},{\"id\":\"sc-syshealth\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"System Health\",\"col\":3}},{\"id\":\"ib-h4\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>REPORTS \\u2014 SALES</b></span>\",\"col\":12}},{\"id\":\"rpt-ds\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Daily Sales\",\"col\":3}},{\"id\":\"rpt-kpi\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales KPIs\",\"col\":3}},{\"id\":\"rpt-sp\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Person\",\"col\":3}},{\"id\":\"rpt-ld\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Lost Deals\",\"col\":3}},{\"id\":\"rpt-ter\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Territory\",\"col\":3}},{\"id\":\"rpt-sku\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"SKU Sales\",\"col\":3}},{\"id\":\"rpt-gm\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Gross Margin\",\"col\":3}},{\"id\":\"rpt-col\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Collections Report\",\"col\":3}},{\"id\":\"rpt-cn\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Credit Notes\",\"col\":3}},{\"id\":\"rpt-dbn\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Debit Notes\",\"col\":3}},{\"id\":\"rpt-al\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Activity Log\",\"col\":3}},{\"id\":\"rpt-dr\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Dispatch Report\",\"col\":3}},{\"id\":\"ib-h-myhr\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>MY SELF-SERVICE</b></span>\",\"col\":12}},{\"id\":\"sc-myhr\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"My HR\",\"col\":3}},{\"id\":\"sc-lv\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Leave Application\",\"col\":3}},{\"id\":\"ib-h5\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\",\"col\":12}},{\"id\":\"sc-kb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Knowledge Base\",\"col\":3}}]",
+ "content": "[{\"id\":\"ib-h0\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>Dashboards</b></span>\",\"col\":12}},{\"id\":\"sc-dash\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Dashboard\",\"col\":3}},{\"id\":\"sc-pulse\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Business Pulse\",\"col\":3}},{\"id\":\"sc-anal\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Analytics Hub\",\"col\":3}},{\"id\":\"ib-h1\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>SALES &amp; CRM</b></span>\",\"col\":12}},{\"id\":\"sc-cb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Board\",\"col\":3}},{\"id\":\"sc-si\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Incentives\",\"col\":3}},{\"id\":\"sc-ch\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Health\",\"col\":3}},{\"id\":\"sc-q\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Quotation\",\"col\":3}},{\"id\":\"sc-so\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Order\",\"col\":3}},{\"id\":\"sc-cm\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer Master\",\"col\":3}},{\"id\":\"sc-rc\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"IB Rate Card\",\"col\":3}},{\"id\":\"m-iph\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Item Price History\",\"col\":3}},{\"id\":\"m-ptrk\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Production Tracker\",\"col\":3}},{\"id\":\"sc-aa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Assignment Admin\",\"col\":3}},{\"id\":\"sc-ld\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Lead\",\"col\":3}},{\"id\":\"sc-sinv\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Invoice\",\"col\":3}},{\"id\":\"sc-samp\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sample Request\",\"col\":3}},{\"id\":\"sc-dn\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Delivery Note\",\"col\":3}},{\"id\":\"ib-hm\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>MASTERS</b></span>\",\"col\":12}},{\"id\":\"sc-lst\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Lead Sales Team\",\"col\":3}},{\"id\":\"sc-brand\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Branding\",\"col\":3}},{\"id\":\"sc-transport\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Transport\",\"col\":3}},{\"id\":\"ib-h2\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>STOCK</b></span>\",\"col\":12}},{\"id\":\"sc-sb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Live Stock Balance\",\"col\":3}},{\"id\":\"6pkSAQ2wDd\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Item Master\",\"col\":3}},{\"id\":\"ib-h3\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>AI AGENTS</b></span>\",\"col\":12}},{\"id\":\"sc-ai\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"AI Inbox\",\"col\":3}},{\"id\":\"ib-h4\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>REPORTS \\u2014 SALES</b></span>\",\"col\":12}},{\"id\":\"rpt-ds\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Daily Sales\",\"col\":3}},{\"id\":\"rpt-kpi\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales KPIs\",\"col\":3}},{\"id\":\"rpt-sp\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Person\",\"col\":3}},{\"id\":\"rpt-ld\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Lost Deals\",\"col\":3}},{\"id\":\"rpt-ter\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Territory\",\"col\":3}},{\"id\":\"rpt-sku\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"SKU Sales\",\"col\":3}},{\"id\":\"rpt-gm\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Gross Margin\",\"col\":3}},{\"id\":\"rpt-col\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Collections Report\",\"col\":3}},{\"id\":\"rpt-cn\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Credit Notes\",\"col\":3}},{\"id\":\"rpt-al\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Activity Log\",\"col\":3}},{\"id\":\"rpt-dr\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Dispatch Report\",\"col\":3}},{\"id\":\"ib-h-myhr\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>MY SELF-SERVICE</b></span>\",\"col\":12}},{\"id\":\"sc-myhr\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"My HR\",\"col\":3}},{\"id\":\"sc-lv\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Leave Application\",\"col\":3}},{\"id\":\"ib-h5\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\",\"col\":12}},{\"id\":\"sc-kb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Knowledge Base\",\"col\":3}}]",
  "creation": "2026-07-15 07:16:56.480087",
  "custom_blocks": [],
  "docstatus": 0,
@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz",
  "links": [],
- "modified": "2026-07-27 07:37:37.565934",
+ "modified": "2026-07-29 02:21:38.205183",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz",
@@ -77,20 +77,6 @@
    "label": "Customer Health",
    "link_to": "ib-customer-health",
    "restrict_to_role": "Sales Manager",
-   "type": "Page"
-  },
-  {
-   "color": "Orange",
-   "doc_view": "",
-   "label": "Leads Pipeline",
-   "link_to": "ib-leads-kanban",
-   "type": "Page"
-  },
-  {
-   "color": "Orange",
-   "doc_view": "",
-   "label": "Sales Incentives",
-   "link_to": "ib-sales-incentives",
    "type": "Page"
   },
   {
@@ -183,15 +169,6 @@
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Sales Target",
-   "link_to": "IB Sales Target",
-   "restrict_to_role": "Sales Manager",
-   "stats_filter": "[]",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "List",
    "label": "Branding",
    "link_to": "IB Branding",
    "restrict_to_role": "Sales Manager",
@@ -203,24 +180,6 @@
    "doc_view": "List",
    "label": "Transport",
    "link_to": "IB Transport",
-   "restrict_to_role": "Sales Manager",
-   "stats_filter": "[]",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "List",
-   "label": "Customer Item Spec",
-   "link_to": "IB Customer Item Spec",
-   "restrict_to_role": "Sales Manager",
-   "stats_filter": "[]",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "List",
-   "label": "Customer Share",
-   "link_to": "IB Customer Share",
    "restrict_to_role": "Sales Manager",
    "stats_filter": "[]",
    "type": "DocType"
@@ -239,24 +198,6 @@
    "link_to": "ib-ai-inbox",
    "restrict_to_role": "Sales Manager",
    "type": "Page"
-  },
-  {
-   "color": "Purple",
-   "doc_view": "List",
-   "label": "AI Actions",
-   "link_to": "IB AI Action",
-   "restrict_to_role": "Sales Manager",
-   "stats_filter": "[]",
-   "type": "DocType"
-  },
-  {
-   "color": "Purple",
-   "doc_view": "List",
-   "label": "Agent Logs",
-   "link_to": "IB Agent Run Log",
-   "restrict_to_role": "Sales Manager",
-   "stats_filter": "[]",
-   "type": "DocType"
   },
   {
    "color": "Blue",
@@ -340,12 +281,11 @@
    "type": "Report"
   },
   {
-   "color": "Grey",
+   "color": "Green",
    "doc_view": "",
-   "label": "Sales Register",
-   "link_to": "Sales Register",
-   "report_ref_doctype": "Sales Invoice",
-   "type": "Report"
+   "label": "Sales Incentives",
+   "link_to": "ib-sales-incentives",
+   "type": "Page"
   },
   {
    "color": "Blue",
@@ -354,14 +294,6 @@
    "link_to": "IB Activity Log",
    "report_ref_doctype": "IB Customer Assignment",
    "restrict_to_role": "Sales Manager",
-   "type": "Report"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "",
-   "label": "Item-wise Sales Register",
-   "link_to": "Item-wise Sales Register",
-   "report_ref_doctype": "Sales Invoice",
    "type": "Report"
   },
   {

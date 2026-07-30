@@ -1,0 +1,132 @@
+{
+ "actions": [],
+ "creation": "2026-07-27 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "bank_account",
+  "mode",
+  "col_date",
+  "col_description",
+  "col_reference",
+  "col_debit",
+  "col_credit",
+  "col_amount",
+  "col_type",
+  "credit_indicator"
+ ],
+ "fields": [
+  {
+   "fieldname": "bank_account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Bank Account",
+   "options": "Bank Account",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "mode",
+   "fieldtype": "Select",
+   "label": "Column Layout",
+   "options": "Separate Debit/Credit Columns\nSingle Amount Column",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_date",
+   "fieldtype": "Data",
+   "label": "Date Column",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_description",
+   "fieldtype": "Data",
+   "label": "Description Column"
+  },
+  {
+   "fieldname": "col_reference",
+   "fieldtype": "Data",
+   "label": "Reference No. Column"
+  },
+  {
+   "fieldname": "col_debit",
+   "fieldtype": "Data",
+   "label": "Debit/Withdrawal Column",
+   "depends_on": "eval:doc.mode=='Separate Debit/Credit Columns'"
+  },
+  {
+   "fieldname": "col_credit",
+   "fieldtype": "Data",
+   "label": "Credit/Deposit Column",
+   "depends_on": "eval:doc.mode=='Separate Debit/Credit Columns'"
+  },
+  {
+   "fieldname": "col_amount",
+   "fieldtype": "Data",
+   "label": "Amount Column",
+   "depends_on": "eval:doc.mode=='Single Amount Column'"
+  },
+  {
+   "fieldname": "col_type",
+   "fieldtype": "Data",
+   "label": "Type Column (Dr/Cr, optional)",
+   "depends_on": "eval:doc.mode=='Single Amount Column'",
+   "description": "Optional. If the amount column isn't already signed (+/-), map a separate Dr/Cr indicator column here."
+  },
+  {
+   "fieldname": "credit_indicator",
+   "fieldtype": "Data",
+   "label": "Credit Indicator Value",
+   "depends_on": "eval:doc.mode=='Single Amount Column' && doc.col_type",
+   "description": "The value in the Type column that means \"credit\" (e.g. CR, C, Credit)."
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-07-27 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "IB Bank Import Profile",
+ "autoname": "field:bank_account",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 0
+}

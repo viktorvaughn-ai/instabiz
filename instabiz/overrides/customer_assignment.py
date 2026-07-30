@@ -138,11 +138,12 @@ def _already_assigned_customers(date):
 	return {r.customer for r in rows}
 
 
-def get_user_assigned_pool(user, limit=200):
+def get_user_assigned_pool(user, limit=50, offset=0):
 	"""Return customers for the 'My Customers' board column:
 	1. Permanently owned (custom_sales_person_user = user).
 	2. Shared with user via IB Customer Share (and not owned by user).
 	share_relation field distinguishes 'owned' vs 'shared' for UI rendering.
+	Paginated (offset/limit) — board's "Load more" button pages through the rest.
 	"""
 	rows = frappe.db.sql(
 		"""
@@ -174,9 +175,9 @@ def get_user_assigned_pool(user, limit=200):
 		    GROUP BY c.name
 		) sub
 		ORDER BY sub.last_so_date ASC
-		LIMIT %(limit)s
+		LIMIT %(limit)s OFFSET %(offset)s
 		""",
-		{"user": user, "limit": limit},
+		{"user": user, "limit": limit, "offset": offset},
 		as_dict=True,
 	)
 	total_rows = frappe.db.sql(
@@ -599,6 +600,27 @@ def get_customer_board_data(date=None):
 		"date": date,
 		"tomorrow_date": tomorrow,
 	}
+
+
+@frappe.whitelist()
+def load_more_my_accounts(offset=0, limit=50):
+	"""Pages through the current user's "My Accounts" board column past the
+	initial 50 — the column previously hard-capped at 200 with no way to see
+	further rows."""
+	rows, total = get_user_assigned_pool(frappe.session.user, limit=int(limit), offset=int(offset))
+	return {"rows": rows, "total": total}
+
+
+@frappe.whitelist()
+def load_more_my_accounts_admin(user, offset=0, limit=50):
+	"""Same as load_more_my_accounts, for a manager/team-leader paging through
+	someone else's "My Accounts" column via Assignment Admin's view-as board."""
+	_require_manager_or_leader()
+	leader_team = None if any(r in frappe.get_roles() for r in ["Sales Manager", "System Manager"]) else _get_leader_team()
+	if leader_team and user not in _get_team_member_users(leader_team):
+		frappe.throw(_("Not authorized."), frappe.PermissionError)
+	rows, total = get_user_assigned_pool(user, limit=int(limit), offset=int(offset))
+	return {"rows": rows, "total": total}
 
 
 @frappe.whitelist()
@@ -1164,54 +1186,6 @@ def get_admin_overview(date=None, territory=None, view_as_user=None):
 
 
 @frappe.whitelist()
-def get_customer_pool(territory=None, pool_type=None, date=None, limit=50, offset=0, search=None):
-	"""Return assignable customers for admin pool browser with pagination."""
-	_require_manager_or_leader()
-	is_manager = any(r in frappe.get_roles() for r in ["Sales Manager", "System Manager"])
-	leader_team = None if is_manager else _get_leader_team()
-	date = date or today()
-	limit = int(limit)
-	offset = int(offset)
-	search = (search or "").strip() or None
-	config = get_assignment_config()
-
-	if territory:
-		territories = [territory]
-	elif leader_team:
-		# Team leaders only see their team's territories
-		terr_rows = frappe.db.get_all(
-			"Lead Sales Team Territory", filters={"parent": leader_team}, fields=["territory"]
-		)
-		territories = [r.territory for r in terr_rows] or ["__none__"]
-	else:
-		territories = frappe.db.sql(
-			"SELECT name FROM `tabTerritory` WHERE is_group = 0",
-			as_dict=True,
-		)
-	if territories and isinstance(territories[0], dict):
-		territories = [t["name"] for t in territories]
-
-	if not territories:
-		return {"rows": [], "total": 0}
-
-	exclude = _already_assigned_customers(date)
-	threshold = config["dormant_threshold_days"]
-
-	if pool_type == "Dormant":
-		rows = get_dormant_pool(territories, exclude, threshold, limit=limit, offset=offset, search=search)
-		total = get_dormant_pool(territories, exclude, threshold, count_only=True, search=search)
-	elif pool_type == "Regular":
-		rows = get_regular_pool(territories, exclude, threshold, limit=limit, offset=offset, search=search)
-		total = get_regular_pool(territories, exclude, threshold, count_only=True, search=search)
-	else:
-		rows = get_dormant_pool(territories, exclude, threshold, limit=limit, offset=offset, search=search)
-		total = get_dormant_pool(territories, exclude, threshold, count_only=True, search=search)
-
-	return {"rows": rows, "total": total}
-
-
-
-@frappe.whitelist()
 def bulk_auto_assign(user, date=None, count=None):
 	"""Admin triggers auto-assign for a specific user on demand."""
 	_require_manager_or_leader()
@@ -1409,72 +1383,6 @@ def bulk_assign_to_user(customers, assigned_to, date=None):
 	return {"assigned": assigned}
 
 
-@frappe.whitelist()
-def cleanup_excess_assignments(date=None):
-	"""Fix users with excess Pending assignments.
-
-	Two passes per user:
-	1. Delete Pending assignments where the customer is 'owned' by that user
-	   (custom_sales_person_user = assigned_to). These appeared because of the old
-	   auto-assign Pass 1 — owned customers now live in the Regular pool only.
-	2. If remaining Pending count still exceeds assignments_per_day quota,
-	   delete the newest excess rows (keep oldest quota entries).
-
-	Runs for today + tomorrow.
-	"""
-	_require_manager()
-	from frappe.utils import add_days
-	config = get_assignment_config()
-	quota = config["assignments_per_day"]
-	today_date = date or today()
-	dates = [today_date, _next_working_day(today_date)]
-	users = get_active_sales_users()
-	removed_owned = 0
-	removed_excess = 0
-
-	for user in users:
-		for d in dates:
-			# Pass 1 (owned-customer removal) was removed: reps legitimately add My Account
-			# customers to Today manually, and can also Claim Territory customers mid-session.
-			# Deleting those assignments would incorrectly nuke valid work items.
-
-			# Trim any Pending count exceeding the daily quota (keep oldest entries)
-			remaining = frappe.db.sql(
-				"""
-				SELECT name FROM `tabIB Customer Assignment`
-				WHERE assigned_to = %(user)s
-				  AND assigned_date = %(date)s
-				  AND status = 'Pending'
-				ORDER BY creation ASC
-				""",
-				{"user": user, "date": d},
-				as_dict=True,
-			)
-			if len(remaining) > quota:
-				to_delete = [r.name for r in remaining[quota:]]
-				for name in to_delete:
-					frappe.db.delete("IB Customer Assignment", {"name": name})
-					removed_excess += 1
-
-	frappe.db.commit()
-	return {
-		"removed_owned": removed_owned,
-		"removed_excess": removed_excess,
-		"total_removed": removed_owned + removed_excess,
-	}
-
-
-@frappe.whitelist()
-def save_assignment_config(assignments_per_day, dormant_threshold_days, dormant_ratio):
-	"""Admin saves global assignment config."""
-	_require_manager()
-	doc = frappe.get_single("IB Assignment Config")
-	doc.assignments_per_day = int(assignments_per_day)
-	doc.dormant_threshold_days = int(dormant_threshold_days)
-	doc.dormant_ratio = float(dormant_ratio)
-	doc.save(ignore_permissions=True)
-	frappe.db.commit()
-	return {"status": "ok"}
 
 
 @frappe.whitelist()

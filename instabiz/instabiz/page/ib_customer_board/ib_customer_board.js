@@ -135,9 +135,10 @@ class IBCustomerBoard {
 							<span class="ib-cb-col-badge" id="ib-cb-dormant-count">0</span>
 						</div>
 						<div class="ib-cb-col-search">
-							<input class="ib-cb-pool-search" id="ib-cb-dormant-search" placeholder="Search…" autocomplete="off">
+							<input class="ib-cb-pool-search form-control" id="ib-cb-dormant-search" placeholder="Search…" autocomplete="off">
 						</div>
 						<div class="ib-cb-cards" id="ib-cb-dormant-cards"></div>
+						<button class="btn btn-xs btn-default" id="ib-cb-dormant-more" style="display:none;width:calc(100% - 20px);margin:8px 10px">Load more</button>
 					</div>
 					<div class="ib-cb-col ib-cb-col--today" id="ib-cb-today">
 						<div class="ib-cb-col-header">
@@ -150,7 +151,7 @@ class IBCustomerBoard {
 							<div class="ib-cb-today-prog-fill" id="ib-cb-today-prog-fill"></div>
 						</div>
 						<div class="ib-cb-col-search">
-							<input class="ib-cb-pool-search" id="ib-cb-today-search" placeholder="Search…" autocomplete="off">
+							<input class="ib-cb-pool-search form-control" id="ib-cb-today-search" placeholder="Search…" autocomplete="off">
 						</div>
 						<div class="ib-cb-cards" id="ib-cb-today-cards"></div>
 					</div>
@@ -161,7 +162,7 @@ class IBCustomerBoard {
 							<span class="ib-cb-col-badge" id="ib-cb-tomorrow-count">0</span>
 						</div>
 						<div class="ib-cb-col-search">
-							<input class="ib-cb-pool-search" id="ib-cb-tomorrow-search" placeholder="Search…" autocomplete="off">
+							<input class="ib-cb-pool-search form-control" id="ib-cb-tomorrow-search" placeholder="Search…" autocomplete="off">
 						</div>
 						<div class="ib-cb-cards" id="ib-cb-tomorrow-cards"></div>
 					</div>
@@ -175,6 +176,7 @@ class IBCustomerBoard {
 				<div class="ib-cb-undo-bar"><div class="ib-cb-undo-bar-fill" id="ib-cb-undo-bar-fill"></div></div>
 			</div>
 		`);
+		$("#ib-cb-dormant-more").off("click").on("click", () => this._load_more_my_accounts());
 	}
 
 	// ── Data load ─────────────────────────────────────────────────────────────
@@ -281,6 +283,37 @@ class IBCustomerBoard {
 			rows.forEach((r) => $cards.append(this._make_card(r, "pool")));
 		}
 		this._bind_search(col, "backend");
+
+		// "My Accounts" pages past its initial batch instead of hard-capping.
+		if (col === "dormant") {
+			this._my_accounts_total = total;
+			this._my_accounts_loaded = rows.length;
+			const $more = $("#ib-cb-dormant-more");
+			$more.toggle(total > rows.length);
+		}
+	}
+
+	_load_more_my_accounts() {
+		const $more = $("#ib-cb-dormant-more");
+		$more.prop("disabled", true).text("Loading…");
+		frappe.call({
+			method: "instabiz.overrides.customer_assignment.load_more_my_accounts",
+			args: { offset: this._my_accounts_loaded, limit: 50 },
+			callback: (r) => {
+				const { rows, total } = r.message || { rows: [], total: this._my_accounts_total };
+				const $cards = $("#ib-cb-dormant-cards");
+				rows.forEach((row) => $cards.append(this._make_card(row, "pool")));
+				this._my_accounts_loaded += rows.length;
+				this._my_accounts_total = total;
+				$("#ib-cb-dormant-count").text(
+					this._my_accounts_total > this._my_accounts_loaded
+						? `${this._my_accounts_loaded} / ${this._my_accounts_total}`
+						: this._my_accounts_loaded
+				);
+				$more.prop("disabled", false).text("Load more")
+					.toggle(this._my_accounts_total > this._my_accounts_loaded);
+			},
+		});
 	}
 
 	// ── Unified search binding ────────────────────────────────────────────────
@@ -564,6 +597,13 @@ class IBCustomerBoard {
 		const data_attr = `data-customer="${frappe.utils.escape_html(r.customer)}"${r.name && ctx !== "pool" ? ` data-assignment="${frappe.utils.escape_html(r.name)}"` : ""}`;
 
 		const $card = $(`<div class="ib-cb-card ${card_cls}" ${data_attr}>${inner_html}</div>`);
+
+		// Deep-link: card name always opens the real Customer record (was a
+		// dead end before — no navigation existed from board cards at all).
+		$card.find(".ib-cb-card-name").addClass("ib-cb-card-name--link").on("click", (e) => {
+			e.stopPropagation();
+			frappe.set_route("Form", "Customer", r.customer);
+		});
 
 		// Event bindings
 		if (ctx === "pool") {

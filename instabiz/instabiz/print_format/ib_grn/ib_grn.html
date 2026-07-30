@@ -62,6 +62,11 @@
 <div class="box">
 
   {# ── Title ── #}
+  {# ── Letter Head (wide banner, ~9:1 aspect — full width, not floated) ── #}
+  <div class="bb" style="padding:6px 10px; text-align:center">
+    <img src="/files/Instabiz_LH_v2.png" style="width:100%; max-width:520px; height:auto; object-fit:contain">
+  </div>
+
   <div style="text-align:center; padding:5px 6px; border-bottom:1px solid #000; font-size:13px; letter-spacing:1px">
     <strong>Goods Receipt Note</strong>
   </div>
@@ -70,7 +75,6 @@
   <table class="bb">
     <tr>
       <td class="br" style="width:55%">
-        <img src="/files/Instabiz_LH_v2.png" style="width:58px; height:auto; max-height:50px; object-fit:contain; float:left; margin-right:8px; margin-bottom:4px">
         <strong>{{ doc.company | upper }}</strong><br>
         {% if co_addr %}
           {{ co_addr.address_line1 or "" }}{% if co_addr.address_line2 %}, {{ co_addr.address_line2 }}{% endif %}<br>

@@ -100,10 +100,10 @@ class IBFinanceDashboard {
 			<div class="ib-fin-toolbar">
 				<h2>Finance Dashboard</h2>
 				<span class="ib-fin-ts" id="ib-fin-ts"></span>
-				<button class="ib-fin-btn" id="ib-fin-btn-si">Sales Invoices</button>
-				<button class="ib-fin-btn" id="ib-fin-btn-pi">Purchase Invoices</button>
-				<button class="ib-fin-btn" id="ib-fin-btn-pe">Payment Entries</button>
-				<button class="ib-fin-btn" id="ib-fin-refresh">↻ Refresh</button>
+				<button class="ib-fin-btn btn btn-default btn-sm" id="ib-fin-btn-si">Sales Invoices</button>
+				<button class="ib-fin-btn btn btn-default btn-sm" id="ib-fin-btn-pi">Purchase Invoices</button>
+				<button class="ib-fin-btn btn btn-default btn-sm" id="ib-fin-btn-pe">Payment Entries</button>
+				<button class="ib-fin-btn btn btn-default btn-sm" id="ib-fin-refresh">↻ Refresh</button>
 			</div>
 			<div id="ib-fin-kpis" class="ib-fin-kpis">${window.ib_skel_kpis ? ib_skel_kpis(6) : ""}</div>
 			<div class="ib-fin-grid">

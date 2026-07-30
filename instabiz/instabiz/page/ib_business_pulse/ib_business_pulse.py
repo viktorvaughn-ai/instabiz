@@ -67,7 +67,7 @@ def get_pulse_data():
 	""", (three_months_start, today))[0][0])
 	collected_3m = max(0.0, total_billed - ar_3m)
 	collection_rate = max(0.0, min(100.0, round(collected_3m / total_billed * 100, 1))) if total_billed else 100.0
-	rev_score = min(100, round((rev_mtd / rev_last * 80) if rev_last else 50, 0))
+	rev_change_pct = round(((rev_mtd - rev_last) / rev_last * 100), 1) if rev_last else None
 
 	# ── Sales Pipeline ───────────────────────────────────────────────────────
 	open_leads = flt(frappe.db.sql("""
@@ -80,14 +80,12 @@ def get_pulse_data():
 		WHERE docstatus=1 AND status NOT IN ('Ordered','Lost','Cancelled','Expired')
 	""")[0][0])
 
-	pipeline_score = min(100, int(open_leads * 5 + open_quotes * 10))
-
 	# ── Inventory ────────────────────────────────────────────────────────────
 	try:
 		total_items = flt(frappe.db.sql(
 			"SELECT COUNT(DISTINCT item_code) FROM `tabBin` WHERE actual_qty > 0"
 		)[0][0])
-		# Same definition as reorder_alert.py / ib_main_dashboard.py — actual_qty at
+		# Same definition as reorder_alert.py / ib_stock_dashboard.py — actual_qty at
 		# or below the item's reorder level, not just zero-stock-with-reservation.
 		low_stock = flt(frappe.db.sql("""
 			SELECT COUNT(DISTINCT b.item_code) FROM `tabBin` b
@@ -96,9 +94,8 @@ def get_pulse_data():
 			WHERE r.warehouse_reorder_level > 0
 			  AND b.actual_qty <= r.warehouse_reorder_level
 		""")[0][0])
-		inv_score = max(0, round((1 - low_stock / total_items) * 100, 0)) if total_items else 80
 	except Exception:
-		total_items, low_stock, inv_score = 0, 0, 80
+		total_items, low_stock = 0, 0
 
 	# ── Procurement / Payables ───────────────────────────────────────────────
 	try:
@@ -106,9 +103,8 @@ def get_pulse_data():
 			SELECT COUNT(*) FROM `tabPurchase Order`
 			WHERE docstatus=1 AND status NOT IN ('Completed','Cancelled','Closed')
 		""")[0][0])
-		procurement_score = min(100, max(40, 100 - int(open_po * 3)))
 	except Exception:
-		open_po, procurement_score = 0, 80
+		open_po = 0
 
 	# ── HR ────────────────────────────────────────────────────────────────────
 	try:
@@ -124,9 +120,8 @@ def get_pulse_data():
 				WHERE attendance_date = %s AND status = 'Present' AND docstatus = 1
 			) _combined
 		""", (today, today))[0][0])
-		hr_score = round((present_today / total_emp * 100), 0) if total_emp else 80
 	except Exception:
-		total_emp, present_today, hr_score = 0, 0, 80
+		total_emp, present_today = 0, 0
 
 	# ── Production ───────────────────────────────────────────────────────────
 	try:
@@ -139,10 +134,8 @@ def get_pulse_data():
 			WHERE status='Completed'
 			AND COALESCE(completed_at, modified) >= %s
 		""", (month_start,))[0][0])
-		prod_total = wo_active + wo_completed
-		prod_score = round((wo_completed / prod_total * 100), 0) if prod_total else 50
 	except Exception:
-		wo_active, wo_completed, prod_score = 0, 0, 80
+		wo_active, wo_completed = 0, 0
 
 	# ── 14-day revenue trend ──────────────────────────────────────────────────
 	trend_14 = frappe.db.sql(f"""
@@ -157,22 +150,17 @@ def get_pulse_data():
 		ORDER BY dt
 	""", (today,), as_dict=True)
 
-	# ── Overall health score (weighted avg) ───────────────────────────────────
-	scores = {
-		"Revenue":     float(rev_score),
-		"Sales":       float(pipeline_score),
-		"Inventory":   float(inv_score),
-		"Procurement": float(procurement_score),
-		"HR":          float(hr_score),
-		"Production":  float(prod_score),
-	}
-	overall = round(sum(scores.values()) / len(scores), 0)
-
 	return {
-		"overall": overall,
-		"scores": scores,
+		"dev_mode": dev_mode,
+		"sales_doctype": doctype,
+		"date_field": date_field,
+		"month_start": str(month_start),
+		"last_month_start": str(last_month_start),
+		"last_month_end": str(last_month_end),
+		"today": str(today),
 		"rev_mtd": rev_mtd,
 		"rev_last": rev_last,
+		"rev_change_pct": rev_change_pct,
 		"collection_rate": collection_rate,
 		"ar": ar,
 		"open_leads": int(open_leads),

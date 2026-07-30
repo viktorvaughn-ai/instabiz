@@ -16,10 +16,6 @@
   "capacity_uom",
   "wastage_norm_pct",
   "status",
-  "spatial_section",
-  "machine_width_mm",
-  "col_break_spatial",
-  "knife_positions",
   "notes"
  ],
  "fields": [
@@ -83,36 +79,13 @@
    "default": "Active"
   },
   {
-   "fieldname": "spatial_section",
-   "fieldtype": "Section Break",
-   "label": "Spatial Capacity",
-   "description": "Only relevant for Slitting/Cutting machines — used for width-aware job bundling and the roll slot-map view."
-  },
-  {
-   "fieldname": "machine_width_mm",
-   "fieldtype": "Float",
-   "label": "Machine Width (MM)",
-   "precision": "1",
-   "description": "Maximum deckle/working width this machine can process in one pass"
-  },
-  {
-   "fieldname": "col_break_spatial",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "knife_positions",
-   "fieldtype": "Int",
-   "label": "Knife Positions",
-   "description": "Number of simultaneous slit/cut positions available"
-  },
-  {
    "fieldname": "notes",
    "fieldtype": "Small Text",
    "label": "Notes"
   }
  ],
  "links": [],
- "modified": "2026-06-06 00:00:00",
+ "modified": "2026-07-29 00:00:00",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "IB Machine",

@@ -16,10 +16,24 @@
   .pl-footer td { padding: 4px; }
   .sig-line { border-top: 1px solid #444; padding-top: 4px; text-align: center; font-size: 10px; color: #555; }
   .lr-box { border: 2px solid #d97757; padding: 6px 12px; display: inline-block; font-size: 13px; font-weight: bold; margin-bottom: 10px; }
+  .watermark { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+               display: flex; align-items: center; justify-content: center;
+               pointer-events: none; z-index: 99999; overflow: hidden; }
+  .watermark span { display: block; font-size: 110px; font-weight: 900;
+                    color: rgba(211,47,47,.15); letter-spacing: 10px;
+                    text-transform: uppercase; white-space: nowrap;
+                    transform: rotate(-40deg); font-family: Arial, sans-serif;
+                    border: 12px solid rgba(211,47,47,.12);
+                    padding: 10px 30px; border-radius: 8px; }
 </style>
 
+{% if doc.docstatus == 2 %}
+<div class="watermark"><span>CANCELLED</span></div>
+{% endif %}
+
 <div class="pl-header">
-  <h2>{{ doc.company }}</h2>
+  <img src="/files/letterhead.jpeg" style="width:58px; height:auto; max-height:50px; object-fit:contain; display:block; margin:0 auto 4px">
+  <h2>{{ doc.company | upper }}</h2>
   <h3>PACKING LIST</h3>
 </div>
 
@@ -74,8 +88,8 @@
     {% set carton_wt = item.custom_carton_weight_kg or 0 %}
     {% set boxes = (row.qty / rolls_per_box) | round(2) %}
     {% set line_wt = (boxes * carton_wt) | round(2) %}
-    {% set _ = total_boxes.__setattr__('v', total_boxes.v + boxes) %}
-    {% set _ = total_wt.__setattr__('v', total_wt.v + line_wt) %}
+    {% set total_boxes.v = total_boxes.v + boxes %}
+    {% set total_wt.v = total_wt.v + line_wt %}
     <tr>
       <td>{{ loop.index }}</td>
       <td>{{ row.item_code }}</td>
@@ -105,6 +119,9 @@
   <tr>
     <td style="width:33%"><div class="sig-line">Packed By</div></td>
     <td style="width:33%"><div class="sig-line">Checked By</div></td>
-    <td style="width:33%"><div class="sig-line">Authorised By</div></td>
+    <td style="width:33%; text-align:center">
+      <img src="/files/IB_Stamp.jpeg" style="height:50px; width:auto; display:inline-block">
+      <div class="sig-line">for {{ doc.company | upper }}<br>Authorised By</div>
+    </td>
   </tr>
 </table>

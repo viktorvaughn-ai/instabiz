@@ -583,8 +583,7 @@ class IBProductionStages {
 			return;
 		}
 
-		const q = (this.item_wise_search || "").toLowerCase();
-		const filtered = q ? items.filter((i) => (i.item_code || "").toLowerCase().includes(q)) : items;
+		const filtered = window.ib_multi_token_filter(items, ["item_code"], this.item_wise_search);
 
 		const PAGE_SIZE = 24;
 		const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -595,7 +594,7 @@ class IBProductionStages {
 
 		const toolbar = `
 			<div class="ib-ps-os-toolbar" style="margin-bottom:12px">
-				<input class="ib-ps-search-input" id="ib-iw-search" placeholder="Search item code…" value="${frappe.utils.escape_html(this.item_wise_search || "")}">
+				<input class="ib-ps-search-input form-control" id="ib-iw-search" placeholder="Search item code…" value="${frappe.utils.escape_html(this.item_wise_search || "")}">
 				<span class="ib-ps-stat-pill">${filtered.length} items</span>
 			</div>`;
 
@@ -840,17 +839,17 @@ class IBProductionStages {
 			<div class="ib-ps-os-toolbar">
 				<div class="ib-ps-filter-group">
 					<label>Status</label>
-					<select id="ib-os-status-filter" class="ib-ps-select">
+					<select id="ib-os-status-filter" class="ib-ps-select form-control">
 						${["All", "Draft", "In Progress", "Completed"].map((s) => `<option value="${s}" ${s === this.os_status_filter ? "selected" : ""}>${s}</option>`).join("")}
 					</select>
 				</div>
 				<div class="ib-ps-filter-group">
 					<label>Priority</label>
-					<select id="ib-os-priority-filter" class="ib-ps-select">
+					<select id="ib-os-priority-filter" class="ib-ps-select form-control">
 						${["All", "Urgent", "High", "Normal", "Low"].map((p) => `<option value="${p}" ${p === this.os_priority_filter ? "selected" : ""}>${p}</option>`).join("")}
 					</select>
 				</div>
-				<button class="ib-ps-btn-primary" id="ib-new-os-btn">+ New Order Sheet</button>
+				<button class="ib-ps-btn-primary btn btn-primary btn-sm" id="ib-new-os-btn">+ New Order Sheet</button>
 			</div>`;
 
 		let table_html = "";
@@ -1285,7 +1284,7 @@ class IBProductionStages {
 					<iconify-icon icon="lucide:settings-2" width="14" height="14"></iconify-icon>
 					<span class="ib-ps-stat-pill">${machines.length} active machine${machines.length !== 1 ? "s" : ""}</span>
 				</div>
-				<button class="ib-ps-btn-primary" id="ib-new-machine-btn" style="margin-left:auto;display:flex;align-items:center;gap:5px">
+				<button class="ib-ps-btn-primary btn btn-primary btn-sm" id="ib-new-machine-btn" style="margin-left:auto;display:flex;align-items:center;gap:5px">
 					<iconify-icon icon="lucide:plus" width="11" height="11"></iconify-icon> New Machine
 				</button>
 			</div>`;
@@ -1480,19 +1479,19 @@ class IBProductionStages {
 		const pm = IB_PRIORITY_META[wo.priority] || IB_PRIORITY_META["Normal"];
 
 		const assign_btn = !wo.machine
-			? `<button class="ib-ps-btn-primary ib-ps-panel-btn" id="ib-wo-assign-machine">Assign Machine</button>`
+			? `<button class="ib-ps-btn-primary ib-ps-panel-btn btn btn-primary btn-sm" id="ib-wo-assign-machine">Assign Machine</button>`
 			: "";
 		const start_btn = wo.status === "Pending" || wo.status === "Draft"
-			? `<button class="ib-ps-btn-success ib-ps-panel-btn" id="ib-wo-start">Start</button>`
+			? `<button class="ib-ps-btn-success ib-ps-panel-btn btn btn-success btn-sm" id="ib-wo-start">Start</button>`
 			: "";
 		const hold_btn = wo.status === "In Progress"
-			? `<button class="ib-ps-btn-warn ib-ps-panel-btn" id="ib-wo-hold">On Hold</button>`
+			? `<button class="ib-ps-btn-warn ib-ps-panel-btn btn btn-warning btn-sm" id="ib-wo-hold">On Hold</button>`
 			: "";
 		const complete_btn = wo.status === "In Progress"
-			? `<button class="ib-ps-btn-success ib-ps-panel-btn" id="ib-wo-complete">Complete</button>`
+			? `<button class="ib-ps-btn-success ib-ps-panel-btn btn btn-success btn-sm" id="ib-wo-complete">Complete</button>`
 			: "";
 		const link_jr_btn = (stage_key === "coating" || stage_key === "slitting") && !wo.jumbo_roll
-			? `<button class="ib-ps-btn-primary ib-ps-panel-btn" id="ib-wo-link-jr">
+			? `<button class="ib-ps-btn-primary ib-ps-panel-btn btn btn-primary btn-sm" id="ib-wo-link-jr">
 					<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
 					Link Jumbo Roll
 				</button>`
@@ -1524,7 +1523,7 @@ class IBProductionStages {
 
 				<div class="ib-ps-panel-actions">
 					${assign_btn}${start_btn}${hold_btn}${complete_btn}${link_jr_btn}
-					<button class="ib-ps-btn-primary ib-ps-panel-btn" id="ib-wo-new-entry">+ New Entry</button>
+					<button class="ib-ps-btn-primary ib-ps-panel-btn btn btn-primary btn-sm" id="ib-wo-new-entry">+ New Entry</button>
 				</div>
 				${wo.jumbo_roll ? `<div class="ib-ps-panel-machine" style="padding:0 16px 8px">Jumbo Roll: <strong>${frappe.utils.escape_html(wo.jumbo_roll)}</strong></div>` : ""}
 
@@ -1906,7 +1905,7 @@ class IBProductionStages {
 					</div>
 				</div>
 				<div class="ib-ps-bundle-body" data-bundle="${frappe.utils.escape_html(bundleKey)}" style="display:none;overflow-x:auto">
-					<table style="width:100%;border-collapse:collapse">
+					<table class="table table-bordered">
 						<thead><tr style="border-bottom:1px solid var(--border-color)">
 							<th style="padding:5px 8px;text-align:left;font-size:10px;font-weight:700;
 								text-transform:uppercase;color:var(--text-muted)">Work Order</th>

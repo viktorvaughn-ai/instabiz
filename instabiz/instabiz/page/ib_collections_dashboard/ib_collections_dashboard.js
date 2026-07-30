@@ -13,10 +13,15 @@ class IBCollectionsDashboard {
 		this._search = "";
 		this._filter_sp = null;
 		this._overdue_only = false;
+		this._min_days_overdue = 0;
+		this._min_outstanding = 0;
 		this._invoices = [];
 		this._privileged = false;
 		this._sp_loaded = false;
 		this._loading = false;
+		this._offset = 0;
+		this._page_size = 50;
+		this._customer_total = 0;
 		this._inject_styles();
 		this._build_layout();
 		// load() started by on_page_show — no double call on first visit
@@ -71,6 +76,11 @@ class IBCollectionsDashboard {
 .ib-col-spinner { width:16px; height:16px; border:2px solid var(--border-color);
   border-top-color:var(--ib-p); border-radius:50%; animation:ib-spin .6s linear infinite; }
 @keyframes ib-spin { to { transform:rotate(360deg); } }
+.ib-col-filters { display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+.ib-col-filters .ib-col-input { min-width:140px; }
+.ib-col-filter-label { font-size:11px; color:var(--text-muted); white-space:nowrap; }
+.ib-col-clear-btn { color:var(--text-muted); }
+.ib-col-clear-btn:hover { color:#dc2626; border-color:#dc2626; }
 `;
 		document.head.appendChild(s);
 	}
@@ -80,13 +90,22 @@ class IBCollectionsDashboard {
 		<div class="ib-col-wrap">
 			<div class="ib-col-toolbar">
 				<h2>Collections Dashboard</h2>
-				<input class="ib-col-input" id="ib-col-search" placeholder="Search customer…" />
-				<select class="ib-col-input" id="ib-col-sp" style="min-width:160px;display:none">
+				<input class="ib-col-input form-control" id="ib-col-search" placeholder="Search customer…" />
+				<select class="ib-col-input form-control" id="ib-col-sp" style="min-width:160px;display:none">
 					<option value="">All Reps</option>
 				</select>
-				<button class="ib-col-btn" id="ib-col-overdue">Overdue Only</button>
-				<button class="ib-col-btn" id="ib-col-refresh">↻ Refresh</button>
-				<button class="ib-col-btn" id="ib-col-si">Outstanding SIs</button>
+				<button class="ib-col-btn btn btn-default btn-sm" id="ib-col-overdue">Overdue Only</button>
+				<button class="ib-col-btn btn btn-default btn-sm" id="ib-col-refresh">↻ Refresh</button>
+				<button class="ib-col-btn btn btn-default btn-sm" id="ib-col-si">Outstanding SIs</button>
+			</div>
+			<div class="ib-col-filters">
+				<span class="ib-col-filter-label">Min days overdue</span>
+				<input type="number" min="0" class="ib-col-input form-control" id="ib-col-min-overdue"
+					placeholder="e.g. 30" style="min-width:100px" />
+				<span class="ib-col-filter-label">Min outstanding ₹</span>
+				<input type="number" min="0" class="ib-col-input form-control" id="ib-col-min-outstanding"
+					placeholder="e.g. 100000" style="min-width:140px" />
+				<button class="ib-col-btn btn btn-default btn-sm ib-col-clear-btn" id="ib-col-clear">Clear Filters</button>
 			</div>
 			<div id="ib-col-kpis" class="ib-col-kpis"></div>
 			<div class="ib-col-tbl-wrap">
@@ -108,26 +127,58 @@ class IBCollectionsDashboard {
 					</tbody>
 				</table>
 			</div>
+			<div id="ib-col-pagination" style="display:flex;align-items:center;gap:10px;justify-content:flex-end;margin-top:10px"></div>
 		</div>`);
 
 		let _search_t;
 		this.$wrap.find("#ib-col-search").on("input", (e) => {
 			clearTimeout(_search_t);
-			_search_t = setTimeout(() => { this._search = e.target.value.trim(); this.load(); }, 350);
+			_search_t = setTimeout(() => { this._search = e.target.value.trim(); this._offset = 0; this.load(); }, 350);
 		});
 		this.$wrap.find("#ib-col-sp").on("change", (e) => {
 			this._filter_sp = e.target.value || null;
+			this._offset = 0;
 			this.load();
 		});
 		this.$wrap.find("#ib-col-overdue").on("click", () => {
 			this._overdue_only = !this._overdue_only;
 			this.$wrap.find("#ib-col-overdue").toggleClass("active", this._overdue_only);
+			this._offset = 0;
 			this.load();
 		});
 		this.$wrap.find("#ib-col-refresh").on("click", () => this.load());
 		this.$wrap.find("#ib-col-si").on("click", () =>
 			frappe.set_route("List", "Sales Invoice", { outstanding_amount: [">", 0], docstatus: 1 })
 		);
+
+		let _min_od_t;
+		this.$wrap.find("#ib-col-min-overdue").on("input", (e) => {
+			clearTimeout(_min_od_t);
+			_min_od_t = setTimeout(() => {
+				this._min_days_overdue = cint(e.target.value) || 0;
+				this._offset = 0;
+				this.load();
+			}, 350);
+		});
+		let _min_out_t;
+		this.$wrap.find("#ib-col-min-outstanding").on("input", (e) => {
+			clearTimeout(_min_out_t);
+			_min_out_t = setTimeout(() => {
+				this._min_outstanding = flt(e.target.value) || 0;
+				this._offset = 0;
+				this.load();
+			}, 350);
+		});
+		this.$wrap.find("#ib-col-clear").on("click", () => {
+			this._search = ""; this._filter_sp = null; this._overdue_only = false;
+			this._min_days_overdue = 0; this._min_outstanding = 0; this._offset = 0;
+			this.$wrap.find("#ib-col-search").val("");
+			this.$wrap.find("#ib-col-sp").val("");
+			this.$wrap.find("#ib-col-min-overdue").val("");
+			this.$wrap.find("#ib-col-min-outstanding").val("");
+			this.$wrap.find("#ib-col-overdue").removeClass("active");
+			this.load();
+		});
 	}
 
 	_cols() { return this._privileged ? 10 : 9; }
@@ -144,6 +195,10 @@ class IBCollectionsDashboard {
 				search: this._search || null,
 				filter_sp: this._filter_sp,
 				overdue_only: this._overdue_only ? 1 : 0,
+				min_days_overdue: this._min_days_overdue || 0,
+				min_outstanding: this._min_outstanding || 0,
+				offset: this._offset,
+				limit: this._page_size,
 			},
 			callback: (r) => {
 				this._loading = false;
@@ -151,6 +206,7 @@ class IBCollectionsDashboard {
 				const d = r.message;
 				this._invoices = d.invoices || [];
 				this._privileged = d.privileged;
+				this._customer_total = d.customer_total || 0;
 				this._render_kpis(d.kpis);
 				this._render_table(d.customers || []);
 				if (d.privileged && !this._sp_loaded) {
@@ -221,8 +277,13 @@ class IBCollectionsDashboard {
 	_render_table(customers) {
 		const cols = this._cols();
 		if (!customers.length) {
+			const has_filters = this._search || this._filter_sp || this._overdue_only
+				|| this._min_days_overdue || this._min_outstanding;
+			const msg = has_filters
+				? "No customers match the current filters — try Clear Filters"
+				: "No outstanding customers";
 			this.$wrap.find("#ib-col-body").html(
-				`<tr><td colspan="${cols}" style="text-align:center;color:var(--text-muted);padding:32px">No outstanding customers</td></tr>`
+				`<tr><td colspan="${cols}" style="text-align:center;color:var(--text-muted);padding:32px">${msg}</td></tr>`
 			);
 			return;
 		}
@@ -268,7 +329,7 @@ class IBCollectionsDashboard {
 				<td><span class="ib-col-badge ${status_cls}">${status_lbl}</span></td>
 				<td style="color:var(--text-muted)">${c.invoice_count}</td>
 				<td>
-					<button class="ib-col-pay-btn"
+					<button class="ib-col-pay-btn btn btn-xs btn-default"
 						data-customer="${frappe.utils.escape_html(c.customer)}"
 						data-cname="${frappe.utils.escape_html(c.customer_name || c.customer)}">
 						Log Payment
@@ -286,6 +347,28 @@ class IBCollectionsDashboard {
 
 		this.$wrap.find("#ib-col-body").html(rows);
 		this._bind_table_events();
+		this._render_pagination();
+	}
+
+	_render_pagination() {
+		const total = this._customer_total;
+		const $p = this.$wrap.find("#ib-col-pagination");
+		if (total <= this._page_size) { $p.html(""); return; }
+		const from = this._offset + 1;
+		const to = Math.min(total, this._offset + this._page_size);
+		$p.html(`
+			<span style="font-size:11px;color:var(--text-muted)">${from}–${to} of ${total} customers</span>
+			<button class="ib-col-btn btn btn-default btn-sm" id="ib-col-prev" ${this._offset === 0 ? "disabled" : ""}>&larr; Prev</button>
+			<button class="ib-col-btn btn btn-default btn-sm" id="ib-col-next" ${to >= total ? "disabled" : ""}>Next &rarr;</button>
+		`);
+		$p.find("#ib-col-prev").on("click", () => {
+			this._offset = Math.max(0, this._offset - this._page_size);
+			this.load();
+		});
+		$p.find("#ib-col-next").on("click", () => {
+			this._offset += this._page_size;
+			this.load();
+		});
 	}
 
 	_bind_table_events() {

@@ -120,3 +120,39 @@ window.ib_delta_html = function (pct, suffix, cls_prefix) {
 	const cls  = pct > 0 ? "pos" : "neg";
 	return `<span class="${p} ${cls}">${sign} ${Math.abs(pct)}%${suffix ? " " + suffix : " vs last month"}</span>`;
 };
+
+// ── Multi-token search (client-side filter) ───────────────────────────────────
+// Splits `query` on whitespace; every token must appear somewhere across the
+// given fields for `row` to match — same "AND of tokens, OR of fields" logic
+// already used ad-hoc in several custom pages (stock dashboard, customer
+// board, price list). Use this instead of re-writing it per page.
+//
+//   ib_multi_token_match(row, ["customer_name", "territory"], "acme mum")
+//   → true only if BOTH "acme" and "mum" appear somewhere in those two fields.
+window.ib_multi_token_match = function (row, fields, query) {
+	const tokens = (query || "").toLowerCase().trim().split(/\s+/).filter(Boolean);
+	if (!tokens.length) return true;
+	const hay = fields.map((f) => (row[f] ?? "")).join(" ").toLowerCase();
+	return tokens.every((t) => hay.includes(t));
+};
+
+/** Filter an array of row objects with ib_multi_token_match. */
+window.ib_multi_token_filter = function (rows, fields, query) {
+	if (!query || !query.trim()) return rows;
+	return rows.filter((row) => window.ib_multi_token_match(row, fields, query));
+};
+
+/**
+ * Debounced multi-token search box binder.
+ *   ib_bind_search($input, 300, (query) => { ... })
+ * Calls `on_search(query)` `delay`ms after typing stops. Caller decides
+ * whether to filter client-side (ib_multi_token_filter) or re-fetch server-side.
+ */
+window.ib_bind_search = function ($input, delay, on_search) {
+	let t;
+	$input.off("input.ib_search").on("input.ib_search", function () {
+		clearTimeout(t);
+		const q = $(this).val();
+		t = setTimeout(() => on_search(q), delay || 300);
+	});
+};

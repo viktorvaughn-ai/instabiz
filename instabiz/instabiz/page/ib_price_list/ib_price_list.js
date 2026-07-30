@@ -465,19 +465,19 @@ class IBRateCardView {
 				</div>
 				<div style="display:flex;flex-direction:column;gap:2px">
 					<label class="ib-pl-search-label">Colour</label>
-					<select class="ib-pl-filter-sel ib-rcv-f-color" style="min-width:110px">
+					<select class="ib-pl-filter-sel ib-rcv-f-color form-control" style="min-width:110px">
 						<option value="">All colours</option>
 					</select>
 				</div>
 				<div style="display:flex;flex-direction:column;gap:2px">
 					<label class="ib-pl-search-label">Thickness</label>
-					<select class="ib-pl-filter-sel ib-rcv-f-thick" style="min-width:100px">
+					<select class="ib-pl-filter-sel ib-rcv-f-thick form-control" style="min-width:100px">
 						<option value="">All thickness</option>
 					</select>
 				</div>
 				<div style="display:flex;flex-direction:column;gap:2px">
 					<label class="ib-pl-search-label">UOM</label>
-					<select class="ib-pl-filter-sel ib-rcv-f-unit" style="min-width:80px">
+					<select class="ib-pl-filter-sel ib-rcv-f-unit form-control" style="min-width:80px">
 						<option value="">All UOM</option>
 					</select>
 				</div>
@@ -499,7 +499,7 @@ class IBRateCardView {
 				<div class="ib-pl-pagination ib-rcv-pager" style="display:none">
 					<div class="ib-pl-pg-info ib-rcv-pg-info"></div>
 					<div class="ib-pl-pg-controls" style="display:flex;align-items:center;gap:6px">
-						<select class="ib-pl-pg-size ib-rcv-pg-size" title="Rows per page">
+						<select class="ib-pl-pg-size ib-rcv-pg-size form-control" title="Rows per page">
 							<option value="20">20 / page</option>
 							<option value="50" selected>50 / page</option>
 							<option value="100">100 / page</option>

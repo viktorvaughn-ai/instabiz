@@ -2,6 +2,7 @@ import frappe
 from frappe.utils import nowdate, getdate, flt, cint
 
 from instabiz.overrides.billing_mode import is_dev_billing_mode, sales_doctype, sales_outstanding_expr
+from instabiz.overrides.utils import build_multi_token_where
 
 
 def get_context(context):
@@ -14,7 +15,8 @@ def _is_privileged(user):
 
 
 @frappe.whitelist()
-def get_collections_data(search=None, filter_sp=None, overdue_only=False):
+def get_collections_data(search=None, filter_sp=None, overdue_only=False, offset=0, limit=50,
+						  min_days_overdue=0, min_outstanding=0):
 	# Basis controlled by instabiz.overrides.billing_mode — dev mode reads
 	# Sales Order (billing isn't live yet, SI-based collections always reads
 	# empty); prod mode reads real Sales Invoice. Sales Order has no is_return
@@ -25,6 +27,9 @@ def get_collections_data(search=None, filter_sp=None, overdue_only=False):
 	today = getdate(nowdate())
 	privileged = _is_privileged(user)
 	overdue_only = cint(overdue_only)
+	offset, limit = int(offset), int(limit)
+	min_days_overdue = cint(min_days_overdue)
+	min_outstanding = flt(min_outstanding)
 	dev_mode = is_dev_billing_mode()
 	doctype  = sales_doctype()
 	date_field = "transaction_date" if dev_mode else "due_date"
@@ -42,9 +47,10 @@ def get_collections_data(search=None, filter_sp=None, overdue_only=False):
 		conditions.append("t.custom_sales_person_user = %s")
 		params.append(filter_sp)
 
-	if search:
-		conditions.append("(t.customer_name LIKE %s OR t.name LIKE %s)")
-		params += [f"%{search}%", f"%{search}%"]
+	search_cond, search_params = build_multi_token_where(["t.customer_name", "t.name"], search)
+	if search_cond:
+		conditions.append(search_cond)
+		params += search_params
 
 	if overdue_only:
 		conditions.append(f"t.{date_field} < %s")
@@ -52,7 +58,33 @@ def get_collections_data(search=None, filter_sp=None, overdue_only=False):
 
 	where = " AND ".join(conditions)
 
-	# Customer-level summary
+	# Customer-level filters (days overdue / min outstanding) apply to the
+	# GROUPED aggregate, not a raw invoice row — HAVING, not WHERE.
+	having_conds = []
+	having_params = []
+	if min_days_overdue:
+		having_conds.append("days_overdue >= %s")
+		having_params.append(min_days_overdue)
+	if min_outstanding:
+		having_conds.append("outstanding >= %s")
+		having_params.append(min_outstanding)
+	having_sql = ("HAVING " + " AND ".join(having_conds)) if having_conds else ""
+
+	# Real customer count behind this filter, unbounded — used for pagination
+	# and so the KPI cards below don't have to be derived from a capped page.
+	customer_total = int(frappe.db.sql(f"""
+		SELECT COUNT(*) FROM (
+			SELECT t.customer,
+				   COALESCE(SUM({outstanding_expr}), 0) as outstanding,
+				   DATEDIFF(%s, MIN(t.{date_field})) as days_overdue
+			FROM `tab{doctype}` t
+			WHERE {where}
+			GROUP BY t.customer
+			{having_sql}
+		) sub
+	""", [str(today)] + params + having_params)[0][0])
+
+	# Customer-level summary (one page)
 	customers = frappe.db.sql(f"""
 		SELECT
 			t.custom_sales_person_user as sp_user,
@@ -68,9 +100,10 @@ def get_collections_data(search=None, filter_sp=None, overdue_only=False):
 		LEFT JOIN `tabUser` u ON u.name = t.custom_sales_person_user
 		WHERE {where}
 		GROUP BY t.customer, t.customer_name, t.custom_sales_person_user, u.full_name
+		{having_sql}
 		ORDER BY outstanding DESC
-		LIMIT 200
-	""", [str(today)] + params, as_dict=True)
+		LIMIT %s OFFSET %s
+	""", [str(today)] + params + having_params + [limit, offset], as_dict=True)
 
 	customer_names = [c.customer for c in customers]
 	invoices = []
@@ -132,20 +165,49 @@ def get_collections_data(search=None, filter_sp=None, overdue_only=False):
 		c.net_outstanding = max(0, flt(c.outstanding) - flt(c.advance))
 		c.collected_90d = collected_map.get(c.customer, 0)
 
-	# KPI totals
-	total_outstanding = sum(flt(c.outstanding) for c in customers)
-	total_advance = sum(flt(c.advance) for c in customers)
-	overdue_count = sum(1 for c in customers if flt(c.days_overdue or 0) > 0)
-	collected_90d_total = sum(flt(c.collected_90d) for c in customers)
+	# ── KPI totals — unbounded, independent of the LIMIT/OFFSET page above ────
+	# Previously these were summed from just the current (or first-200) page of
+	# `customers`, silently understating every KPI once matching customers
+	# exceeded the page size (confirmed live: 448 real customers vs a 200 cap,
+	# total_outstanding read ~18M short of the real ~43.8Cr).
+	total_outstanding = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM({outstanding_expr}), 0) FROM `tab{doctype}` t WHERE {where}
+	""", params)[0][0])
+
+	overdue_count = int(frappe.db.sql(f"""
+		SELECT COUNT(*) FROM (
+			SELECT t.customer FROM `tab{doctype}` t
+			WHERE {where}
+			GROUP BY t.customer
+			HAVING DATEDIFF(%s, MIN(t.{date_field})) > 0
+		) sub
+	""", [str(today)] + params)[0][0])
+
+	total_advance = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM(pe.unallocated_amount), 0)
+		FROM `tabPayment Entry` pe
+		WHERE pe.party_type='Customer' AND pe.payment_type='Receive'
+		  AND pe.docstatus=1 AND pe.unallocated_amount > 0
+		  AND pe.party IN (SELECT DISTINCT t.customer FROM `tab{doctype}` t WHERE {where})
+	""", params)[0][0])
+
+	collected_90d_total = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM(pe.paid_amount), 0)
+		FROM `tabPayment Entry` pe
+		WHERE pe.party_type='Customer' AND pe.payment_type='Receive'
+		  AND pe.docstatus=1 AND pe.posting_date >= %s
+		  AND pe.party IN (SELECT DISTINCT t.customer FROM `tab{doctype}` t WHERE {where})
+	""", [str(frappe.utils.add_days(str(today), -90))] + params)[0][0])
 
 	return {
 		"customers": customers,
+		"customer_total": customer_total,
 		"invoices": invoices,
 		"kpis": {
 			"total_outstanding": total_outstanding,
 			"total_advance": total_advance,
 			"net_outstanding": total_outstanding - total_advance,
-			"customer_count": len(customers),
+			"customer_count": customer_total,
 			"overdue_count": overdue_count,
 			"collected_90d": collected_90d_total,
 		},
