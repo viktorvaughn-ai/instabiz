@@ -11,15 +11,20 @@ def get_context(context):
 	context.no_cache = 1
 
 
+_PRIVILEGED_ANALYTICS_ROLES = {"System Manager", "Sales Manager", "Accounts Manager", "Factory Management"}
+
+
 @frappe.whitelist()
 def get_analytics_data(tab="sales", period="monthly"):
-	# "me" is self-scoped (frappe.session.user) and safe for anyone. Every other
-	# tab returns company-wide sales/finance/hr/production data — the Page itself
-	# restricts navigation to these roles, but the RPC was previously callable
-	# directly by any authenticated user with no internal check (same class of
-	# bug already fixed in ib_hrms_dashboard.get_hrms_data).
-	if tab != "me":
-		frappe.only_for(["System Manager", "Sales Manager", "Accounts Manager", "Factory Management"])
+	# Every tab is open to any authenticated user — "me" was always self-scoped;
+	# the other tabs used to hard-block anyone without a privileged role. Now
+	# privileged roles still get the full company-wide view, everyone else gets
+	# a content-aware view scoped to their own work (own orders/customers, a
+	# stock in/out signal with no real numbers, their own SOs' production
+	# status, their own HR self-service snapshot) instead of either "everything"
+	# or "nothing".
+	is_privileged = bool(_PRIVILEGED_ANALYTICS_ROLES & set(frappe.get_roles()))
+	user = frappe.session.user
 	today = getdate(nowdate())
 
 	# `since`/date_fmt/group_fmt drive the trend chart's window+bucketing.
@@ -59,18 +64,30 @@ def get_analytics_data(tab="sales", period="monthly"):
 		"period_label": period_label,
 	}
 
+	month_start = get_first_day(today)
+
 	if tab == "sales":
-		return _sales_data(today, since, date_fmt, group_fmt, pw)
+		if is_privileged:
+			return _sales_data(today, since, date_fmt, group_fmt, pw)
+		return _my_work_sales(user, today, since, date_fmt, group_fmt, month_start, pw)
 	elif tab == "inventory":
-		return _inventory_data(today, since, date_fmt, group_fmt)
+		if is_privileged:
+			return _inventory_data(today, since, date_fmt, group_fmt)
+		return _my_inventory_data()
 	elif tab == "production":
-		return _production_data(today, since, date_fmt, group_fmt, pw)
+		if is_privileged:
+			return _production_data(today, since, date_fmt, group_fmt, pw)
+		return _my_production_status_data(user, pw)
 	elif tab == "hr":
-		return _hr_data(today, since, date_fmt, group_fmt, pw)
+		if is_privileged:
+			return _hr_data(today, since, date_fmt, group_fmt, pw)
+		return _my_personal_hr_data(user, today, since, date_fmt, group_fmt, month_start, pw)
 	elif tab == "finance":
-		return _finance_data(today, since, date_fmt, group_fmt, pw)
+		if is_privileged:
+			return _finance_data(today, since, date_fmt, group_fmt, pw)
+		return _my_finance_data(user, today, since, date_fmt, group_fmt, month_start, pw)
 	elif tab == "me":
-		return _my_work_data(frappe.session.user, today, since, date_fmt, group_fmt, pw)
+		return _my_work_data(user, today, since, date_fmt, group_fmt, pw)
 	return {}
 
 
@@ -957,4 +974,211 @@ def _finance_data(today, since, date_fmt, group_fmt, pw):
 		"trend": pl_trend,
 		"breakdown": overdue,
 		"secondary": [],
+	}
+
+
+# ── Non-privileged, content-aware tab views ──────────────────────────────────
+# Shown instead of _inventory_data/_production_data/_hr_data/_finance_data
+# when the caller doesn't hold any of _PRIVILEGED_ANALYTICS_ROLES. Never raw
+# company-wide numbers — either scoped to the calling user's own work, or (for
+# inventory) reduced to a plain in-stock/out-of-stock signal.
+
+def _my_inventory_data():
+	"""No real quantities or stock value — a Sales User needs to know whether
+	they can promise an item right now, not the company's exact stock
+	position. In/out status only."""
+	total_items = int(flt(frappe.db.sql(
+		"SELECT COUNT(DISTINCT item_code) FROM `tabBin`"
+	)[0][0]))
+	in_stock = int(flt(frappe.db.sql("""
+		SELECT COUNT(*) FROM (
+			SELECT item_code FROM `tabBin` GROUP BY item_code HAVING SUM(actual_qty) > 0
+		) x
+	""")[0][0]))
+	out_of_stock = total_items - in_stock
+
+	# Out-of-stock items first (most actionable before quoting), capped —
+	# this is a quick signal list, not a full stock report (that's the Stock
+	# Ledger / Live Stock Balance pages, which have real numbers by design
+	# for the roles that need them).
+	rows = frappe.db.sql("""
+		SELECT b.item_code, i.item_name, SUM(b.actual_qty) as qty
+		FROM `tabBin` b JOIN `tabItem` i ON i.name = b.item_code
+		WHERE i.disabled = 0
+		GROUP BY b.item_code, i.item_name
+		ORDER BY qty ASC
+		LIMIT 30
+	""", as_dict=True)
+	breakdown = [
+		{"label": r.item_name or r.item_code, "status": "green" if flt(r.qty) > 0 else "red"}
+		for r in rows
+	]
+
+	return {
+		"kpis": [
+			{"label": "Total SKUs", "value": total_items, "type": "count", "delta": 0},
+			{"label": "In Stock", "value": in_stock, "type": "count", "delta": 0},
+			{"label": "Out of Stock", "value": out_of_stock, "type": "count", "delta": 0},
+		],
+		"trend": [],
+		"breakdown": breakdown,
+		"meta": {"scoped": True, "user_type": "inventory_status"},
+	}
+
+
+def _my_production_status_data(user, pw):
+	"""Production status of just this user's own Sales Orders — which stage
+	each is in, or whether it's shipped. Reuses the same scoped query that
+	powers the sales-facing Production Tracker page (item 110), so the two
+	views can never drift apart."""
+	from instabiz.overrides.production import get_my_production_orders
+
+	orders = get_my_production_orders(sales_person_user=user, show_completed=1)
+
+	in_flight = [o for o in orders if o["pct"] < 100]
+	completed = [o for o in orders if o["pct"] >= 100]
+	overdue = [o for o in orders if o.get("risk") == "overdue"]
+	at_risk = [o for o in orders if o.get("risk") == "at-risk"]
+
+	breakdown = [
+		{"label": f"{o['sales_order']} — {o['customer']}", "amount": o["pct"]}
+		for o in sorted(orders, key=lambda o: o["pct"])[:15]
+	]
+
+	return {
+		"kpis": [
+			{"label": "In Production", "value": len(in_flight), "type": "count", "delta": 0},
+			{"label": "At Risk", "value": len(at_risk), "type": "count", "delta": 0},
+			{"label": "Overdue", "value": len(overdue), "type": "count", "delta": 0},
+			{"label": "Completed", "value": len(completed), "type": "count", "delta": 0},
+		],
+		"trend": [],
+		"breakdown": breakdown,
+		"meta": {"scoped": True, "user_type": "production_status"},
+	}
+
+
+def _my_personal_hr_data(user, today, since, date_fmt, group_fmt, month_start, pw):
+	"""The employee's own HR self-service snapshot — leave balance, this
+	period's attendance, their own pending leave requests, last payslip —
+	never company-wide headcount/payroll (that's _hr_data, privileged-only)."""
+	employee = frappe.db.get_value("Employee", {"user_id": user, "status": "Active"}, "name")
+	if not employee:
+		return {
+			"kpis": [{"label": "No Employee Record", "value": 0, "type": "count", "delta": 0}],
+			"trend": [], "breakdown": [],
+			"meta": {"scoped": True, "user_type": "personal_hr"},
+		}
+
+	leave_rows = frappe.db.sql("""
+		SELECT la.leave_type, la.total_leaves_allocated as allocated,
+			   COALESCE(SUM(CASE WHEN app.status='Approved' AND app.docstatus=1
+			   					  THEN app.total_leave_days ELSE 0 END), 0) as used
+		FROM `tabLeave Allocation` la
+		LEFT JOIN `tabLeave Application` app
+			   ON app.employee = la.employee AND app.leave_type = la.leave_type
+		WHERE la.employee = %(emp)s
+		GROUP BY la.leave_type, la.total_leaves_allocated
+	""", {"emp": employee}, as_dict=True)
+	leave_balance = sum(flt(r.allocated) - flt(r.used) for r in leave_rows)
+	leave_breakdown = [
+		{"label": r.leave_type, "amount": round(flt(r.allocated) - flt(r.used), 1)}
+		for r in leave_rows
+	]
+
+	present_days = int(flt(frappe.db.sql("""
+		SELECT COUNT(*) FROM `tabAttendance`
+		WHERE employee=%(emp)s AND status='Present' AND docstatus=1
+		AND attendance_date BETWEEN %(start)s AND %(end)s
+	""", {"emp": employee, "start": pw["period_start"], "end": pw["period_end"]})[0][0]))
+
+	pending_leaves = int(flt(frappe.db.sql("""
+		SELECT COUNT(*) FROM `tabLeave Application`
+		WHERE employee=%(emp)s AND status='Open' AND docstatus IN (0,1)
+	""", {"emp": employee})[0][0]))
+
+	latest_slip = frappe.db.sql("""
+		SELECT net_pay FROM `tabSalary Slip`
+		WHERE employee=%(emp)s AND docstatus=1
+		ORDER BY start_date DESC LIMIT 1
+	""", {"emp": employee}, as_dict=True)
+	last_net_pay = flt(latest_slip[0].net_pay) if latest_slip else 0
+
+	trend = frappe.db.sql(f"""
+		SELECT DATE_FORMAT(attendance_date, '{date_fmt}') as label,
+			   DATE_FORMAT(attendance_date, '{group_fmt}') as grp,
+			   COUNT(*) as amount
+		FROM `tabAttendance`
+		WHERE employee=%(emp)s AND status='Present' AND docstatus=1
+		AND attendance_date >= %(since)s
+		GROUP BY grp, label ORDER BY grp
+	""", {"emp": employee, "since": since}, as_dict=True)
+
+	return {
+		"kpis": [
+			{"label": "Leave Balance", "value": round(leave_balance, 1), "type": "count", "delta": 0},
+			{"label": f"Present Days ({pw['period_label']})", "value": present_days, "type": "count", "delta": 0},
+			{"label": "Pending Leave Requests", "value": pending_leaves, "type": "count", "delta": 0},
+			{"label": "Last Net Pay", "value": last_net_pay, "type": "currency", "delta": 0},
+		],
+		"trend": trend,
+		"breakdown": leave_breakdown,
+		"meta": {"scoped": True, "user_type": "personal_hr"},
+	}
+
+
+def _my_finance_data(user, today, since, date_fmt, group_fmt, month_start, pw):
+	"""This sales rep's own customers' outstanding and collections only — no
+	AP (a Sales User has no business reason to see company payables) and no
+	other reps' customers."""
+	period_start, period_end = pw["period_start"], pw["period_end"]
+	period_label = pw["period_label"]
+	dev_mode = is_dev_billing_mode()
+	sales_dt = sales_doctype()
+	sales_date = "transaction_date" if dev_mode else "posting_date"
+	sales_cond = "AND t.status != 'Cancelled'" if dev_mode else "AND t.is_return=0"
+	ar_expr = sales_outstanding_expr("t")
+
+	ar_total = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM({ar_expr}),0) FROM `tab{sales_dt}` t
+		WHERE docstatus=1 {sales_cond} AND t.custom_sales_person_user = %s
+	""", (user,))[0][0])
+
+	collections_mtd = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM(per.allocated_amount), 0)
+		FROM `tabPayment Entry` pe
+		JOIN `tabPayment Entry Reference` per ON per.parent = pe.name
+		JOIN `tab{sales_dt}` t ON t.name = per.reference_name
+		WHERE pe.docstatus=1 AND pe.payment_type='Receive'
+		AND per.reference_doctype = %s
+		AND pe.posting_date BETWEEN %s AND %s
+		AND t.custom_sales_person_user = %s
+	""", (sales_dt, period_start, period_end, user))[0][0])
+
+	trend = frappe.db.sql(f"""
+		SELECT DATE_FORMAT({sales_date}, '{date_fmt}') as label,
+			   DATE_FORMAT({sales_date}, '{group_fmt}') as grp,
+			   COALESCE(SUM(grand_total), 0) as amount
+		FROM `tab{sales_dt}` t
+		WHERE docstatus=1 {sales_cond} AND {sales_date} >= %s AND t.custom_sales_person_user = %s
+		GROUP BY grp, label ORDER BY grp
+	""", (since, user), as_dict=True)
+
+	overdue_by_cust = frappe.db.sql(f"""
+		SELECT customer_name as label, COALESCE(SUM({ar_expr}), 0) as amount
+		FROM `tab{sales_dt}` t
+		WHERE docstatus=1 {sales_cond} AND {sales_date} < %s AND t.custom_sales_person_user = %s
+		GROUP BY customer_name
+		HAVING amount > 0
+		ORDER BY amount DESC LIMIT 10
+	""", (today, user), as_dict=True)
+
+	return {
+		"kpis": [
+			{"label": "My Outstanding AR", "value": ar_total, "type": "currency", "delta": 0},
+			{"label": f"My Collections {period_label}", "value": collections_mtd, "type": "currency", "delta": 0},
+		],
+		"trend": trend,
+		"breakdown": overdue_by_cust,
+		"meta": {"scoped": True, "user_type": "my_finance"},
 	}

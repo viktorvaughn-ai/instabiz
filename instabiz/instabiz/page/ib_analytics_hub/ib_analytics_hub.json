@@ -1,20 +1,19 @@
 {
- "creation": "2026-06-20 00:00:00.000000",
+ "content": null,
+ "creation": "2026-06-20 00:00:00",
+ "docstatus": 0,
  "doctype": "Page",
- "modified": "2026-06-20 00:00:00.000000",
+ "idx": 2,
+ "modified": "2026-07-30 15:42:01.401347",
  "modified_by": "Administrator",
- "module": "instabiz",
+ "module": "Instabiz",
  "name": "ib-analytics-hub",
  "owner": "Administrator",
  "page_name": "ib-analytics-hub",
- "restrict_to_domain": null,
- "roles": [
-  {"role": "System Manager"},
-  {"role": "Sales Manager"},
-  {"role": "Accounts Manager"},
-  {"role": "Factory Management"}
- ],
+ "roles": [],
+ "script": null,
  "standard": "Yes",
+ "style": null,
  "system_page": 0,
  "title": "Analytics Hub"
 }

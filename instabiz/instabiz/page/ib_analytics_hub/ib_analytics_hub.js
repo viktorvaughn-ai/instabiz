@@ -386,14 +386,11 @@ class IBAnalyticsHub {
 		if (first) this.$wrap.css("--ib-hub-color", first.color);
 	}
 
-	_can_see_tab(tab) {
-		const r = this._roles;
-		const all = ["System Manager"];
-		if (tab === "me") return true;
-		if (tab === "hr") return r.some(x => [...all, "HR Manager", "HR User", "Factory Management"].includes(x));
-		if (tab === "finance") return r.some(x => [...all, "Accounts Manager", "Accounts User", "Sales Manager"].includes(x));
-		if (tab === "production") return r.some(x => [...all, "Factory Management", "Sales Manager"].includes(x));
-		return true; // sales + inventory visible to all workspace roles
+	_can_see_tab() {
+		// Every tab is visible to every role now — the backend scopes the data
+		// (company-wide for privileged roles, the user's own work for everyone
+		// else) instead of hiding tabs outright.
+		return true;
 	}
 
 	_skeleton_kpis() {
@@ -450,6 +447,10 @@ class IBAnalyticsHub {
 		if (this._active_tab === "me") {
 			this._me_usertype = (d.meta || {}).user_type || "sales";
 		}
+		// Non-privileged viewers get scoped data on every tab now (not just
+		// "me") — titles/labels read this to say "My ..." instead of the
+		// company-wide title.
+		this._scoped = !!(d.meta || {}).scoped;
 		this._render_kpis(d.kpis || []);
 		this._render_trend(d.trend || []);
 		this._render_breakdown(d.breakdown || []);
@@ -627,7 +628,13 @@ class IBAnalyticsHub {
 			production: "Active WOs by Stage",
 			finance: "Overdue AR by Customer",
 		};
-		const titles = {
+		const titles = this._scoped ? {
+			sales: "My Top Customers (MTD)",
+			inventory: "Stock Status (In/Out)",
+			production: "My Orders — Production Progress",
+			hr: "My Leave Balance",
+			finance: "My Overdue AR by Customer",
+		} : {
 			me: me_break_titles[this._me_usertype || "sales"] || "My Top Customers (MTD)",
 			sales: "Top Customers (MTD)",
 			inventory: "Current Stock by Warehouse",
@@ -641,6 +648,22 @@ class IBAnalyticsHub {
 			this.$wrap.find("#ib-hub-breakdown").html(
 				`<div style="padding:30px;text-align:center;color:var(--text-muted);font-size:12px">No data</div>`
 			);
+			return;
+		}
+
+		// Scoped inventory view: rows carry a green/red status flag instead of
+		// a numeric amount — no real stock figures for non-privileged users,
+		// so render a status-dot list instead of proportional bars.
+		if (rows[0].status !== undefined) {
+			this.$wrap.find("#ib-hub-breakdown").html(rows.map(r => {
+				const color = r.status === "green" ? "#16a34a" : "#dc2626";
+				return `<div class="ib-hub-bar-row" style="align-items:center">
+					<span style="display:inline-block;width:8px;height:8px;border-radius:50%;
+						background:${color};margin-right:8px;flex-shrink:0"></span>
+					<div class="ib-hub-bar-lbl" style="flex:1" title="${frappe.utils.escape_html(r.label || "")}">${frappe.utils.escape_html(r.label || "")}</div>
+					<div class="ib-hub-bar-val" style="color:${color};font-weight:600">${r.status === "green" ? "In Stock" : "Out of Stock"}</div>
+				</div>`;
+			}).join(""));
 			return;
 		}
 
