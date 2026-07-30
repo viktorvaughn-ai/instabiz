@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"stk-h0\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>INVENTORY</b></span>\",\"col\":12}},{\"id\":\"stk-sb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Live Stock Balance\",\"col\":3}},{\"id\":\"stk-sl\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Stock Ledger\",\"col\":3}},{\"id\":\"stk-h1\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>REPORTS</b></span>\",\"col\":12}},{\"id\":\"stk-sa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Stock Ageing\",\"col\":3}},{\"id\":\"stk-h2\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\",\"col\":12}},{\"id\":\"stk-kb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Knowledge Base\",\"col\":3}},{\"id\":\"stk-inward\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inward Stock Transfer\",\"col\":3}}]",
+ "content": "[{\"id\": \"stk-h0\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>INVENTORY</b></span>\", \"col\": 12}}, {\"id\": \"stk-sb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Live Stock Balance\", \"col\": 3}}, {\"id\": \"stk-sl\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Stock Ledger\", \"col\": 3}}, {\"id\": \"stock-recon\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Stock Reconciliation\", \"col\": 3}}, {\"id\": \"stk-h1\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>REPORTS</b></span>\", \"col\": 12}}, {\"id\": \"stk-sa\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Stock Ageing\", \"col\": 3}}, {\"id\": \"stk-h2\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\", \"col\": 12}}, {\"id\": \"stk-kb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Knowledge Base\", \"col\": 3}}, {\"id\": \"stk-inward\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Inward Stock Transfer\", \"col\": 3}}]",
  "creation": "2026-07-29 01:54:13.924807",
  "custom_blocks": [],
  "docstatus": 0,
@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz Stock",
  "links": [],
- "modified": "2026-07-29 01:59:26.578204",
+ "modified": "2026-07-30 15:33:55.697320",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz Stock",
@@ -80,6 +80,13 @@
    "label": "Inward Stock Transfer",
    "type": "URL",
    "url": "/app/stock-entry?purpose=Material Transfer"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "",
+   "label": "Stock Reconciliation",
+   "link_to": "Stock Reconciliation",
+   "type": "DocType"
   }
  ],
  "title": "Instabiz Stock"
