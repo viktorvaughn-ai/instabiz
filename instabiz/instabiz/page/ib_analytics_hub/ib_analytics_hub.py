@@ -12,6 +12,14 @@ def get_context(context):
 
 
 _PRIVILEGED_ANALYTICS_ROLES = {"System Manager", "Sales Manager", "Accounts Manager", "Factory Management"}
+# Per-tab additions on top of the base set above — HR Manager/HR User run
+# company HR ops, so they need the privileged (company-wide) view on the HR
+# tab specifically, same as Factory Management does for Production and
+# Accounts Manager does for Finance. They stay non-privileged (scoped to
+# their own work) on every other tab, same as any other non-privileged role.
+_TAB_EXTRA_PRIVILEGED_ROLES = {
+	"hr": {"HR Manager", "HR User"},
+}
 
 
 @frappe.whitelist()
@@ -23,8 +31,15 @@ def get_analytics_data(tab="sales", period="monthly"):
 	# stock in/out signal with no real numbers, their own SOs' production
 	# status, their own HR self-service snapshot) instead of either "everything"
 	# or "nothing".
-	is_privileged = bool(_PRIVILEGED_ANALYTICS_ROLES & set(frappe.get_roles()))
 	user = frappe.session.user
+	user_roles = set(frappe.get_roles(user))
+	base_privileged = bool(_PRIVILEGED_ANALYTICS_ROLES & user_roles)
+
+	def is_tab_privileged(tab_name):
+		if base_privileged:
+			return True
+		return bool(_TAB_EXTRA_PRIVILEGED_ROLES.get(tab_name, set()) & user_roles)
+
 	today = getdate(nowdate())
 
 	# `since`/date_fmt/group_fmt drive the trend chart's window+bucketing.
@@ -67,23 +82,23 @@ def get_analytics_data(tab="sales", period="monthly"):
 	month_start = get_first_day(today)
 
 	if tab == "sales":
-		if is_privileged:
+		if is_tab_privileged("sales"):
 			return _sales_data(today, since, date_fmt, group_fmt, pw)
 		return _my_work_sales(user, today, since, date_fmt, group_fmt, month_start, pw)
 	elif tab == "inventory":
-		if is_privileged:
+		if is_tab_privileged("inventory"):
 			return _inventory_data(today, since, date_fmt, group_fmt)
 		return _my_inventory_data()
 	elif tab == "production":
-		if is_privileged:
+		if is_tab_privileged("production"):
 			return _production_data(today, since, date_fmt, group_fmt, pw)
 		return _my_production_status_data(user, pw)
 	elif tab == "hr":
-		if is_privileged:
+		if is_tab_privileged("hr"):
 			return _hr_data(today, since, date_fmt, group_fmt, pw)
 		return _my_personal_hr_data(user, today, since, date_fmt, group_fmt, month_start, pw)
 	elif tab == "finance":
-		if is_privileged:
+		if is_tab_privileged("finance"):
 			return _finance_data(today, since, date_fmt, group_fmt, pw)
 		return _my_finance_data(user, today, since, date_fmt, group_fmt, month_start, pw)
 	elif tab == "me":
