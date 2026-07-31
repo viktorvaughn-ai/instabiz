@@ -46,9 +46,22 @@ def get_employees_with_status(search=None, department=None, employee_category=No
 	all_employees = frappe.get_all(
 		"Employee",
 		filters=filters,
-		fields=["name", "employee_name", "designation", "department"],
+		fields=["name", "employee_name", "designation", "department", "user_id"],
 		order_by="employee_name asc",
 	)
+
+	# Defense in depth: Employee.status can drift out of sync with the linked
+	# User's enabled flag (e.g. a login disabled on exit before HR processes
+	# the status change) — exclude anyone whose own User account is disabled,
+	# regardless of what Employee.status still says.
+	linked_users = [e.user_id for e in all_employees if e.user_id]
+	disabled_users = set()
+	if linked_users:
+		disabled_users = set(frappe.get_all(
+			"User", filters={"name": ["in", linked_users], "enabled": 0}, pluck="name"
+		))
+	if disabled_users:
+		all_employees = [e for e in all_employees if e.user_id not in disabled_users]
 
 	# Filter by office / factory category
 	if employee_category == "office":
@@ -157,11 +170,25 @@ def get_terminal_context():
 	return {"privileged": privileged, "category": category}
 
 
+def _assert_employee_markable(employee):
+	"""Refuse to mark attendance for an employee who's inactive or whose
+	linked login is disabled — same check the terminal's own listing uses,
+	repeated here so a stale client (or a direct API call) can't bypass it."""
+	row = frappe.db.get_value("Employee", employee, ["status", "user_id"], as_dict=True)
+	if not row:
+		frappe.throw(_("Employee {0} not found").format(employee))
+	if row.status != "Active":
+		frappe.throw(_("{0} is not an active employee").format(employee))
+	if row.user_id and not frappe.db.get_value("User", row.user_id, "enabled"):
+		frappe.throw(_("{0}'s account is disabled").format(employee))
+
+
 @frappe.whitelist()
 def create_checkin(employee, log_type, late_reason=None):
 	"""Create an Employee Checkin from the Attendance Terminal."""
 	if log_type not in ("IN", "OUT"):
 		frappe.throw(_("Invalid log_type"))
+	_assert_employee_markable(employee)
 
 	shift = frappe.db.get_value("Employee", employee, "default_shift")
 
@@ -183,6 +210,7 @@ def create_checkin(employee, log_type, late_reason=None):
 @frappe.whitelist()
 def mark_absent(employee):
 	"""Submit an Absent attendance record for today."""
+	_assert_employee_markable(employee)
 	# Replicate mark_attendance() with ignore_permissions so terminal users
 	# (who lack Attendance create/submit roles) can still mark absent.
 	from hrms.hr.doctype.attendance.attendance import (
