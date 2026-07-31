@@ -772,12 +772,28 @@ class IBSalesIncentives {
 	// ── slab management ────────────────────────────────────────────────────────
 	_show_slab_dialog() {
 		const self = this;
+		this._slab_designation = this._slab_designation || "Sales User";
+
 		const render = (d, $b) => {
 			frappe.call({
 				method: "instabiz.overrides.sales_target.get_incentive_slabs",
+				args: { designation: self._slab_designation },
 				callback(r) {
 					const slabs = r.message || [];
-					let html = slabs.length
+					const tabs = `
+						<div style="display:flex;gap:6px;margin-bottom:14px">
+							${["Sales User", "Sales Manager"].map(desig => `
+								<button class="btn btn-sm ib-slab-desig-tab ${self._slab_designation === desig ? "btn-primary" : "btn-default"}"
+									data-desig="${desig}">${desig}</button>
+							`).join("")}
+						</div>
+						<div style="font-size:11px;color:#6b7280;margin-bottom:10px">
+							Showing slabs for <b>${self._slab_designation}</b> — this is the designation
+							used to pick which slab table a rep's commission is calculated against
+							(see <code>_get_slab_designation()</code>: anyone with the Sales Manager role
+							uses the Sales Manager slabs, everyone else uses Sales User).
+						</div>`;
+					let html = tabs + (slabs.length
 						? `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px">
 							<thead><tr style="background:#f9fafb">
 								<th style="padding:7px 10px;text-align:left;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:10.5px">Label</th>
@@ -788,20 +804,25 @@ class IBSalesIncentives {
 								<th style="padding:7px 10px;border-bottom:1px solid #e5e7eb"></th>
 							</tr></thead><tbody>
 							${slabs.map(sl => `<tr>
-								<td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;font-weight:500">${frappe.utils.escape_html(sl.slab_label || "")}</td>
-								<td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;text-align:right">${sl.from_pct}%</td>
-								<td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;text-align:right">${sl.to_pct ? sl.to_pct + "%" : "∞"}</td>
-								<td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:600;color:#d97757">${sl.commission_pct}%</td>
+								<td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;font-weight:500">
+									<input class="form-control form-control-sm ib-sn-edit-lbl" data-name="${frappe.utils.escape_html(sl.name)}" value="${frappe.utils.escape_html(sl.slab_label || "")}"></td>
+								<td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;text-align:right">
+									<input type="number" class="form-control form-control-sm ib-sn-edit-from" data-name="${frappe.utils.escape_html(sl.name)}" value="${sl.from_pct}" style="width:70px;margin-left:auto"></td>
+								<td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;text-align:right">
+									<input type="number" class="form-control form-control-sm ib-sn-edit-to" data-name="${frappe.utils.escape_html(sl.name)}" value="${sl.to_pct}" style="width:70px;margin-left:auto"></td>
+								<td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;text-align:right">
+									<input type="number" class="form-control form-control-sm ib-sn-edit-comm" data-name="${frappe.utils.escape_html(sl.name)}" value="${sl.commission_pct}" style="width:70px;margin-left:auto;font-weight:600;color:#d97757"></td>
 								<td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;text-align:center">${sl.is_active ? `<span style="color:#10b981;font-weight:700">✓</span>` : ""}</td>
-								<td style="padding:8px 10px;border-bottom:1px solid #f3f4f6">
+								<td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;white-space:nowrap">
+									<button class="btn btn-xs btn-default ib-slab-save" data-name="${frappe.utils.escape_html(sl.name)}">Save</button>
 									<button class="btn btn-xs btn-danger ib-slab-del" data-name="${frappe.utils.escape_html(sl.name)}">Delete</button>
 								</td>
 							</tr>`).join("")}
 							</tbody></table>`
-						: `<div style="padding:16px;text-align:center;color:#9ca3af;font-size:12px;margin-bottom:12px">No slabs configured</div>`;
+						: `<div style="padding:16px;text-align:center;color:#9ca3af;font-size:12px;margin-bottom:12px">No slabs configured for ${self._slab_designation}</div>`);
 
 					html += `<hr style="margin:10px 0 12px;border:none;border-top:1px solid #e5e7eb"/>
-					<div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:8px">Add Slab</div>
+					<div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:8px">Add Slab (${self._slab_designation})</div>
 					<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:8px;align-items:end">
 						<div><label style="font-size:10.5px;color:#6b7280;display:block;margin-bottom:3px">Label</label>
 							<input class="form-control form-control-sm ib-sn-lbl" placeholder="e.g. Slab 3"/></div>
@@ -815,9 +836,24 @@ class IBSalesIncentives {
 					</div>`;
 
 					$b.html(html);
+
+					$b.find(".ib-slab-desig-tab").on("click", function () {
+						self._slab_designation = $(this).data("desig");
+						render(d, $b);
+					});
+					$b.find(".ib-slab-save").on("click", function () {
+						const name = $(this).data("name");
+						const lbl      = $b.find(`.ib-sn-edit-lbl[data-name="${name}"]`).val().trim();
+						const from_pct = parseFloat($b.find(`.ib-sn-edit-from[data-name="${name}"]`).val()) || 0;
+						const to_pct   = parseFloat($b.find(`.ib-sn-edit-to[data-name="${name}"]`).val()) || 0;
+						const comm_pct = parseFloat($b.find(`.ib-sn-edit-comm[data-name="${name}"]`).val()) || 0;
+						frappe.call({ method: "instabiz.overrides.sales_target.save_incentive_slab",
+							args: { name, slab_label: lbl, from_pct, to_pct, commission_pct: comm_pct, designation: self._slab_designation, is_active: 1 },
+							callback() { frappe.show_alert({ message: "Slab updated", indicator: "green" }); render(d, $b); self.load(); } });
+					});
 					$b.find(".ib-slab-del").on("click", function () {
 						frappe.call({ method: "instabiz.overrides.sales_target.delete_incentive_slab",
-							args: { name: $(this).data("name") }, callback() { render(d, $b); } });
+							args: { name: $(this).data("name") }, callback() { render(d, $b); self.load(); } });
 					});
 					$b.find(".ib-sn-add-btn").on("click", function () {
 						const lbl = $b.find(".ib-sn-lbl").val().trim();
@@ -826,7 +862,7 @@ class IBSalesIncentives {
 						const comm_pct = parseFloat($b.find(".ib-sn-comm").val()) || 0;
 						if (!lbl || !comm_pct) { frappe.show_alert({ message: "Label and Commission % required", indicator: "orange" }); return; }
 						frappe.call({ method: "instabiz.overrides.sales_target.save_incentive_slab",
-							args: { slab_label: lbl, from_pct, to_pct, commission_pct: comm_pct, is_active: 1 },
+							args: { slab_label: lbl, from_pct, to_pct, commission_pct: comm_pct, designation: self._slab_designation, is_active: 1 },
 							callback() { render(d, $b); self.load(); } });
 					});
 				},

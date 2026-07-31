@@ -180,19 +180,31 @@ def _require_manager():
 # ── Incentive Slab API ────────────────────────────────────────────────────────
 
 @frappe.whitelist()
-def get_incentive_slabs():
-	"""Return all IB Incentive Slab records ordered by from_pct."""
+def get_incentive_slabs(designation=None):
+	"""Return IB Incentive Slab records ordered by from_pct.
+
+	Real commission calc (_load_slabs/_apply_slab in ib_sales_incentives.py)
+	groups slabs by designation ("Sales Manager" vs "Sales User") — this
+	previously returned everything with no designation filter or field at
+	all, so there was no way to tell which role's slabs you were looking at,
+	and a slab added here had a blank designation that would never actually
+	match any real rep's lookup.
+	"""
+	filters = {"designation": designation} if designation else {}
 	return frappe.db.get_all(
 		"IB Incentive Slab",
-		fields=["name", "slab_label", "from_pct", "to_pct", "commission_pct", "is_active"],
-		order_by="from_pct asc",
+		filters=filters,
+		fields=["name", "designation", "slab_label", "from_pct", "to_pct", "commission_pct", "is_active"],
+		order_by="designation, from_pct asc",
 	)
 
 
 @frappe.whitelist()
-def save_incentive_slab(slab_label, from_pct, to_pct, commission_pct, name=None, is_active=1):
+def save_incentive_slab(slab_label, from_pct, to_pct, commission_pct, designation, name=None, is_active=1):
 	"""Create or update an IB Incentive Slab. Requires Sales Manager / System Manager."""
 	_require_manager()
+	if designation not in ("Sales Manager", "Sales User"):
+		frappe.throw(frappe._("Designation must be Sales Manager or Sales User"))
 	from_pct = flt(from_pct)
 	to_pct = flt(to_pct)
 	commission_pct = flt(commission_pct)
@@ -200,6 +212,7 @@ def save_incentive_slab(slab_label, from_pct, to_pct, commission_pct, name=None,
 
 	if name and frappe.db.exists("IB Incentive Slab", name):
 		doc = frappe.get_doc("IB Incentive Slab", name)
+		doc.designation = designation
 		doc.slab_label = slab_label
 		doc.from_pct = from_pct
 		doc.to_pct = to_pct
@@ -209,6 +222,7 @@ def save_incentive_slab(slab_label, from_pct, to_pct, commission_pct, name=None,
 	else:
 		doc = frappe.get_doc({
 			"doctype": "IB Incentive Slab",
+			"designation": designation,
 			"slab_label": slab_label,
 			"from_pct": from_pct,
 			"to_pct": to_pct,
