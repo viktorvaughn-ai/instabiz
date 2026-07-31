@@ -41,6 +41,14 @@ const IB_STAGES = [
 	{ key: "delivered",        label: "Delivered",        icon: "check-circle", color: "#10b981" },
 ];
 
+// Same abbreviations as the Production Dashboard's stagePills (_render_plan in
+// ib_production_dashboard.js) — kept identical across both pages so a chip
+// means the same thing wherever it's seen.
+const STAGE_ABBR = {
+	"Coating": "CT", "Slitting": "SL", "Rewinding": "RW", "Cutting": "CU",
+	"Packing": "PK", "Ready to Deliver": "RTD", "Delivered": "DL",
+};
+
 const IB_PRIORITY_META = {
 	Urgent: { cls: "ib-ps-badge--urgent", label: "Urgent" },
 	High: { cls: "ib-ps-badge--high", label: "High" },
@@ -833,18 +841,47 @@ class IBProductionStages {
 			return;
 		}
 
+		// Left-to-right chip order always follows the production route, not
+		// creation order (Move/manual stage jumps can otherwise reorder them).
+		const stageOrder = IB_STAGES.map((s) => s.label);
+
 		const rows = items.map((item) => {
 			const pct = item.qty > 0 ? Math.min(100, Math.round((item.completed_qty / item.qty) * 100)) : 0;
-			const wo_rows = (item.work_orders || []).map((wo) => {
+
+			const wos = [...(item.work_orders || [])].sort(
+				(a, b) => stageOrder.indexOf(a.stage) - stageOrder.indexOf(b.stage)
+			);
+			const doneCount = wos.filter((wo) => wo.status === "Completed").length;
+			const stagePct = wos.length ? Math.round((doneCount / wos.length) * 100) : 0;
+
+			// Compact stage-pill row — same visual language as the Production
+			// Dashboard's per-item stagePills (_render_plan in
+			// ib_production_dashboard.js): one small colored chip per Work
+			// Order, abbreviated + colored by status. Full WO name/qty/date
+			// (previously always-visible as a wall of <li> text) now lives in
+			// the hover tooltip; clicking a chip still opens the same WO side
+			// panel a click on the old list row used to.
+			const chips = wos.map((wo) => {
 				this._wo_data.set(wo.name, { ...wo, delivery_date: (detail.order_sheet || {}).delivery_date });
-				return `<li class="ib-ps-wo-sub-item ib-ps-wo-sub-item--clickable" data-woid="${frappe.utils.escape_html(wo.name)}" title="Click to open this Work Order">
-					<span class="ib-ps-stage-chip" style="background:${this._stage_color(wo.stage)}">${frappe.utils.escape_html(wo.stage || "")}</span>
-					<span>${frappe.utils.escape_html(wo.name || "")}</span>
-					<span class="ib-ps-status-chip">${frappe.utils.escape_html(wo.status || "")}</span>
-					<span>${wo.completed_qty || 0}/${wo.target_qty || 0}</span>
-					<span style="font-size:10px;color:var(--text-muted)">Created: ${wo.creation ? frappe.datetime.str_to_user(wo.creation) : "—"}</span>
-				</li>`;
+				const abbr = STAGE_ABBR[wo.stage] || (wo.stage || "").substring(0, 2).toUpperCase();
+				const statusKey = (wo.status || "").toLowerCase().replace(/ /g, "_");
+				const created = wo.creation ? frappe.datetime.str_to_user(wo.creation) : "—";
+				const title = `${wo.stage || ""}: ${wo.name || ""} — ${wo.status || ""} `
+					+ `(${wo.completed_qty || 0}/${wo.target_qty || 0}) — Created: ${created}`;
+				return `<span class="ib-ps-wo-chip ib-ps-wo-chip--${statusKey}"
+					data-woid="${frappe.utils.escape_html(wo.name)}"
+					title="${frappe.utils.escape_html(title)}">${abbr}</span>`;
 			}).join("");
+
+			const wo_cell = wos.length
+				? `<div class="ib-ps-wo-chip-row">${chips}</div>
+					<div class="ib-ps-wo-chip-progress">
+						<div class="ib-ps-wo-chip-progress-wrap">
+							<div class="ib-ps-progress-bar" style="width:${stagePct}%;background:var(--ib-primary)"></div>
+						</div>
+						<small>${doneCount}/${wos.length} stages (${stagePct}%)</small>
+					</div>`
+				: `<span style="color:var(--text-muted);font-size:11px">No Work Orders</span>`;
 
 			return `
 				<tr>
@@ -857,9 +894,7 @@ class IBProductionStages {
 						</div>
 						<small>${pct}%</small>
 					</td>
-					<td>
-						<ul class="ib-ps-wo-sub-list">${wo_rows}</ul>
-					</td>
+					<td>${wo_cell}</td>
 				</tr>`;
 		}).join("");
 
@@ -871,7 +906,7 @@ class IBProductionStages {
 				</table>
 			</div>`);
 
-		$body.off("click", ".ib-ps-wo-sub-item--clickable").on("click", ".ib-ps-wo-sub-item--clickable", (e) => {
+		$body.off("click", ".ib-ps-wo-chip").on("click", ".ib-ps-wo-chip", (e) => {
 			const woid = $(e.currentTarget).data("woid");
 			const wo = this._wo_data.get(woid);
 			if (wo) this._open_wo_panel(wo, IB_STAGES.find(s => s.label === wo.stage)?.key || "");
@@ -2354,6 +2389,29 @@ class IBProductionStages {
 }
 .ib-ps-progress-bar { height: 100%; border-radius: 3px; transition: width 0.3s; }
 .ib-ps-progress-label { font-size: 10px; color: var(--text-muted); }
+
+/* Work Order stage-pill chips (Order-wise tab) — same visual language as the
+   Production Dashboard's stagePills (_render_plan in ib_production_dashboard.js),
+   swapped in for the old always-expanded <li> list of full WO name/status/qty/date. */
+.ib-ps-wo-chip-row { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.ib-ps-wo-chip {
+	font-size: 10px; font-weight: 700;
+	border-radius: 4px; padding: 2px 6px;
+	letter-spacing: .03em; cursor: pointer;
+	transition: transform 0.1s, box-shadow 0.15s;
+}
+.ib-ps-wo-chip:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,0.12); }
+.ib-ps-wo-chip--completed   { background: #d1fae5; color: #065f46; }
+.ib-ps-wo-chip--in_progress { background: #dbeafe; color: #1e3a8a; }
+.ib-ps-wo-chip--pending     { background: #f1f5f9; color: #64748b; }
+.ib-ps-wo-chip--on_hold     { background: #fef3c7; color: #92400e; }
+.ib-ps-wo-chip--cancelled   { background: #fee2e2; color: #991b1b; text-decoration: line-through; }
+.ib-ps-wo-chip-progress { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.ib-ps-wo-chip-progress-wrap {
+	height: 5px; width: 60px; background: var(--border-color);
+	border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle;
+}
+.ib-ps-wo-chip-progress small { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
 
 /* ----------------------------------------------------------------
    Order Sheet / Tables

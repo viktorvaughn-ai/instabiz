@@ -4,7 +4,8 @@
 {% set jr = frappe.get_doc("IB Jumbo Roll", doc.jumbo_roll) if doc.jumbo_roll else None %}
 {% set machine_name = frappe.db.get_value("IB Machine", doc.machine, "machine_name") if doc.machine else None %}
 <style>
-  body { font-family: Arial, sans-serif; font-size: 12px; color: #111; }
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #111; padding: 10px; }
+  .print-format { margin-top: 0mm; margin-right: 0mm; margin-bottom: 0mm; margin-left: 0mm; }
   .jo-header { text-align: center; margin-bottom: 10px; }
   .jo-header img { width: 100%; max-height: 60px; object-fit: contain; display: block; margin: 0 auto 6px; }
   .jo-header h2 { margin: 4px 0 0; font-size: 20px; letter-spacing: 1px; }

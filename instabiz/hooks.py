@@ -325,6 +325,7 @@ override_whitelisted_methods = {
 jinja = {
     "methods": [
         "instabiz.overrides.production.get_order_sheet_wo_names",
+        "instabiz.overrides.production.get_order_sheet_stage_workflow",
     ],
 }
 

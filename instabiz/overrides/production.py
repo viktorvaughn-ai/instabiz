@@ -661,6 +661,7 @@ def get_order_sheet_detail(order_sheet):
 		fields=[
 			"name",
 			"item_code",
+			"order_sheet_item",
 			"stage",
 			"machine",
 			"operator",
@@ -679,16 +680,31 @@ def get_order_sheet_detail(order_sheet):
 		order_by="creation asc",
 	)
 
-	# Order-wise view: items with their WOs listed per item
+	# Order-wise view: items with their WOs listed per item. Grouping by plain
+	# item_code (wo_by_item, still used below for product_wise_view) conflates
+	# WOs across multiple Order Sheet Item rows that share the same item_code
+	# (e.g. one SKU ordered as separate line items at different quantities) —
+	# every row matching that item_code would show the full merged bucket
+	# instead of just its own WOs. Same fragility already fixed on the write
+	# side in _update_order_sheet_item(): key by order_sheet_item (the unique
+	# child-row name) when the WO has it; fall back to an item_code match only
+	# for genuinely legacy WOs that predate order_sheet_item being populated.
 	order_wise_view = []
 	wo_by_item = {}
+	wo_by_osi = {}
+	wo_by_item_legacy = {}
 	for wo in work_orders:
 		wo_by_item.setdefault(wo.item_code, []).append(wo)
+		if wo.order_sheet_item:
+			wo_by_osi.setdefault(wo.order_sheet_item, []).append(wo)
+		else:
+			wo_by_item_legacy.setdefault(wo.item_code, []).append(wo)
 
 	for item in items:
+		row_wos = wo_by_osi.get(item["name"], []) + wo_by_item_legacy.get(item["item_code"], [])
 		order_wise_view.append({
 			**item,
-			"work_orders": wo_by_item.get(item["item_code"], []),
+			"work_orders": row_wos,
 		})
 
 	# Product-wise view: per item → {stage: {status, wo_name, completed_qty, target_qty}}
@@ -796,6 +812,132 @@ def get_order_sheet_wo_names(order_sheet):
 				break
 
 	return names
+
+
+_SUMMARY_STAGES = ["Coating", "Slitting", "Rewinding", "Cutting", "Packing", "Ready to Deliver"]
+
+
+@frappe.whitelist()
+def get_order_sheet_stage_workflow(order_sheet):
+	"""Per-item full stage routing for the "IB Job Order Summary" print format's
+	stage x machine grid — one row per Order Sheet Item, one column per stage in
+	_SUMMARY_STAGES, showing the real machine allotment (or lack of one) at every
+	stage of that item's actual route (via _get_stage_route — route-aware, same
+	helper get_order_sheet_wo_names()/auto_create_all_stage_wos() already use).
+
+	Unlike get_order_sheet_wo_names() (which returns only the ONE currently-
+	actionable WO per item), this returns the FULL chain so the printed sheet
+	can show completed / current / not-yet-reached / not-in-route honestly —
+	all stage WOs for an item are created upfront by auto_create_all_stage_wos(),
+	but only the first stage gets a machine at creation time; later stages sit
+	as Pending with no machine until advance_to_next_stage() activates them.
+	That is real, expected data — not a gap to hide.
+
+	Keyed by order_sheet_item (child row name), not bare item_code, so an item
+	appearing on multiple rows of the same order sheet doesn't collide.
+
+	Also carries each item's real dimension fields (color/width_mm/length_mtr/
+	qty_pkg/total_pkg, from the underlying Sales Order Item) plus sheet-wide
+	any_* flags — the print format uses these to show only the dimension
+	columns that actually have data anywhere on the sheet (a SQMT roll item
+	and a PCS packed item can sit on the same order sheet; each only fills in
+	its own columns, the other's stay blank rather than adding a column no
+	row on the sheet ever uses).
+	"""
+	location = _get_os_location(order_sheet)
+	sales_order = frappe.db.get_value("IB Order Sheet", order_sheet, "sales_order")
+	items = frappe.db.get_all(
+		"IB Order Sheet Item",
+		filters={"parent": order_sheet},
+		fields=["name", "item_code", "item_name", "qty", "uom"],
+	)
+
+	any_color = any_width_mm = any_length_mtr = any_qty_pkg = any_total_pkg = False
+
+	result = []
+	for item in items:
+		dims = frappe.db.get_value(
+			"Sales Order Item",
+			{"parent": sales_order, "item_code": item.item_code},
+			["color", "width_mm", "length_mtr", "qty_pkg", "total_pkg"],
+			as_dict=True,
+		) if sales_order else None
+		dims = dims or frappe._dict()
+		any_color = any_color or bool(dims.color)
+		any_width_mm = any_width_mm or bool(dims.width_mm)
+		any_length_mtr = any_length_mtr or bool(dims.length_mtr)
+		any_qty_pkg = any_qty_pkg or bool(dims.qty_pkg)
+		any_total_pkg = any_total_pkg or bool(dims.total_pkg)
+
+		stage_route = _get_stage_route(item.item_code, location)
+		wos = frappe.db.get_all(
+			"IB Work Order",
+			filters={
+				"order_sheet": order_sheet,
+				"order_sheet_item": item.name,
+				"status": ["!=", "Cancelled"],
+			},
+			fields=["name", "stage", "status", "machine", "pcs_to_make", "logs_to_make",
+			        "target_qty", "target_uom"],
+		)
+		wo_by_stage = {wo.stage: wo for wo in wos}
+
+		# Same "one actionable stage" rule as get_order_sheet_wo_names(): first
+		# stage in real route order whose WO is not yet Completed.
+		current_stage = None
+		for stage in stage_route:
+			wo = wo_by_stage.get(stage)
+			if wo and wo.status != "Completed":
+				current_stage = stage
+				break
+
+		stages_out = []
+		for stage in _SUMMARY_STAGES:
+			if stage not in stage_route:
+				stages_out.append({
+					"stage": stage, "in_route": False, "machine": None,
+					"status": None, "is_current": False,
+				})
+				continue
+			wo = wo_by_stage.get(stage)
+			stages_out.append({
+				"stage": stage,
+				"in_route": True,
+				"machine": wo.machine if wo else None,
+				"status": wo.status if wo else None,
+				"is_current": stage == current_stage,
+			})
+
+		# Manager reconciliation (Adjust Qty) is set on whichever stage WO the
+		# manager opened — check the whole chain, not just one stage.
+		pcs_to_make = next((flt(wo.pcs_to_make) for wo in wos if wo.pcs_to_make), 0)
+		logs_to_make = next((flt(wo.logs_to_make) for wo in wos if wo.logs_to_make), 0)
+		target_uom = next((wo.target_uom for wo in wos if wo.target_uom), item.uom)
+
+		result.append({
+			"item_code": item.item_code,
+			"item_name": item.item_name,
+			"qty": item.qty,
+			"uom": item.uom,
+			"target_uom": target_uom,
+			"pcs_to_make": pcs_to_make,
+			"logs_to_make": logs_to_make,
+			"color": dims.color,
+			"width_mm": dims.width_mm,
+			"length_mtr": dims.length_mtr,
+			"qty_pkg": dims.qty_pkg,
+			"total_pkg": dims.total_pkg,
+			"stages": stages_out,
+		})
+
+	return {
+		"rows": result,
+		"any_color": any_color,
+		"any_width_mm": any_width_mm,
+		"any_length_mtr": any_length_mtr,
+		"any_qty_pkg": any_qty_pkg,
+		"any_total_pkg": any_total_pkg,
+	}
 
 
 # ---------------------------------------------------------------------------
