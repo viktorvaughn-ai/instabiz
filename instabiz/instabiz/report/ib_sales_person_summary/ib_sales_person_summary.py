@@ -63,7 +63,7 @@ def _data(filters):
 		FROM `tabSales Order` so
 		LEFT JOIN `tabUser` u ON u.name = so.custom_sales_person_user
 		WHERE so.docstatus = 1
-		  AND so.transaction_date BETWEEN %(from_date)s AND %(to_date)s
+		  AND DATE(so.creation) BETWEEN %(from_date)s AND %(to_date)s
 		  AND (u.name IS NULL OR (u.enabled = 1 AND u.name != 'Administrator'))
 		  {where_extra}
 		GROUP BY COALESCE(NULLIF(so.custom_sales_person,''), u.full_name, so.custom_sales_person_user)
