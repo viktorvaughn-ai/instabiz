@@ -136,6 +136,11 @@ fixtures = [
                                           "Salary Slip"]]]
     },
     {
+        "dt": "Custom DocPerm",
+        "filters": [["parent", "=", "Payment Entry"],
+                    ["role", "in", ["Sales Manager", "Accounts User", "Accounts Manager"]]]
+    },
+    {
         "dt": "Purchase Taxes and Charges Template",
         "filters": [["company", "=", "Instabiz Solutions India Pvt Ltd"]]
     },

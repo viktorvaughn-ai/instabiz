@@ -33,8 +33,15 @@ def _get_slab_designation(user):
 	return "Sales Manager" if "Sales Manager" in roles else "Sales User"
 
 
-def _apply_slab(collected, pct, designation, slabs_by_desig):
-	"""Return (commission_amount, slab_label) for the given achievement %."""
+def _apply_slab(amount, pct, designation, slabs_by_desig):
+	"""Return (commission_amount, slab_label) for the given achievement %.
+
+	`amount` is the commission base — order value (grand_total), not cash
+	collected. Sales Manager/PE access is gated separately (see billing_mode
+	and payment_entry.py), so custom_advance_paid — and therefore "collected"
+	— stays at 0 for most reps regardless of real sales activity; keying
+	commission off it made the payout always compute to zero.
+	"""
 	if pct is None or pct < 0:
 		return 0.0, None
 	candidates = slabs_by_desig.get(designation) or slabs_by_desig.get("Sales User") or []
@@ -42,7 +49,7 @@ def _apply_slab(collected, pct, designation, slabs_by_desig):
 		lo = flt(slab.from_pct)
 		hi = flt(slab.to_pct)
 		if pct >= lo and (hi == 0 or pct < hi):
-			commission = flt(collected) * flt(slab.commission_pct) / 100
+			commission = flt(amount) * flt(slab.commission_pct) / 100
 			return round(commission, 2), slab.slab_label
 	return 0.0, None
 
@@ -247,13 +254,15 @@ def _individual_incentive(sales_person, month_start, month_end):
 		"IB Sales Target", {"sales_user": sales_person, "month": month_start}, "target_amount"
 	) or 0)
 	row.target = target
-	row.pct = round(flt(row.collected) / target * 100, 1) if target else None
-	row.gap = max(0, target - flt(row.collected)) if target else None
+	# Achievement % and commission are computed on order value (revenue), not
+	# cash collected — see _apply_slab docstring for why.
+	row.pct = round(flt(row.revenue) / target * 100, 1) if target else None
+	row.gap = max(0, target - flt(row.revenue)) if target else None
 	row.collection_pct = round(flt(row.collected) / flt(row.revenue) * 100, 1) if row.revenue else 0
 
 	desig = _get_slab_designation(row.sp_user)
 	row.slab_designation = desig
-	commission, slab_label = _apply_slab(row.collected, row.pct, desig, slabs_by_desig)
+	commission, slab_label = _apply_slab(row.revenue, row.pct, desig, slabs_by_desig)
 	row.commission = commission
 	row.slab_earned = slab_label
 
@@ -340,13 +349,15 @@ def _team_incentives(month_start, month_end):
 	for row in by_sp:
 		target = target_map.get(row.sp_user, 0)
 		row.target = target
-		row.pct = round(flt(row.collected) / target * 100, 1) if target else None
-		row.gap = max(0, target - flt(row.collected)) if target else None
+		# Achievement % and commission are computed on order value (revenue),
+		# not cash collected — see _apply_slab docstring for why.
+		row.pct = round(flt(row.revenue) / target * 100, 1) if target else None
+		row.gap = max(0, target - flt(row.revenue)) if target else None
 		row.collection_pct = round(flt(row.collected) / flt(row.revenue) * 100, 1) if row.revenue else 0
 
 		desig = _get_slab_designation(row.sp_user)
 		row.slab_designation = desig
-		commission, slab_label = _apply_slab(row.collected, row.pct, desig, slabs_by_desig)
+		commission, slab_label = _apply_slab(row.revenue, row.pct, desig, slabs_by_desig)
 		row.commission = commission
 		row.slab_earned = slab_label
 
@@ -409,7 +420,7 @@ def _team_incentives(month_start, month_end):
 		"total_target": total_target,
 		"total_collected": total_collected,
 		"total_commission": total_commission,
-		"team_pct": round(total_collected / total_target * 100, 1) if total_target else None,
+		"team_pct": round(total_revenue / total_target * 100, 1) if total_target else None,
 		"trend": trend,
 		"top_customers": top_customers,
 	}

@@ -373,7 +373,7 @@ class IBSalesIncentives {
 		if (this._is_manager) {
 			const self = this;
 			$kpis.find("#ib-si-set-tgt-btn").on("click", () => {
-				self._show_set_target_dialog(rep.sp_user, rep.sp_name, parseFloat(rep.target || 0), parseFloat(rep.collected || 0), parseFloat(rep.pct || 0));
+				self._show_set_target_dialog(rep.sp_user, rep.sp_name, parseFloat(rep.target || 0), parseFloat(rep.revenue || 0), parseFloat(rep.pct || 0));
 			});
 		}
 	}
@@ -506,7 +506,7 @@ class IBSalesIncentives {
 				<button class="ib-set-tgt"
 					data-user="${frappe.utils.escape_html(r.sp_user)}"
 					data-name="${frappe.utils.escape_html(r.sp_name || r.sp_user)}"
-					data-target="${r.target || 0}" data-actual="${r.collected || 0}" data-pct="${r.pct || 0}"
+					data-target="${r.target || 0}" data-actual="${r.revenue || 0}" data-pct="${r.pct || 0}"
 					title="Set target">✎</button>`;
 
 			html.push(`<tr>

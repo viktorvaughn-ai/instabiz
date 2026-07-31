@@ -5,3 +5,5 @@
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
 instabiz.patches.enable_batch_tracking_for_fg_groups
+instabiz.patches.add_sales_manager_payment_entry_perm
+instabiz.patches.set_incentive_slab_commission_pct
