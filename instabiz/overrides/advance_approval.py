@@ -23,8 +23,53 @@ def _is_advance_approver(user=None):
 	return "System Manager" in frappe.get_roles(user)
 
 
+@frappe.whitelist()
+def get_advance_approval_queue():
+	"""Pending advance approvals + recent decision history, for the Advance
+	Approvals dashboard. Approver-only (same gate as set_advance_approval)."""
+	if not _is_advance_approver():
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+	pending = frappe.db.sql("""
+		SELECT so.name, so.customer_name, so.custom_advance_paid AS advance_paid,
+		       so.custom_sales_person_user AS sales_person_user,
+		       COALESCE(u.full_name, so.custom_sales_person_user) AS sales_person_name,
+		       so.currency, so.transaction_date, so.creation
+		FROM `tabSales Order` so
+		LEFT JOIN `tabUser` u ON u.name = so.custom_sales_person_user
+		WHERE so.docstatus = 0 AND so.custom_advance_approval_status = 'Pending'
+		ORDER BY so.creation ASC
+	""", as_dict=True)
+
+	history = frappe.db.sql("""
+		SELECT so.name, so.customer_name, so.custom_advance_paid AS advance_paid,
+		       so.custom_advance_approval_status AS status,
+		       so.custom_advance_approval_remarks AS remarks,
+		       COALESCE(u.full_name, so.custom_sales_person_user) AS sales_person_name,
+		       so.currency, so.modified
+		FROM `tabSales Order` so
+		LEFT JOIN `tabUser` u ON u.name = so.custom_sales_person_user
+		WHERE so.custom_advance_approval_status IN ('Approved', 'Rejected')
+		ORDER BY so.modified DESC
+		LIMIT 30
+	""", as_dict=True)
+
+	return {"pending": pending, "history": history}
+
+
 def check_advance_approval(doc):
 	"""Called from Sales Order.before_submit()."""
+	# Rejected stays hard-blocked even though the advance display was zeroed
+	# out — zeroing was purely so the order stops being credited with money
+	# that isn't backing it anymore, not a way to clear the gate. Confirming
+	# a Rejected order needs a fresh decision (re-request approval, or the
+	# rep sorts out a corrected advance), not "reject" quietly turning into
+	# "never mind, submit anyway."
+	if doc.custom_advance_approval_status == "Rejected":
+		frappe.throw(
+			_("Cannot confirm this Sales Order: its advance payment was rejected by {0}. "
+			  "Resolve that before submitting.").format(APPROVER_EMAIL)
+		)
 	if flt(doc.custom_advance_paid) > 0 and doc.custom_advance_approval_status != "Approved":
 		frappe.throw(
 			_("Cannot confirm this Sales Order: an advance payment of {0} was collected "
