@@ -1,6 +1,7 @@
 """instabiz.overrides.sales_order"""
 import frappe
 from frappe import _
+from frappe.utils import add_days, nowdate
 from frappe.model.mapper import get_mapped_doc  # pyright: ignore[reportMissingImports]
 from erpnext.selling.doctype.sales_order.sales_order import SalesOrder  # pyright: ignore[reportMissingImports]
 
@@ -53,6 +54,10 @@ class CustomSalesOrder(IbStatusMixin, SalesOrder):
 
     def before_insert(self):
         set_sales_person(self)
+        # Default ETD = order date + 8 days when not explicitly set — covers
+        # API/mapper-created SOs; the form itself defaults this client-side too.
+        if not self.delivery_date:
+            self.delivery_date = add_days(self.transaction_date or nowdate(), 8)
 
     def validate(self):
         if not self.custom_location or self.custom_location == "Select":
@@ -215,7 +220,16 @@ def reopen_sales_order(name):
 # ── Mapper: Sales Order → Delivery Note ──────────────────────────────────────
 
 @frappe.whitelist()
-def custom_make_delivery_note(source_name, target_doc=None):
+def custom_make_delivery_note(source_name, target_doc=None, item_code=None):
+    """Map a Sales Order to a Delivery Note.
+
+    item_code: when set, only that item's row is carried across (used by the
+    Production Stages "Create Delivery Note" button, which fires per Work
+    Order/item as it reaches Ready to Deliver — pulling the whole order's
+    items there would ship items other stages haven't finished yet). Blank
+    keeps the existing whole-order behavior used by the SO form's own
+    "Create > Delivery Note" button.
+    """
     def postprocess_parent(source_doc, target_doc, source_parent):
         if source_doc.get("customer"):
             target_doc.customer = source_doc.customer
@@ -256,7 +270,8 @@ def custom_make_delivery_note(source_name, target_doc=None):
             "Sales Order Item": {
                 "doctype": "Delivery Note Item",
                 "postprocess": dn_item_postprocess,
-                "condition": lambda row: row.qty != 0,
+                "condition": (lambda row: row.qty != 0 and row.item_code == item_code) if item_code
+                    else (lambda row: row.qty != 0),
                 "field_map": {
                     **COMMON_CHILD_FIELD_MAP,
                     "name":   "so_detail",

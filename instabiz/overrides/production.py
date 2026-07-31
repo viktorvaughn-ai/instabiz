@@ -72,9 +72,23 @@ _ITEM_GROUP_STAGE_ROUTES = {
 }
 _DEFAULT_STAGE_ROUTE = ["Cutting", "Packing", "Ready to Deliver"]
 
+# Gujarat is the only factory location (Coating/Slitting/Rewinding/Cutting
+# machines all live there). Maharashtra and Chennai are warehouse-only — an
+# order routed to either always gets Packing -> Ready to Deliver regardless
+# of item group, since there's no factory capability physically there.
+_WAREHOUSE_ONLY_LOCATIONS = {"maharashtra", "chennai"}
+_WAREHOUSE_STAGE_ROUTE = ["Packing", "Ready to Deliver"]
 
-def _get_stage_route(item_code):
-	"""Return ordered list of production stages for an item based on its item_group."""
+
+def _get_stage_route(item_code, location=None):
+	"""Return ordered list of production stages for an item.
+
+	`location` is the Sales Order's `custom_location` (maharashtra/gujarat/chennai,
+	lowercase). Warehouse-only locations short-circuit to Packing->RTD; Gujarat
+	(factory) uses the existing item-group-based route.
+	"""
+	if (location or "").lower() in _WAREHOUSE_ONLY_LOCATIONS:
+		return _WAREHOUSE_STAGE_ROUTE
 	item_group = frappe.db.get_value("Item", item_code, "item_group") or ""
 	return _ITEM_GROUP_STAGE_ROUTES.get(item_group, _DEFAULT_STAGE_ROUTE)
 
@@ -153,42 +167,73 @@ def _get_os_location(order_sheet):
 # ---------------------------------------------------------------------------
 
 @frappe.whitelist()
-def get_production_dashboard():
-	"""KPIs + stage pipeline counts + recent entries."""
+def get_production_dashboard(location=None):
+	"""KPIs + stage pipeline counts + recent entries.
+
+	location: optional Sales Order custom_location filter (maharashtra/gujarat/chennai) —
+	narrows every count below to Work Orders whose Order Sheet's Sales Order is there.
+	"""
 	today_date = today()
 
+	loc_filter = ""
+	params = {"today": today_date, "location": location}
+	if location:
+		loc_filter = """AND wo.order_sheet IN (
+			SELECT os.name FROM `tabIB Order Sheet` os
+			JOIN `tabSales Order` so ON so.name = os.sales_order
+			WHERE so.custom_location = %(location)s
+		)"""
+
 	active_wo = frappe.db.sql(
-		"SELECT COUNT(*) FROM `tabIB Work Order` WHERE status NOT IN ('Completed','Cancelled')"
+		f"SELECT COUNT(*) FROM `tabIB Work Order` wo WHERE wo.status NOT IN ('Completed','Cancelled') {loc_filter}",
+		params,
 	)[0][0]
-	pending_wo = frappe.db.count("IB Work Order", {"status": "Pending"})
+	pending_wo = frappe.db.sql(
+		f"SELECT COUNT(*) FROM `tabIB Work Order` wo WHERE wo.status = 'Pending' {loc_filter}",
+		params,
+	)[0][0]
 
 	completed_today = frappe.db.sql(
-		"""
-		SELECT COUNT(*) FROM `tabIB Work Order`
-		WHERE status = 'Completed'
-		  AND DATE(COALESCE(completed_at, modified)) = %s
+		f"""
+		SELECT COUNT(*) FROM `tabIB Work Order` wo
+		WHERE wo.status = 'Completed'
+		  AND DATE(COALESCE(wo.completed_at, wo.modified)) = %(today)s
+		  {loc_filter}
 		""",
-		(today_date,),
+		params,
 	)[0][0]
 
-	machines_active = frappe.db.count("IB Machine", {"status": "Active"})
+	machines_active = frappe.db.count(
+		"IB Machine", {"status": "Active", **({"location": location} if location else {})}
+	)
 
 	# Stage pipeline
 	stage_rows = frappe.db.sql(
-		"""
-		SELECT stage, status, COUNT(*) AS cnt
-		FROM `tabIB Work Order`
-		GROUP BY stage, status
+		f"""
+		SELECT wo.stage, wo.status, COUNT(*) AS cnt
+		FROM `tabIB Work Order` wo
+		WHERE 1=1 {loc_filter}
+		GROUP BY wo.stage, wo.status
 		""",
+		params,
 		as_dict=True,
 	)
 	# Use lowercase_underscore keys so JS STAGE_COLORS lookup works directly
 	def _stage_key(s):
 		return s.lower().replace(" ", "_")
 
-	stage_map = {s: {"stage": _stage_key(s), "pending": 0, "in_progress": 0, "completed": 0} for s in STAGES}
+	# Warehouse-only locations never run Coating/Slitting/Rewinding/Cutting — don't
+	# even show those as empty cards when a warehouse location is selected.
+	visible_stages = (
+		["Packing", "Ready to Deliver", "Delivered"]
+		if (location or "").lower() in _WAREHOUSE_ONLY_LOCATIONS
+		else STAGES
+	)
+	stage_map = {s: {"stage": _stage_key(s), "pending": 0, "in_progress": 0, "completed": 0} for s in visible_stages}
 	for row in stage_rows:
 		if row.stage not in stage_map:
+			if location and row.stage not in visible_stages:
+				continue
 			stage_map[row.stage] = {"stage": _stage_key(row.stage), "pending": 0, "in_progress": 0, "completed": 0}
 		if row.status == "Pending":
 			stage_map[row.stage]["pending"] = row.cnt
@@ -200,12 +245,14 @@ def get_production_dashboard():
 
 	# Priority overview — lowercase keys match JS badge lookup
 	priority_rows = frappe.db.sql(
-		"""
+		f"""
 		SELECT os.priority, COUNT(*) AS cnt
 		FROM `tabIB Work Order` wo
 		JOIN `tabIB Order Sheet` os ON os.name = wo.order_sheet
+		WHERE 1=1 {loc_filter}
 		GROUP BY os.priority
 		""",
+		params,
 		as_dict=True,
 	)
 	priority_overview = {"urgent": 0, "high": 0, "normal": 0, "low": 0}
@@ -217,24 +264,27 @@ def get_production_dashboard():
 	# verified live) even though a capture dialog exists; source from completed Work
 	# Orders instead, same fallback pattern already used in get_dpr().
 	wastage_result = frappe.db.sql(
-		"""
-		SELECT AVG(wastage_pct) FROM `tabIB Work Order`
-		WHERE status = 'Completed' AND DATE(COALESCE(completed_at, modified)) = %s
+		f"""
+		SELECT AVG(wo.wastage_pct) FROM `tabIB Work Order` wo
+		WHERE wo.status = 'Completed' AND DATE(COALESCE(wo.completed_at, wo.modified)) = %(today)s
+		{loc_filter}
 		""",
-		(today_date,),
+		params,
 	)
 	wastage_today = round(flt(wastage_result[0][0]), 1) if wastage_result and wastage_result[0][0] else 0.0
 
 	# Recent 10 completions (IB Production Entry has no real data — see above)
 	recent_entries = frappe.db.sql(
-		"""
-		SELECT name, stage, machine, completed_qty AS output_qty,
-			wastage_pct, DATE(COALESCE(completed_at, modified)) AS entry_date
-		FROM `tabIB Work Order`
-		WHERE status = 'Completed'
-		ORDER BY COALESCE(completed_at, modified) DESC
+		f"""
+		SELECT wo.name, wo.stage, wo.machine, wo.completed_qty AS output_qty,
+			wo.wastage_pct, DATE(COALESCE(wo.completed_at, wo.modified)) AS entry_date
+		FROM `tabIB Work Order` wo
+		WHERE wo.status = 'Completed'
+		{loc_filter}
+		ORDER BY COALESCE(wo.completed_at, wo.modified) DESC
 		LIMIT 10
 		""",
+		params,
 		as_dict=True,
 	)
 
@@ -348,17 +398,26 @@ def save_machine(
 # ---------------------------------------------------------------------------
 
 @frappe.whitelist()
-def get_order_sheets(status=None, priority=None):
+def get_order_sheets(status=None, priority=None, location=None, search=None):
 	"""Return order sheets with progress %."""
 	filters = {}
 	if status:
 		filters["status"] = status
 	if priority:
 		filters["priority"] = priority
+	if location:
+		loc_sos = frappe.get_all("Sales Order", filters={"custom_location": location}, pluck="name")
+		filters["sales_order"] = ["in", loc_sos or [""]]
+
+	or_filters = None
+	if search:
+		like = f"%{search}%"
+		or_filters = [["sales_order", "like", like], ["customer_name", "like", like]]
 
 	sheets = frappe.get_all(
 		"IB Order Sheet",
 		filters=filters,
+		or_filters=or_filters,
 		fields=[
 			"name",
 			"sales_order",
@@ -612,6 +671,9 @@ def get_order_sheet_detail(order_sheet):
 			"wastage_pct",
 			"started_at",
 			"completed_at",
+			"sales_order",
+			"order_sheet",
+			"jumbo_roll",
 		],
 		order_by="creation asc",
 	)
@@ -1250,10 +1312,11 @@ def advance_to_next_stage(work_order):
 		frappe.throw(_("Could not acquire lock for Work Order {0}. Please try again.").format(work_order))
 	try:
 		doc = frappe.get_doc("IB Work Order", work_order)
+		location = _get_os_location(doc.order_sheet)
 
 		# Idempotency: already completed — find the next-stage WO that was activated and return it
 		if doc.status == "Completed":
-			stage_route = _get_stage_route(doc.item_code)
+			stage_route = _get_stage_route(doc.item_code, location)
 			try:
 				route_idx = stage_route.index(doc.stage)
 			except ValueError:
@@ -1287,7 +1350,7 @@ def advance_to_next_stage(work_order):
 								 order_sheet_item=doc.order_sheet_item or None)
 
 		# Determine next stage from item's route (route-aware, skips inapplicable stages)
-		stage_route = _get_stage_route(doc.item_code)
+		stage_route = _get_stage_route(doc.item_code, location)
 		try:
 			route_idx = stage_route.index(doc.stage)
 		except ValueError:
@@ -1385,7 +1448,7 @@ def auto_create_all_stage_wos(order_sheet):
 	created = []
 
 	for item in os_doc.items:
-		stage_route = _get_stage_route(item.item_code)
+		stage_route = _get_stage_route(item.item_code, location)
 
 		for idx, stage in enumerate(stage_route):
 			# Per-row key: order_sheet + order_sheet_item (child row name) + stage
@@ -1419,7 +1482,7 @@ def auto_create_all_stage_wos(order_sheet):
 	frappe.db.set_value("IB Order Sheet", order_sheet, "status", "In Progress")
 	frappe.db.commit()
 	return {"created": created, "route_used": {
-		item.item_code: _get_stage_route(item.item_code) for item in os_doc.items
+		item.item_code: _get_stage_route(item.item_code, location) for item in os_doc.items
 	}}
 
 
@@ -1429,13 +1492,21 @@ def auto_create_first_stage_wos(order_sheet):
 
 
 @frappe.whitelist()
-def get_production_plan(limit=None):
+def get_production_plan(limit=None, start=0, location=None, search=None):
 	"""Return data for all 3 production views (order-wise, product-wise, machine-wise).
 
 	limit: max number of order sheets to return in order_wise (default: all).
-	       Dashboard passes limit=25 to keep the view fast.
+	       Dashboard passes limit=25 per page for infinite scroll.
+	start: offset for the order_wise page (infinite scroll).
+	location: optional Sales Order custom_location filter (maharashtra/gujarat/chennai).
+	search: optional match against Sales Order name or customer name.
 	"""
-	limit_clause = f"LIMIT {int(limit)}" if limit and str(limit).isdigit() else ""
+	limit = int(limit) if limit and str(limit).isdigit() else None
+	start = int(start) if str(start).isdigit() else 0
+	limit_clause = f"LIMIT {limit} OFFSET {start}" if limit else ""
+	loc_join = "JOIN `tabSales Order` so ON so.name = os.sales_order" if location else ""
+	loc_where = "AND so.custom_location = %(location)s" if location else ""
+	search_where = "AND (os.sales_order LIKE %(search)s OR os.customer_name LIKE %(search)s)" if search else ""
 
 	# ── Order-wise: active order sheets with item stage status ──────────────
 	order_sheets = frappe.db.sql(
@@ -1443,12 +1514,16 @@ def get_production_plan(limit=None):
 		SELECT os.name, os.sales_order, os.customer_name, os.priority, os.status,
 		       os.delivery_date, os.order_date
 		FROM `tabIB Order Sheet` os
+		{loc_join}
 		WHERE os.status IN ('Draft', 'In Progress')
+		{loc_where}
+		{search_where}
 		ORDER BY
 		  FIELD(os.priority, 'Urgent','High','Normal','Low'),
 		  os.delivery_date ASC
 		{limit_clause}
 		""",
+		{"location": location, "search": f"%{search}%" if search else None},
 		as_dict=True,
 	)
 
@@ -1839,10 +1914,11 @@ def get_so_production_status(sales_order):
 		return {"has_order_sheet": False, "sales_order": sales_order}
 
 	os_doc = frappe.get_doc("IB Order Sheet", os_name)
+	location = frappe.db.get_value("Sales Order", sales_order, "custom_location")
 	items_out = []
 
 	for item in os_doc.items:
-		stage_route = _get_stage_route(item.item_code)
+		stage_route = _get_stage_route(item.item_code, location)
 		wos = frappe.db.get_all(
 			"IB Work Order",
 			filters={"order_sheet": os_name, "item_code": item.item_code,
@@ -1904,7 +1980,11 @@ _VALID_STAGES = {"Coating", "Slitting", "Rewinding", "Cutting", "Packing", "Read
 
 @frappe.whitelist()
 def move_work_order_stage(work_order, new_stage):
-	"""Reassign a Work Order to a different pipeline stage (drag-and-drop in Pipeline view)."""
+	"""Manually move a Work Order to a chosen stage (stage-picker in Active Production
+	Plan) and auto-assign the least-loaded available machine for that stage — same
+	load-balancing `advance_to_next_stage` uses, so a manual jump doesn't dump extra
+	load on whichever machine happened to be set for the old stage.
+	"""
 	_require_production_role()
 	if new_stage not in _VALID_STAGES:
 		frappe.throw(frappe._("Invalid stage: {0}").format(new_stage))
@@ -1914,11 +1994,14 @@ def move_work_order_stage(work_order, new_stage):
 	old_stage = doc.stage
 	if old_stage == new_stage:
 		return {"ok": True, "changed": False}
+	location = _get_os_location(doc.order_sheet)
+	machine = _assign_machine_load_balanced(new_stage, location) or ""
 	doc.stage = new_stage
+	doc.machine = machine
 	doc.save(ignore_permissions=True)
 	frappe.db.commit()
 	_notify_floor_update()
-	return {"ok": True, "changed": True, "old_stage": old_stage, "new_stage": new_stage}
+	return {"ok": True, "changed": True, "old_stage": old_stage, "new_stage": new_stage, "machine": machine}
 
 
 # ── Sales Order production panel ──────────────────────────────────────────────
@@ -2176,19 +2259,31 @@ def get_so_list_badges(sales_orders):
 # ── Job bundles ───────────────────────────────────────────────────────────────
 
 @frappe.whitelist()
-def get_job_bundles():
-	"""Group Pending WOs by item_code+stage across order sheets for efficient batch assignment."""
+def get_job_bundles(location=None, search=None):
+	"""Group Pending, not-yet-machine-assigned WOs by item_code+stage across order
+	sheets for efficient batch assignment.
+
+	Excludes WOs that already have a machine — without this, a bundle you just
+	ran "Batch Assign" on reappeared identically on refresh (same Pending status,
+	same item+stage grouping key), since only the machine field had changed.
+	"""
 	_require_production_role()
-	rows = frappe.db.sql("""
+	loc_where = "AND so.custom_location = %(location)s" if location else ""
+	search_where = "AND (wo.item_code LIKE %(search)s OR os.sales_order LIKE %(search)s OR os.customer_name LIKE %(search)s)" if search else ""
+	rows = frappe.db.sql(f"""
 		SELECT wo.name, wo.item_code, wo.item_name, wo.stage, wo.target_qty,
 		       wo.target_uom, wo.machine, wo.batch_group, wo.order_sheet,
 		       os.priority, os.sales_order, os.customer_name, os.delivery_date
 		FROM `tabIB Work Order` wo
 		JOIN `tabIB Order Sheet` os ON os.name = wo.order_sheet
+		JOIN `tabSales Order` so ON so.name = os.sales_order
 		WHERE wo.status = 'Pending'
+		AND (wo.machine IS NULL OR wo.machine = '')
+		{loc_where}
+		{search_where}
 		ORDER BY wo.item_code, wo.stage,
 		         FIELD(os.priority, 'Urgent', 'High', 'Normal', 'Low')
-	""", as_dict=True)
+	""", {"location": location, "search": f"%{search}%" if search else None}, as_dict=True)
 
 	bundle_map = {}
 	for wo in rows:
@@ -2292,6 +2387,7 @@ def _so_progress_pct(so_name):
 	if not os_name:
 		return None, None, None
 
+	location = frappe.db.get_value("Sales Order", so_name, "custom_location")
 	items = frappe.db.get_all("IB Order Sheet Item", filters={"parent": os_name}, fields=["item_code"])
 	wos = frappe.db.get_all(
 		"IB Work Order",
@@ -2304,7 +2400,7 @@ def _so_progress_pct(so_name):
 
 	items_summary = []
 	for item in items:
-		route = _get_stage_route(item.item_code)
+		route = _get_stage_route(item.item_code, location)
 		item_wos = {w.stage: w for w in wo_by_item.get(item.item_code, [])}
 		stages = [{"stage": s, "status": item_wos[s].status if s in item_wos else "Not Created"} for s in route]
 		current = next((s["stage"] for s in stages if s["status"] in ("Pending", "In Progress")), None)

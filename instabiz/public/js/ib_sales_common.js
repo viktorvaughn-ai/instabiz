@@ -20,6 +20,18 @@ frappe.ui.form.on("Quotation", {
 
 frappe.ui.form.on("Sales Order", {
 	refresh: (frm) => ib_set_item_query(frm, "customer"),
+	onload(frm) {
+		if (frm.is_new() && !frm.doc.delivery_date) {
+			frm.set_value("delivery_date", frappe.datetime.add_days(frm.doc.transaction_date || frappe.datetime.get_today(), 8));
+		}
+	},
+	// Default ETD = order date + 8 days — only while the doc is still new/unsaved,
+	// so editing transaction_date on an existing order never touches a real delivery_date.
+	transaction_date(frm) {
+		if (frm.is_new()) {
+			frm.set_value("delivery_date", frappe.datetime.add_days(frm.doc.transaction_date || frappe.datetime.get_today(), 8));
+		}
+	},
 });
 
 // Advance-payment approval gate: a Draft SO with an unapproved advance can't

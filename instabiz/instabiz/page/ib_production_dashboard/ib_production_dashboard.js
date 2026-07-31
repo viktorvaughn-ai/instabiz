@@ -26,11 +26,32 @@ const STAGE_COLORS = {
 	delivered:        "#10b981",
 };
 
+function _etd_badge(dateStr) {
+	if (!dateStr) return "";
+	const days = frappe.datetime.get_diff(dateStr, frappe.datetime.get_today());
+	let color = "#059669"; // on track
+	if (days < 0) color = "#dc2626";       // overdue
+	else if (days <= 2) color = "#ea580c"; // at risk
+	return `<span class="ib-pd-etd-badge" style="background:${color}15;color:${color};border:1px solid ${color}40">
+		<iconify-icon icon="lucide:calendar-clock" width="11" height="11" style="vertical-align:middle;margin-right:3px"></iconify-icon>
+		ETD ${frappe.datetime.str_to_user(dateStr)}
+	</span>`;
+}
+
+const PLAN_PAGE_SIZE = 25;
+
 class IBProductionDashboard {
 	constructor(wrapper) {
 		this.wrapper   = wrapper;
 		this.page      = wrapper.page;
 		this._fetching = false;
+		// Shared with Production Stages (same localStorage key) so picking a
+		// location on either page carries over to the other.
+		this.location_filter = localStorage.getItem("ib_prod_location") || "";
+		this.plan_search = "";
+		this._plan_offset = 0;
+		this._plan_has_more = true;
+		this._plan_loading_more = false;
 		this._inject_styles();
 		this._build_layout();
 		this._add_toolbar_buttons();
@@ -43,6 +64,8 @@ class IBProductionDashboard {
 		this._fetching = true;
 		this._set_refresh_label("Loading…");
 		this.$container.find("#ib-pd-kpis").html(window.ib_skel_kpis ? ib_skel_kpis(4) : "");
+		this._plan_offset = 0;
+		this._plan_has_more = true;
 
 		let _done = 0;
 		const _total = 3;
@@ -56,6 +79,7 @@ class IBProductionDashboard {
 
 		frappe.call({
 			method: "instabiz.overrides.production.get_production_dashboard",
+			args: { location: this.location_filter || "" },
 			callback: (r) => {
 				if (r.message) this._render(r.message);
 				else this._set_refresh_label("No data");
@@ -65,9 +89,12 @@ class IBProductionDashboard {
 		});
 		frappe.call({
 			method: "instabiz.overrides.production.get_production_plan",
-			args: { limit: 25 },
+			args: { limit: PLAN_PAGE_SIZE, start: 0, location: this.location_filter || "", search: this.plan_search || "" },
 			callback: (r) => {
-				if (r.message) this._render_plan(r.message.order_wise || []);
+				const rows = (r.message && r.message.order_wise) || [];
+				this._plan_offset = rows.length;
+				this._plan_has_more = rows.length === PLAN_PAGE_SIZE;
+				this._render_plan(rows);
 				_check_done();
 			},
 			error: () => _check_done(),
@@ -87,16 +114,50 @@ class IBProductionDashboard {
 		});
 	}
 
+	_load_more_plan() {
+		if (this._plan_loading_more || !this._plan_has_more) return;
+		this._plan_loading_more = true;
+		this.$container.find("#ib-pd-plan-more").text("Loading more…");
+		frappe.call({
+			method: "instabiz.overrides.production.get_production_plan",
+			args: { limit: PLAN_PAGE_SIZE, start: this._plan_offset, location: this.location_filter || "", search: this.plan_search || "" },
+			callback: (r) => {
+				const rows = (r.message && r.message.order_wise) || [];
+				this._plan_offset += rows.length;
+				this._plan_has_more = rows.length === PLAN_PAGE_SIZE;
+				this._plan_loading_more = false;
+				this._render_plan(rows, true);
+			},
+			error: () => { this._plan_loading_more = false; },
+		});
+	}
+
 	// ── Layout ────────────────────────────────────────────────────────────────
 	_build_layout() {
 		this.$container = $(`
 			<div class="ib-pd-page container">
-				<div style="text-align:right;margin-bottom:8px">
+				<div class="ib-pd-top-bar">
+					<div class="ib-pd-loc-group">
+						<iconify-icon icon="lucide:map-pin" width="13" height="13" style="color:var(--text-muted)"></iconify-icon>
+						<select id="ib-pd-location" class="ib-ps-select form-control">
+							<option value="">All Locations</option>
+							<option value="gujarat">Gujarat (Factory)</option>
+							<option value="maharashtra">Maharashtra (Warehouse)</option>
+							<option value="chennai">Chennai (Warehouse)</option>
+						</select>
+					</div>
 					<span id="ib-pd-refresh-ts" class="ib-pd-refresh-time"></span>
 				</div>
 				<div class="ib-pd-kpi-row" id="ib-pd-kpis"></div>
-				<div class="ib-pd-section-title">Pipeline</div>
-				<div class="ib-pd-pipeline" id="ib-pd-pipeline"></div>
+				<div id="ib-pd-pipeline-section" style="display:none">
+					<div class="ib-pd-section-title">Pipeline</div>
+					<div class="ib-pd-pipeline" id="ib-pd-pipeline"></div>
+				</div>
+				<div id="ib-pd-pipeline-hint" class="ib-pd-empty" style="display:none">
+					<iconify-icon icon="lucide:map-pin" width="15" height="15" style="vertical-align:middle;margin-right:5px;opacity:.6"></iconify-icon>
+					Pick a location above to see its stage pipeline — Maharashtra and Chennai are
+					warehouse-only (Packing → Ready to Deliver), Gujarat runs the full factory chain.
+				</div>
 				<div class="ib-pd-row-2">
 					<div class="ib-pd-priority-strip" id="ib-pd-priority"></div>
 					<div class="ib-pd-wastage-card" id="ib-pd-wastage"></div>
@@ -114,12 +175,44 @@ class IBProductionDashboard {
 				</div>
 				<div id="ib-pd-bundles"></div>
 				<div class="ib-pd-section-title">Active Production Plan</div>
+				<div class="ib-pd-filter-group ib-pd-filter-group--search">
+					<iconify-icon icon="lucide:search" width="13" height="13" style="color:var(--text-muted)"></iconify-icon>
+					<input type="text" id="ib-pd-plan-search" class="ib-pd-search-input" placeholder="Search Sales Order or customer…">
+				</div>
 				<div id="ib-pd-plan"></div>
+				<div id="ib-pd-plan-more" class="ib-pd-empty" style="padding:14px;font-size:12px"></div>
 				<div class="ib-pd-section-title">Recent Entries</div>
 				<div id="ib-pd-recent"></div>
 				<div class="ib-pd-quick-actions" id="ib-pd-actions"></div>
 			</div>
 		`).appendTo($(this.wrapper).find(".layout-main-section"));
+
+		this.$container.find("#ib-pd-location").val(this.location_filter);
+		this.$container.find("#ib-pd-location").on("change", (e) => {
+			this.location_filter = $(e.target).val();
+			localStorage.setItem("ib_prod_location", this.location_filter);
+			this.refresh();
+		});
+
+		let plan_search_timer = null;
+		this.$container.find("#ib-pd-plan-search").on("input", (e) => {
+			clearTimeout(plan_search_timer);
+			const val = $(e.target).val();
+			plan_search_timer = setTimeout(() => {
+				this.plan_search = val;
+				this.refresh();
+			}, 300);
+		});
+
+		// Infinite scroll — the Desk layout scrolls the whole page, not this
+		// container, so listen on window and check how close #ib-pd-plan-more is.
+		this._scroll_handler = () => {
+			const $sentinel = this.$container.find("#ib-pd-plan-more");
+			if (!$sentinel.length || !$sentinel.is(":visible")) return;
+			const rect = $sentinel[0].getBoundingClientRect();
+			if (rect.top < window.innerHeight + 300) this._load_more_plan();
+		};
+		$(window).on("scroll.ib-pd-plan", this._scroll_handler);
 	}
 
 	_add_toolbar_buttons() {
@@ -133,7 +226,14 @@ class IBProductionDashboard {
 	// ── Render ────────────────────────────────────────────────────────────────
 	_render(data) {
 		this._render_kpis(data.summary || {});
-		this._render_pipeline(data.pipeline || []);
+		if (this.location_filter) {
+			this.$container.find("#ib-pd-pipeline-section").show();
+			this.$container.find("#ib-pd-pipeline-hint").hide();
+			this._render_pipeline(data.pipeline || []);
+		} else {
+			this.$container.find("#ib-pd-pipeline-section").hide();
+			this.$container.find("#ib-pd-pipeline-hint").show();
+		}
 		this._render_priority(data.priority_overview || {});
 		this._render_wastage(data.avg_wastage_today);
 		this._render_recent(data.recent_entries || []);
@@ -315,10 +415,16 @@ class IBProductionDashboard {
 		`);
 	}
 
-	_render_plan(order_sheets) {
+	_render_plan(order_sheets, append) {
 		const $el = this.$container.find("#ib-pd-plan");
-		if (!order_sheets.length) {
+		const $more = this.$container.find("#ib-pd-plan-more");
+		if (!append && !order_sheets.length) {
 			$el.html(`<div class="ib-pd-empty">No active Order Sheets. Submit a Sales Order to auto-generate production.</div>`);
+			$more.text("");
+			return;
+		}
+		if (append && !order_sheets.length) {
+			$more.text(this._plan_has_more ? "" : "— end of list —");
 			return;
 		}
 
@@ -369,14 +475,14 @@ class IBProductionDashboard {
 						<iconify-icon icon="lucide:chevron-right" width="13" height="13" class="ib-pd-plan-chevron"
 							style="flex-shrink:0;transition:transform .15s;${collapsedByDefault ? "" : "transform:rotate(90deg)"}"></iconify-icon>
 						<div class="ib-pd-plan-so">
+							<span class="ib-pd-tag ib-pd-tag--so" title="Sales Order">SO</span>
 							<a href="/app/sales-order/${os.sales_order || ""}" target="_blank" onclick="event.stopPropagation()">${os.sales_order || os.name}</a>
 							— ${os.customer_name || os.customer || ""}
 							<span style="color:var(--text-muted);font-size:11px;font-weight:400">(${itemCount} item${itemCount !== 1 ? "s" : ""})</span>
 						</div>
 						<div class="ib-pd-plan-meta">
 							<span class="ib-pd-priority-badge" style="background:${pColor};font-size:11px;padding:2px 10px">${os.priority}</span>
-							${os.delivery_date ? `<span class="ib-pd-plan-date"><iconify-icon icon="lucide:calendar" width="12" height="12" style="vertical-align:middle;margin-right:3px"></iconify-icon>${frappe.datetime.str_to_user(os.delivery_date)}</span>` : ""}
-							<a href="/app/ib-order-sheet/${os.name}" target="_blank" class="ib-pd-plan-link" onclick="event.stopPropagation()">${os.name}</a>
+							${_etd_badge(os.delivery_date)}
 						</div>
 					</div>
 					<table class="ib-pd-table ib-pd-plan-table" data-os-body="${os.name}" style="${collapsedByDefault ? "display:none" : ""}">
@@ -388,7 +494,8 @@ class IBProductionDashboard {
 				</div>`;
 		}).join("");
 
-		$el.html(rows);
+		if (append) $el.append(rows); else $el.html(rows);
+		$more.text(this._plan_has_more ? "" : (this._plan_offset ? "— end of list —" : ""));
 		$el.off("click", ".ib-pd-plan-toggle").on("click", ".ib-pd-plan-toggle", (e) => {
 			const os = $(e.currentTarget).data("os");
 			const $body = $el.find(`[data-os-body="${os}"]`);
@@ -747,6 +854,25 @@ class IBProductionDashboard {
 				font-size: 11px;
 				color: var(--primary, #d97757);
 				text-decoration: none;
+			}
+			.ib-pd-tag {
+				display: inline-block;
+				font-size: 9.5px;
+				font-weight: 800;
+				letter-spacing: .03em;
+				border-radius: 4px;
+				padding: 1px 5px;
+				margin-right: 4px;
+				vertical-align: middle;
+			}
+			.ib-pd-tag--so { background: #dbeafe; color: #1e3a8a; }
+			.ib-pd-etd-badge {
+				display: inline-flex;
+				align-items: center;
+				font-size: 11px;
+				font-weight: 600;
+				border-radius: 12px;
+				padding: 2px 10px;
 			}
 			.ib-pd-plan-item { font-size: 12px; font-family: monospace; color: #1e293b; }
 			.ib-pd-plan-table { margin-bottom: 0; border-radius: 0; border: none; }
