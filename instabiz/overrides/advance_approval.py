@@ -49,8 +49,27 @@ def set_advance_approval(sales_order, status, remarks=None):
 	if flt(doc.custom_advance_paid) <= 0:
 		frappe.throw(_("No advance payment recorded against this order."))
 
+	# Capture before any zeroing below — the notification/comment should still
+	# state the real amount that was rejected, not 0.
+	rejected_amount = flt(doc.custom_advance_paid)
+
 	doc.db_set("custom_advance_approval_status", status, update_modified=False)
 	doc.db_set("custom_advance_approval_remarks", remarks or "", update_modified=False)
+
+	if status == "Rejected":
+		# A rejected advance no longer counts against this order — it stops
+		# reducing the order's outstanding balance and stops showing as
+		# "received" here. The underlying Payment Entry is untouched (real
+		# cash was genuinely received); if it needs refunding or
+		# re-allocating, that's a separate real accounting action, not
+		# something this field should silently paper over. _update_so_advance
+		# also skips recomputing this field once a SO is Rejected, so a later
+		# unrelated PE event on the same order can't quietly revive it.
+		doc.db_set("custom_advance_paid", 0, update_modified=False)
+		customer = doc.customer
+		if customer:
+			from instabiz.overrides.customer import refresh_customer_outstanding
+			refresh_customer_outstanding(customer)
 
 	doc.add_comment(
 		"Info",
@@ -64,7 +83,7 @@ def set_advance_approval(sales_order, status, remarks=None):
 			"doctype":       "Notification Log",
 			"subject":       f"[ib-advance-approval-{doc.name}] Advance {status.lower()} for {doc.name}"[:140],
 			"email_content": _("Advance payment of {0} for {1} was {2} by {3}.{4}").format(
-				fmt_money(doc.custom_advance_paid, currency=doc.currency),
+				fmt_money(rejected_amount, currency=doc.currency),
 				doc.name, status.lower(), frappe.session.user,
 				f" Remarks: {remarks}" if remarks else "",
 			),

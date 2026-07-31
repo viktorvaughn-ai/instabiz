@@ -155,6 +155,12 @@ def _update_so_advance(doc):
 		if ref.reference_doctype == "Sales Order"
 	}
 	for so_name in so_names:
+		# A Rejected advance is a deliberate decision that the current advance
+		# no longer counts for this order — don't let an unrelated PE event
+		# (submit/cancel of some other PE still referencing this SO) silently
+		# recompute it back to a nonzero value. See set_advance_approval().
+		if frappe.db.get_value("Sales Order", so_name, "custom_advance_approval_status") == "Rejected":
+			continue
 		total = frappe.db.sql(
 			"""
 			SELECT COALESCE(SUM(per.allocated_amount), 0)
