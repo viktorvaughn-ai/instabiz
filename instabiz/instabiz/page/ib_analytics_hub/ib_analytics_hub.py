@@ -541,8 +541,14 @@ def _my_work_sales(user, today, since, date_fmt, group_fmt, month_start, pw):
 		from instabiz.instabiz.page.ib_sales_incentives.ib_sales_incentives import (
 			_load_slabs, _get_slab_designation, _apply_slab,
 		)
+		# rev_mtd (dev-mode Sales Order basis), not collected — the real IB
+		# Sales Incentives page (_individual_incentive) computes commission
+		# on revenue for exactly this reason (billing isn't live, so
+		# Sales-Invoice-based "collected" always reads 0 in dev mode). This
+		# was passing `collected` here, so Analytics Hub's Me/Sales tabs
+		# always showed zero commission regardless of real performance.
 		commission, slab_label = _apply_slab(
-			collected, tgt_pct, _get_slab_designation(user), _load_slabs()
+			rev_mtd, tgt_pct, _get_slab_designation(user), _load_slabs()
 		)
 	except Exception:
 		pass
