@@ -62,7 +62,7 @@ class IbItemPriceHistory {
 			label: __("Item"),
 			fieldtype: "Link",
 			options: "Item",
-			reqd: 1,
+			// Not hard-required — Item or Customer (or both) is enough, see refresh().
 			change: () => this._on_item_change(),
 		});
 		this.f_item.$wrapper.addClass("ib-iph-filter-primary");
@@ -214,6 +214,7 @@ class IbItemPriceHistory {
 								<tr>
 									<th data-col="transaction_date">${__("Date")}</th>
 									<th data-col="sales_order">${__("Sales Order")}</th>
+									<th>${__("Item")}</th>
 									<th data-col="customer">${__("Customer")}</th>
 									<th data-col="location">${__("Location")}</th>
 									<th data-col="sales_person">${__("Sales Person")}</th>
@@ -243,7 +244,7 @@ class IbItemPriceHistory {
 					</div>
 				</div>
 				<div class="ib-iph-select-prompt">
-					${__("Select an item above to view its price history.")}
+					${__("Select an Item, a Customer, or both above to view price history.")}
 				</div>
 			</div>
 		`).appendTo(this.$body);
@@ -432,7 +433,8 @@ class IbItemPriceHistory {
 
 	refresh(opts = {}) {
 		const item_code = this.f_item.get_value();
-		if (!item_code) {
+		const customer = this.f_customer.get_value();
+		if (!item_code && !customer) {
 			this._show_idle();
 			return;
 		}
@@ -451,8 +453,8 @@ class IbItemPriceHistory {
 		frappe.call({
 			method: "instabiz.instabiz.page.ib_item_price_history.ib_item_price_history.get_item_price_history",
 			args: {
-				item_code,
-				customer: this.f_customer.get_value() || null,
+				item_code: item_code || null,
+				customer: customer || null,
 				sales_person_user: this.f_sales_person_user.get_value() || null,
 				location: this.f_location.get_value() || null,
 				uom: this.f_uom.get_value() || null,
@@ -566,6 +568,7 @@ class IbItemPriceHistory {
 					<tr class="${i === 0 && this._offset === 0 && this._sort_by === "transaction_date" && this._sort_dir === "desc" ? "ib-iph-row-latest" : ""}">
 						<td>${frappe.datetime.str_to_user(r.transaction_date)}</td>
 						<td><a href="/app/sales-order/${r.sales_order}">${r.sales_order}</a></td>
+						<td>${frappe.utils.escape_html(r.item_name || r.item_code || "")}</td>
 						<td><a href="/app/customer/${encodeURIComponent(r.customer)}">${frappe.utils.escape_html(r.customer_name || r.customer || "")}</a></td>
 						<td>${frappe.utils.escape_html(r.location || "")}</td>
 						<td>${frappe.utils.escape_html(r.sales_person || "")}</td>
@@ -604,14 +607,15 @@ class IbItemPriceHistory {
 
 	_export_csv() {
 		const item_code = this.f_item.get_value();
-		if (!item_code) return;
+		const customer = this.f_customer.get_value();
+		if (!item_code && !customer) return;
 
 		this.$export_btn.prop("disabled", true);
 		frappe.call({
 			method: "instabiz.instabiz.page.ib_item_price_history.ib_item_price_history.export_item_price_history",
 			args: {
-				item_code,
-				customer: this.f_customer.get_value() || null,
+				item_code: item_code || null,
+				customer: customer || null,
 				sales_person_user: this.f_sales_person_user.get_value() || null,
 				location: this.f_location.get_value() || null,
 				uom: this.f_uom.get_value() || null,
@@ -628,10 +632,11 @@ class IbItemPriceHistory {
 					return;
 				}
 				IBStock.csv_download(
-					`Item_Price_History_${item_code}_${frappe.datetime.get_today()}.csv`,
+					`Item_Price_History_${item_code || customer}_${frappe.datetime.get_today()}.csv`,
 					[
 						__("Date"),
 						__("Sales Order"),
+						__("Item"),
 						__("Customer"),
 						__("Location"),
 						__("Sales Person"),
@@ -644,6 +649,7 @@ class IbItemPriceHistory {
 					(row) => [
 						frappe.datetime.str_to_user(row.transaction_date),
 						row.sales_order,
+						row.item_name || row.item_code || "",
 						row.customer_name || row.customer,
 						row.location || "",
 						row.sales_person || "",

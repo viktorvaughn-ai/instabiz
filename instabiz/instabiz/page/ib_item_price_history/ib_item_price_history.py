@@ -19,11 +19,15 @@ SORT_COLUMNS = {
 
 
 def _build_where(item_code, customer, from_date, to_date, sales_person_user, location, uom, search, user):
-	if not item_code:
-		frappe.throw(frappe._("Item is required"))
+	if not item_code and not customer:
+		frappe.throw(frappe._("Select an Item or a Customer"))
 
-	conditions = ["so.docstatus = 1", "soi.item_code = %(item_code)s"]
-	params = {"item_code": item_code}
+	conditions = ["so.docstatus = 1"]
+	params = {}
+
+	if item_code:
+		conditions.append("soi.item_code = %(item_code)s")
+		params["item_code"] = item_code
 
 	if customer:
 		conditions.append("so.customer = %(customer)s")
@@ -104,7 +108,7 @@ def get_item_uoms(item_code):
 
 @frappe.whitelist()
 def get_item_price_history(
-	item_code,
+	item_code=None,
 	customer=None,
 	from_date=None,
 	to_date=None,
@@ -142,6 +146,8 @@ def get_item_price_history(
 			so.customer_name,
 			so.custom_sales_person AS sales_person,
 			so.custom_location AS location,
+			soi.item_code,
+			soi.item_name,
 			soi.qty,
 			soi.uom,
 			soi.rate,
@@ -158,7 +164,7 @@ def get_item_price_history(
 
 	agg = frappe.db.sql(
 		f"""
-		SELECT COUNT(*) AS cnt, MAX(soi.rate) AS max_rate
+		SELECT COUNT(*) AS cnt
 		FROM `tabSales Order Item` soi
 		INNER JOIN `tabSales Order` so ON so.name = soi.parent
 		WHERE {where}
@@ -167,32 +173,58 @@ def get_item_price_history(
 		as_dict=True,
 	)[0]
 
-	# min_rate excludes rate<=0 rows separately — a mis-entered 0-rate SO line
-	# should not make the "Lowest" KPI read ₹0 (the row itself still shows in
-	# the table/count above, only the lowest-price summary skips it).
-	min_row = frappe.db.sql(
-		f"""
-		SELECT MIN(soi.rate) AS min_rate
-		FROM `tabSales Order Item` soi
-		INNER JOIN `tabSales Order` so ON so.name = soi.parent
-		WHERE {where} AND soi.rate > 0
-		""",
-		params,
-		as_dict=True,
-	)[0]
+	total = agg.cnt
 
-	last = frappe.db.sql(
-		f"""
-		SELECT soi.rate
-		FROM `tabSales Order Item` soi
-		INNER JOIN `tabSales Order` so ON so.name = soi.parent
-		WHERE {where}
-		ORDER BY so.transaction_date DESC, so.creation DESC
-		LIMIT 1
-		""",
-		params,
-		as_dict=True,
-	)
+	# Last/lowest/highest rate only mean something when comparing the same
+	# item's price over time — with no item filter (customer-only view) the
+	# rows can span completely different items at unrelated price scales, so
+	# skip these entirely rather than show a misleading blended number.
+	if item_code:
+		max_row = frappe.db.sql(
+			f"""
+			SELECT MAX(soi.rate) AS max_rate
+			FROM `tabSales Order Item` soi
+			INNER JOIN `tabSales Order` so ON so.name = soi.parent
+			WHERE {where}
+			""",
+			params,
+			as_dict=True,
+		)[0]
+
+		# min_rate excludes rate<=0 rows separately — a mis-entered 0-rate SO
+		# line should not make the "Lowest" KPI read ₹0 (the row itself still
+		# shows in the table/count above, only the lowest-price summary skips it).
+		min_row = frappe.db.sql(
+			f"""
+			SELECT MIN(soi.rate) AS min_rate
+			FROM `tabSales Order Item` soi
+			INNER JOIN `tabSales Order` so ON so.name = soi.parent
+			WHERE {where} AND soi.rate > 0
+			""",
+			params,
+			as_dict=True,
+		)[0]
+
+		last = frappe.db.sql(
+			f"""
+			SELECT soi.rate
+			FROM `tabSales Order Item` soi
+			INNER JOIN `tabSales Order` so ON so.name = soi.parent
+			WHERE {where}
+			ORDER BY so.transaction_date DESC, so.creation DESC
+			LIMIT 1
+			""",
+			params,
+			as_dict=True,
+		)
+		summary = {
+			"count": total,
+			"last_rate": last[0].rate if last else None,
+			"min_rate": min_row.min_rate,
+			"max_rate": max_row.max_rate,
+		}
+	else:
+		summary = {"count": total, "last_rate": None, "min_rate": None, "max_rate": None}
 
 	trend_rows = frappe.db.sql(
 		f"""
@@ -207,14 +239,6 @@ def get_item_price_history(
 		as_dict=True,
 	)
 
-	total = agg.cnt
-	summary = {
-		"count": total,
-		"last_rate": last[0].rate if last else None,
-		"min_rate": min_row.min_rate,
-		"max_rate": agg.max_rate,
-	}
-
 	return {
 		"data": rows,
 		"total": total,
@@ -225,7 +249,7 @@ def get_item_price_history(
 
 @frappe.whitelist()
 def export_item_price_history(
-	item_code,
+	item_code=None,
 	customer=None,
 	from_date=None,
 	to_date=None,
@@ -253,6 +277,8 @@ def export_item_price_history(
 			so.customer_name,
 			so.custom_sales_person AS sales_person,
 			so.custom_location AS location,
+			soi.item_code,
+			soi.item_name,
 			soi.qty,
 			soi.uom,
 			soi.rate,
