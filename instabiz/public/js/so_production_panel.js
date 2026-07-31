@@ -127,7 +127,6 @@ function _ib_build_prod_panel(data) {
 	const dispatch   = data.dispatch || {};
 	const dispMeta   = _IB_DISPATCH[dispatch.status] || _IB_DISPATCH["Not Dispatched"];
 	const priColor   = _IB_PRIORITY_COLOR[data.priority] || "#6b7280";
-	const osHref     = data.order_sheet ? `/app/ib-order-sheet/${data.order_sheet}` : null;
 
 	const rtdBanner = data.ready_to_deliver ? `
 		<div style="background:#fff7ed;border:1px solid #ea580c40;border-radius:6px;
@@ -196,8 +195,6 @@ function _ib_build_prod_panel(data) {
 			<iconify-icon icon="lucide:factory" width="14" height="14"
 				style="color:var(--text-muted);flex-shrink:0"></iconify-icon>
 			<strong style="font-size:13px">Production</strong>
-			${osHref ? `<a href="${osHref}" target="_blank"
-				style="font-size:11px;color:var(--primary)">${_ib_esc(data.order_sheet)}</a>` : ""}
 			<span style="background:${priColor}18;color:${priColor};
 				padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700;
 				text-transform:uppercase">${_ib_esc(data.priority || "Normal")}</span>

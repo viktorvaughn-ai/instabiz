@@ -1,0 +1,151 @@
+{
+ "actions": [],
+ "autoname": "field:terminal_name",
+ "creation": "2026-07-31 10:13:03.556322",
+ "doctype": "DocType",
+ "description": "Hikvision ISAPI attendance terminal master — credentials + sync config for one physical fingerprint/access-control device.",
+ "engine": "InnoDB",
+ "field_order": [
+  "terminal_name",
+  "location",
+  "status",
+  "col_break_1",
+  "ip_address",
+  "port",
+  "sync_mode",
+  "sec_break_1",
+  "username",
+  "password",
+  "last_sync"
+ ],
+ "fields": [
+  {
+   "fieldname": "terminal_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Terminal Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "location",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Location",
+   "options": "\nmaharashtra\ngujarat\nchennai"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Active\nInactive",
+   "default": "Active",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "ip_address",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "IP Address",
+   "reqd": 1
+  },
+  {
+   "fieldname": "port",
+   "fieldtype": "Int",
+   "label": "Port",
+   "default": "80",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "sync_mode",
+   "fieldtype": "Select",
+   "label": "Sync Mode",
+   "options": "Push\nPull\nBoth",
+   "default": "Both",
+   "reqd": 1,
+   "description": "Push: device posts events to our webhook. Pull: we poll the device on a schedule. Both: support either."
+  },
+  {
+   "fieldname": "sec_break_1",
+   "fieldtype": "Section Break",
+   "label": "Device Credentials"
+  },
+  {
+   "fieldname": "username",
+   "fieldtype": "Data",
+   "label": "Username",
+   "reqd": 1
+  },
+  {
+   "fieldname": "password",
+   "fieldtype": "Password",
+   "label": "Password",
+   "reqd": 1
+  },
+  {
+   "fieldname": "last_sync",
+   "fieldtype": "Datetime",
+   "label": "Last Sync",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-31 10:13:03.556322",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "IB Hikvision Terminal",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "select": 1,
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR Manager",
+   "select": 1,
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR User",
+   "select": 1,
+   "share": 0,
+   "write": 0
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "terminal_name",
+ "track_changes": 1
+}

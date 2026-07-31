@@ -1,8 +1,14 @@
-"""instabiz.overrides.comment — notify doc owner when a comment is posted on Q or SO."""
+"""instabiz.overrides.comment — notify doc owner (and, for Sales Orders in
+active production, factory roles) when a comment is posted on Q or SO."""
 import frappe
 
 
 WATCHED_DOCTYPES = {"Quotation", "Sales Order"}
+
+# Same "notify everyone with role X" query pattern as payment_entry.py's
+# _notify_accounts() / reorder_alert.py — role-based recipient lookup via
+# `tabHas Role`, not a hardcoded user list.
+_FACTORY_ROLES = frozenset({"Factory Management", "Factory Production", "System Manager"})
 
 
 def notify_owner_on_comment(doc, method=None):
@@ -11,12 +17,29 @@ def notify_owner_on_comment(doc, method=None):
 	Sends an in-app notification + email to the document owner (custom_sales_person_user)
 	whenever a real user comment is added to a Quotation or Sales Order.
 	Skips if the commenter IS the owner.
+
+	For Sales Orders that already have an active Order Sheet (production has
+	actually started), also alerts Factory Management / Factory Production /
+	System Manager — a comment on an in-flight production order is relevant
+	to the floor, not just the rep. Quotations, and Sales Orders with no
+	production started yet, are left as sales-rep-only (would be pure noise
+	for factory roles otherwise).
 	"""
 	if doc.comment_type != "Comment":
 		return
 	if doc.reference_doctype not in WATCHED_DOCTYPES:
 		return
 
+	commenter = frappe.session.user
+	commenter_name = frappe.db.get_value("User", commenter, "full_name") or commenter
+
+	_notify_sales_owner(doc, commenter, commenter_name)
+
+	if doc.reference_doctype == "Sales Order":
+		_notify_factory_roles(doc, commenter, commenter_name)
+
+
+def _notify_sales_owner(doc, commenter, commenter_name):
 	owner_user = frappe.db.get_value(
 		doc.reference_doctype,
 		doc.reference_name,
@@ -25,12 +48,9 @@ def notify_owner_on_comment(doc, method=None):
 
 	if not owner_user:
 		return
-
-	commenter = frappe.session.user
 	if commenter == owner_user:
 		return
 
-	commenter_name = frappe.db.get_value("User", commenter, "full_name") or commenter
 	subject = f"New comment on {doc.reference_doctype} {doc.reference_name}"
 	message = (
 		f"<b>{commenter_name}</b> commented on "
@@ -51,3 +71,48 @@ def notify_owner_on_comment(doc, method=None):
 		"from_user":     commenter,
 		"type":          "Alert",
 	}).insert(ignore_permissions=True)
+
+
+def _notify_factory_roles(doc, commenter, commenter_name):
+	has_active_production = frappe.db.exists(
+		"IB Order Sheet",
+		{"sales_order": doc.reference_name, "status": ["!=", "Cancelled"]},
+	)
+	if not has_active_production:
+		return
+
+	users = frappe.db.sql(
+		"""
+		SELECT DISTINCT ur.parent
+		FROM `tabHas Role` ur
+		INNER JOIN `tabUser` u ON u.name = ur.parent
+		WHERE ur.role IN %(roles)s
+		  AND ur.parent != 'Administrator'
+		  AND u.enabled = 1
+		""",
+		{"roles": list(_FACTORY_ROLES)},
+		pluck="parent",
+	)
+	if not users:
+		return
+
+	subject = f"New comment on Sales Order {doc.reference_name}"
+	message = (
+		f"<b>{commenter_name}</b> commented on "
+		f"<b>Sales Order {doc.reference_name}</b> (in production):<br><br>"
+		f"{doc.content}"
+	)
+
+	for user in users:
+		if user == commenter:
+			continue
+		frappe.get_doc({
+			"doctype":       "Notification Log",
+			"subject":       subject,
+			"email_content": message,
+			"document_type": doc.reference_doctype,
+			"document_name": doc.reference_name,
+			"for_user":      user,
+			"from_user":     commenter,
+			"type":          "Alert",
+		}).insert(ignore_permissions=True)

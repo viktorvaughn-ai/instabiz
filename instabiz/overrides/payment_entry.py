@@ -18,11 +18,13 @@ def on_submit(doc, method=None):
 	_notify_accounts(doc)
 	_update_so_advance(doc)
 	_update_customer_outstanding(doc)
+	_update_advance_for_so(doc)
 
 
 def on_cancel(doc, method=None):
 	_update_so_advance(doc)
 	_update_customer_outstanding(doc)
+	_update_advance_for_so(doc)
 
 
 def _auto_reconcile(doc):
@@ -200,6 +202,63 @@ def _maybe_flag_advance_pending(so_name, total_advance):
 			"Sales Order", so_name, "custom_advance_approval_status", "Pending", update_modified=False
 		)
 		_notify_advance_approver(so_name, row.customer_name, total_advance, row.currency)
+
+
+def _update_advance_for_so(doc):
+	"""On-account advance path: doc.custom_advance_for_so (set on a Receive PE
+	that carries NO references row — see payment_entry.js / ib_sales_common.js's
+	"Record Advance (Deposit)" button) drives the same Pending-flag +
+	custom_advance_paid tracking that _update_so_advance() does for
+	reference-row-based PEs on already-submitted SOs. This is the path that
+	actually works for a Draft SO, since PaymentEntry.validate_reference_documents()
+	unconditionally throws "Sales Order X must be submitted" the moment a PE's
+	references table contains a row pointing at a non-submitted Sales Order —
+	structurally impossible for the old path to ever fire pre-submit. Mirrors
+	the old path's Rejected-guard so a rejected advance can't be silently
+	revived by an unrelated PE event on the same SO.
+	"""
+	if doc.payment_type != "Receive" or not doc.custom_advance_for_so:
+		return
+	so_name = doc.custom_advance_for_so
+
+	if frappe.db.get_value("Sales Order", so_name, "custom_advance_approval_status") == "Rejected":
+		return
+
+	# Sum only PEs whose custom_advance_for_so actually points at THIS SO — not
+	# a PE's full paid_amount blindly, which could theoretically apply
+	# elsewhere (the same fan-out class of bug already fixed for
+	# allocated_amount vs paid_amount in ib_analytics_hub.py's advance_collected KPI).
+	total = frappe.db.sql(
+		"""
+		SELECT COALESCE(SUM(pe.paid_amount), 0)
+		FROM `tabPayment Entry` pe
+		WHERE pe.custom_advance_for_so = %s
+		  AND pe.payment_type       = 'Receive'
+		  AND pe.docstatus          = 1
+		""",
+		so_name,
+	)[0][0]
+	total = flt(total)
+
+	row = frappe.db.get_value(
+		"Sales Order", so_name,
+		["docstatus", "custom_advance_approval_status", "customer_name", "customer", "currency"],
+		as_dict=True,
+	)
+	if not row:
+		return
+
+	frappe.db.set_value("Sales Order", so_name, "custom_advance_paid", total)
+
+	if row.docstatus == 0 and not row.custom_advance_approval_status and total > 0:
+		frappe.db.set_value(
+			"Sales Order", so_name, "custom_advance_approval_status", "Pending", update_modified=False
+		)
+		_notify_advance_approver(so_name, row.customer_name, total, row.currency)
+
+	if row.customer:
+		from instabiz.overrides.customer import refresh_customer_outstanding
+		refresh_customer_outstanding(row.customer)
 
 
 def _notify_advance_approver(so_name, customer_name, total_advance, currency):

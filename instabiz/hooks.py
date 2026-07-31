@@ -42,6 +42,14 @@ scheduler_events = {
         # Monthly payroll draft creation — fires daily but only acts on the 7th
         "instabiz.overrides.payroll.run_monthly_payroll_draft",
     ],
+    "cron": {
+        # Poll Active Hikvision terminals (Pull/Both sync_mode) for new
+        # attendance events every 15 minutes — near-real-time without
+        # hammering the device with constant requests.
+        "*/15 * * * *": [
+            "instabiz.overrides.hikvision.run_hikvision_sync",
+        ],
+    },
 }
 
 # ── Employee Exit Handover: pending document sources ───────────────────────────
@@ -133,7 +141,7 @@ fixtures = [
         "filters": [["doc_type", "in", ["Quotation", "Sales Order", "Lead", "Delivery Note", "Customer",
                                           "IB Credit Note", "IB Debit Note", "Purchase Invoice",
                                           "Purchase Order", "Purchase Receipt", "Sales Invoice",
-                                          "Salary Slip"]]]
+                                          "Salary Slip", "IB Work Order", "IB Order Sheet"]]]
     },
     {
         "dt": "Custom DocPerm",
@@ -303,6 +311,23 @@ override_whitelisted_methods = {
         "instabiz.overrides.workspace_filter.get_desktop_page",
 }
 
+# Exposes Python functions directly as Jinja globals (by function name, not
+# dotted path) — used by the "IB Job Order Summary" print format
+# (instabiz/instabiz/print_format/ib_job_order_summary/) to reuse the same
+# "one actionable Work Order per item" logic the Order-wise list's bulk-print
+# button already calls over HTTP. Deliberately NOT called via the `frappe.call`
+# Jinja global for this: that goes through frappe.handler.execute_cmd ->
+# is_valid_http_method, which reads frappe.local.request.method — fine for a
+# real browser print/download click, but throws AttributeError when there is
+# no active HTTP request (e.g. frappe.get_print(...) from bench console, or
+# any future scheduled/emailed use of this print format). A `jinja` methods
+# hook calls the function directly with no HTTP-request dependency at all.
+jinja = {
+    "methods": [
+        "instabiz.overrides.production.get_order_sheet_wo_names",
+    ],
+}
+
 # ── Frontend assets ───────────────────────────────────────────────────────────
 app_include_css = ["instabiz.bundle.css"]
 app_include_js  = [
@@ -356,4 +381,5 @@ doctype_js = {
     "Purchase Invoice":        "public/js/ib_purchase_common.js",
     "IB Credit Note":          "public/js/ib_credit_note.js",
     "IB Debit Note":           "public/js/ib_debit_note.js",
+    "Payment Entry":           "public/js/payment_entry.js",
 }

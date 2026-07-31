@@ -618,7 +618,7 @@ def run_prod_notify_ready(trigger="schedule"):
 		for os_row in os_rows:
 			sales_user = os_row.custom_sales_person_user or ""
 			summary = (
-				f"Order Sheet {os_row.name} for {os_row.customer_name} ({os_row.sales_order}) "
+				f"Sales Order {os_row.sales_order} for {os_row.customer_name} "
 				f"is fully Ready to Deliver. Notify: {sales_user or 'unassigned'}."
 			)
 			draft = {
@@ -664,7 +664,7 @@ def run_prod_auto_os(trigger="schedule"):
 		records = len(sos)
 		for so in sos:
 			summary = (
-				f"SO {so.name} for {so.customer_name} has no Order Sheet. "
+				f"SO {so.name} for {so.customer_name} has not started production. "
 				f"Delivery: {so.delivery_date or 'not set'}. Auto-create?"
 			)
 			draft = {

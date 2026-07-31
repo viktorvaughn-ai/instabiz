@@ -66,3 +66,26 @@ function ib_decide_advance(frm, status) {
 		__(status)
 	);
 }
+
+// Record Advance (Deposit) — the only way to reach the advance-approval feature
+// at all pre-submit. The standard "Create > Payment" button never shows for a
+// Draft SO, and a Payment Entry referencing a non-submitted Sales Order in its
+// references table is rejected outright by core ERPNext validation. This opens
+// a plain on-account Payment Entry instead: no references row, just
+// custom_advance_for_so pointing back at this order (see payment_entry.js /
+// instabiz.overrides.payment_entry._update_advance_for_so).
+frappe.ui.form.on("Sales Order", {
+	refresh(frm) {
+		if (frm.doc.docstatus !== 0 || frm.is_new()) return;
+		if (!frm.doc.customer) return;
+
+		frm.add_custom_button(__("Record Advance (Deposit)"), () => {
+			frappe.new_doc("Payment Entry", {
+				payment_type: "Receive",
+				party_type: "Customer",
+				party: frm.doc.customer,
+				custom_advance_for_so: frm.doc.name,
+			});
+		}, __("Create"));
+	},
+});

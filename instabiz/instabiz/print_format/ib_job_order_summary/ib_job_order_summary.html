@@ -1,0 +1,108 @@
+{% set wo_names = get_order_sheet_wo_names(doc.name) or [] %}
+{% set rows = [] %}
+{% for wo_name in wo_names %}
+  {% set wo = frappe.get_doc("IB Work Order", wo_name) %}
+  {% set dims = frappe.db.get_value("Sales Order Item", {"parent": doc.sales_order, "item_code": wo.item_code}, ["color", "width_mm", "length_mtr", "qty_pkg", "total_pkg"], as_dict=True) if doc.sales_order else None %}
+  {% set machine_name = frappe.db.get_value("IB Machine", wo.machine, "machine_name") if wo.machine else None %}
+  {% set jr = frappe.get_doc("IB Jumbo Roll", wo.jumbo_roll) if wo.jumbo_roll else None %}
+  {% if rows.append({"wo": wo, "dims": dims, "machine_name": machine_name, "jr": jr}) %}{% endif %}
+{% endfor %}
+<style>
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; }
+  .jos-header { text-align: center; margin-bottom: 8px; }
+  .jos-header img { width: 100%; max-height: 55px; object-fit: contain; display: block; margin: 0 auto 6px; }
+  .jos-header h2 { margin: 4px 0 0; font-size: 18px; letter-spacing: 1px; }
+  .jos-ref { text-align: center; font-size: 11px; color: #555; margin-bottom: 10px; }
+  table.jos-items { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+  table.jos-items th { background: #d97757; color: #fff; padding: 4px 6px; text-align: left; font-size: 10px; white-space: nowrap; }
+  table.jos-items td { border-bottom: 1px solid #ddd; padding: 4px 6px; vertical-align: middle; font-size: 10px; }
+  table.jos-items tr:nth-child(even) td { background: #fafafa; }
+  .jos-empty { text-align: center; padding: 20px; color: #888; font-size: 12px; }
+  .jos-footer { margin-top: 20px; width: 100%; }
+  .jos-footer td { padding: 4px; }
+  .sig-line { border-top: 1px solid #444; padding-top: 4px; text-align: center; font-size: 10px; color: #555; }
+</style>
+
+<div class="jos-header">
+  <img src="/files/Instabiz_LH_v2.png">
+  <h2>JOB ORDER SUMMARY</h2>
+</div>
+
+<div class="jos-ref">
+  Sheet Date: {{ frappe.utils.formatdate(doc.creation, "dd-MMM-yy") if doc.creation else "" }}
+  &nbsp;|&nbsp; Items: {{ rows | length }}
+</div>
+
+{% if rows %}
+<table class="jos-items">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>WO No.</th>
+      <th>Item Code</th>
+      <th>Item Name</th>
+      <th>Stage</th>
+      <th>Machine</th>
+      <th>Qty</th>
+      <th>Pcs/Logs</th>
+      <th>Color</th>
+      <th>Dims</th>
+      <th>Jumbo</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for row in rows %}
+    {% set wo = row.wo %}
+    {% set dims = row.dims %}
+    {% set jr = row.jr %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td>{{ wo.name }}</td>
+      <td>{{ wo.item_code }}</td>
+      <td>{{ wo.item_name or "" }}</td>
+      <td>{{ wo.stage }}</td>
+      <td>{{ wo.machine or "" }}{% if row.machine_name %} - {{ row.machine_name }}{% endif %}</td>
+      <td>{{ wo.target_qty or 0 }} {{ wo.target_uom or "" }}</td>
+      <td>
+        {%- if wo.target_uom == "PCS" and wo.pcs_to_make -%}
+          {{ wo.pcs_to_make }}
+        {%- elif wo.target_uom == "SQMT" and wo.logs_to_make -%}
+          {{ wo.logs_to_make }}
+        {%- else -%}
+          -
+        {%- endif -%}
+      </td>
+      <td>{{ dims.color if dims and dims.color else "-" }}</td>
+      <td>
+        {%- if dims and dims.width_mm and dims.length_mtr -%}
+          {{ dims.width_mm }}mm x {{ dims.length_mtr }}mtr
+        {%- elif dims and dims.qty_pkg and dims.total_pkg -%}
+          {{ dims.qty_pkg }}/pkg x {{ dims.total_pkg }}pkg
+        {%- else -%}
+          -
+        {%- endif -%}
+      </td>
+      <td>
+        {%- if jr and jr.width_mm and jr.length_mtr -%}
+          {{ jr.width_mm }}mm x {{ jr.length_mtr }}mtr
+        {%- elif jr and jr.width_mm -%}
+          {{ jr.width_mm }}mm
+        {%- else -%}
+          -
+        {%- endif -%}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="jos-empty">No active Work Orders to print for this order.</div>
+{% endif %}
+
+<table class="jos-footer">
+  <tr>
+    <td style="width:33%"><div class="sig-line">Operator Signature</div></td>
+    <td style="width:33%"><div class="sig-line">Actual Output Qty / Date</div></td>
+    <td style="width:33%"><div class="sig-line">Checked By</div></td>
+  </tr>
+</table>
