@@ -10,6 +10,11 @@ def get_context(context):
 
 @frappe.whitelist()
 def get_dashboard_data():
+	# Page nav restricts to these roles but the RPC had no internal check —
+	# any authenticated user could pull company-wide revenue/AR/top-customer
+	# data. Same bug class already fixed in ib_finance_dashboard.py /
+	# ib_procurement_dashboard.py — backported here.
+	frappe.only_for(["System Manager", "Sales Manager", "Sales User", "Accounts Manager", "Accounts User", "Factory Management"])
 	today = getdate(nowdate())
 	month_start = get_first_day(today)
 	last_month_start = get_first_day(add_months(today, -1))

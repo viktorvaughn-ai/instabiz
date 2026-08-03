@@ -149,6 +149,47 @@ def _maybe_clear_overdue_block(customer):
 		frappe.logger().info(f"IB: overdue block cleared for {customer} — all dues paid")
 
 
+def _compute_so_advance_total(so_name):
+	"""Total submitted-Receive advance against this SO from BOTH tracking
+	paths — the Payment Entry Reference table (post-submit path, used once
+	the SO is already submitted) and custom_advance_for_so (pre-submit
+	on-account path, see _update_advance_for_so / advance_approval.py). A
+	given PE only ever uses one path or the other — the on-account "Record
+	Advance (Deposit)" button never fills the references child table (that's
+	the whole reason it exists: PaymentEntry.validate_reference_documents()
+	throws if references points at a non-submitted SO) — so summing both
+	here is safe, not a double-count. Without this shared helper, whichever
+	path's own on_submit/on_cancel handler ran most recently would overwrite
+	custom_advance_paid with only its own half of the total and silently
+	drop whatever the other path had already collected — the same
+	inline-duplicate-math class of bug already fixed once in
+	ib_analytics_hub.py's advance_collected KPI.
+	"""
+	from_references = frappe.db.sql(
+		"""
+		SELECT COALESCE(SUM(per.allocated_amount), 0)
+		FROM `tabPayment Entry` pe
+		INNER JOIN `tabPayment Entry Reference` per ON per.parent = pe.name
+		WHERE per.reference_doctype = 'Sales Order'
+		  AND per.reference_name    = %s
+		  AND pe.payment_type       = 'Receive'
+		  AND pe.docstatus          = 1
+		""",
+		so_name,
+	)[0][0]
+	from_on_account = frappe.db.sql(
+		"""
+		SELECT COALESCE(SUM(pe.paid_amount), 0)
+		FROM `tabPayment Entry` pe
+		WHERE pe.custom_advance_for_so = %s
+		  AND pe.payment_type       = 'Receive'
+		  AND pe.docstatus          = 1
+		""",
+		so_name,
+	)[0][0]
+	return flt(from_references) + flt(from_on_account)
+
+
 def _update_so_advance(doc):
 	"""Recompute custom_advance_paid on every Sales Order referenced by this PE."""
 	so_names = {
@@ -163,18 +204,7 @@ def _update_so_advance(doc):
 		# recompute it back to a nonzero value. See set_advance_approval().
 		if frappe.db.get_value("Sales Order", so_name, "custom_advance_approval_status") == "Rejected":
 			continue
-		total = frappe.db.sql(
-			"""
-			SELECT COALESCE(SUM(per.allocated_amount), 0)
-			FROM `tabPayment Entry` pe
-			INNER JOIN `tabPayment Entry Reference` per ON per.parent = pe.name
-			WHERE per.reference_doctype = 'Sales Order'
-			  AND per.reference_name    = %s
-			  AND pe.payment_type       = 'Receive'
-			  AND pe.docstatus          = 1
-			""",
-			so_name,
-		)[0][0]
+		total = _compute_so_advance_total(so_name)
 		frappe.db.set_value("Sales Order", so_name, "custom_advance_paid", flt(total))
 		_maybe_flag_advance_pending(so_name, flt(total))
 		# Dev-mode customer outstanding (Customer.custom_outstanding_amount) is
@@ -224,21 +254,12 @@ def _update_advance_for_so(doc):
 	if frappe.db.get_value("Sales Order", so_name, "custom_advance_approval_status") == "Rejected":
 		return
 
-	# Sum only PEs whose custom_advance_for_so actually points at THIS SO — not
-	# a PE's full paid_amount blindly, which could theoretically apply
-	# elsewhere (the same fan-out class of bug already fixed for
-	# allocated_amount vs paid_amount in ib_analytics_hub.py's advance_collected KPI).
-	total = frappe.db.sql(
-		"""
-		SELECT COALESCE(SUM(pe.paid_amount), 0)
-		FROM `tabPayment Entry` pe
-		WHERE pe.custom_advance_for_so = %s
-		  AND pe.payment_type       = 'Receive'
-		  AND pe.docstatus          = 1
-		""",
-		so_name,
-	)[0][0]
-	total = flt(total)
+	# Use the same combined-total helper _update_so_advance() uses — summing
+	# only this PE's own custom_advance_for_so contribution here would drop
+	# whatever the reference-table path had already collected for this SO
+	# (and vice versa) the next time either handler fires. See
+	# _compute_so_advance_total()'s docstring.
+	total = _compute_so_advance_total(so_name)
 
 	row = frappe.db.get_value(
 		"Sales Order", so_name,

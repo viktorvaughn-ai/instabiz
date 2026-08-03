@@ -1,6 +1,12 @@
 """instabiz.overrides.pdc_alert
 
-Daily scheduler: alert Accounts/Sales users when PDC cheque date is 3 days away.
+Daily scheduler: alert Accounts/Sales users when a Pending PDC cheque is due
+within 3 days, or is already past its cheque date and still Pending.
+
+Was an exact `cheque_date = today+3` match — if the scheduler ever missed a
+day, that cheque silently never got alerted at all. The dedup marker is keyed
+by PDC name only (no date component), so widening this to a catch-up range is
+safe — a user already notified for a given PDC won't be re-notified.
 """
 import frappe
 from frappe.utils import today, add_days, getdate
@@ -11,7 +17,7 @@ def run_pdc_alert():
 
 	pdcs = frappe.get_all(
 		"IB PDC",
-		filters={"cheque_date": alert_date, "status": "Pending"},
+		filters={"cheque_date": ["<=", alert_date], "status": "Pending"},
 		fields=["name", "customer", "customer_name", "cheque_no", "amount", "bank_name",
 		        "cheque_date", "sales_person_user"],
 	)
@@ -38,8 +44,10 @@ def run_pdc_alert():
 		for user in users:
 			if frappe.db.exists("Notification Log", {"for_user": user, "subject": ["like", f"%{marker}%"]}):
 				continue
+			days_left = (getdate(pdc.cheque_date) - getdate(today())).days
+			label = f"overdue by {abs(days_left)}d" if days_left < 0 else f"due in {days_left}d"
 			base = (
-				f"PDC due in 3 days: #{pdc.cheque_no} "
+				f"PDC {label}: #{pdc.cheque_no} "
 				f"{pdc.customer_name or pdc.customer} "
 				f"Rs.{pdc.amount:,.0f} on {pdc.cheque_date}"
 			)

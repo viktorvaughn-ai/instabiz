@@ -114,6 +114,14 @@ def get_daily_attendance(date=None, department=None, search=None, limit=20, offs
 	Return one row per employee with IN time, OUT time and work hours
 	for the given date. Used by the Employee Checkin list view.
 	"""
+	# This queries via raw SQL (bypasses ORM permission query conditions), so it
+	# must replicate employee_checkin_query_conditions/has_permission's own
+	# exclusion of Sales User explicitly — previously this RPC had no gate at
+	# all, letting a Sales User pull company-wide attendance data that the
+	# doctype's own permission hooks are specifically designed to hide from them.
+	if _is_sales_user():
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+
 	limit  = int(limit)
 	offset = int(offset)
 	if not date:

@@ -3,7 +3,8 @@ scheduler_events = {
     "daily": [
         # Runs on relieving_date — creates handover doc, notifies HR Managers
         "instabiz.overrides.employee_exit.run_exit_handover_daily",
-        # Runs on relieving_date + 1 — disables the ERP user account (only for employees marked "Left")
+        # Runs on relieving_date + 1 — disables the ERP user account for any employee
+        # with a set relieving_date (no status filter — see the function's own docstring)
         "instabiz.overrides.employee_exit.run_user_disable_daily",
         # Rolls over pending assignments and generates tomorrow's customer board
         "instabiz.overrides.customer_assignment.run_daily_assignment",

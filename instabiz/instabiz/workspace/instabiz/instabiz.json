@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz",
  "links": [],
- "modified": "2026-07-31 13:41:33.920169",
+ "modified": "2026-08-03 11:11:29.344528",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz",
@@ -75,7 +75,6 @@
    "doc_view": "",
    "label": "Customer Health",
    "link_to": "ib-customer-health",
-   "restrict_to_role": "Sales Manager",
    "type": "Page"
   },
   {
@@ -161,7 +160,6 @@
    "doc_view": "List",
    "label": "Lead Sales Team",
    "link_to": "Lead Sales Team",
-   "restrict_to_role": "Sales Manager",
    "stats_filter": "[]",
    "type": "DocType"
   },
@@ -204,7 +202,6 @@
    "label": "Daily Sales",
    "link_to": "IB Daily Sales Report",
    "report_ref_doctype": "Sales Order",
-   "restrict_to_role": "Sales Manager",
    "type": "Report"
   },
   {
@@ -213,7 +210,6 @@
    "label": "Sales KPIs",
    "link_to": "IB Sales KPIs",
    "report_ref_doctype": "Sales Order",
-   "restrict_to_role": "Sales Manager",
    "type": "Report"
   },
   {
@@ -231,7 +227,6 @@
    "label": "Lost Deals",
    "link_to": "IB Lost Deal Analysis",
    "report_ref_doctype": "Lead",
-   "restrict_to_role": "Sales Manager",
    "type": "Report"
   },
   {
@@ -240,7 +235,6 @@
    "label": "Territory",
    "link_to": "IB Territory Report",
    "report_ref_doctype": "Sales Order",
-   "restrict_to_role": "Sales Manager",
    "type": "Report"
   },
   {
@@ -249,7 +243,6 @@
    "label": "SKU Sales",
    "link_to": "IB SKU Report",
    "report_ref_doctype": "Sales Order",
-   "restrict_to_role": "Sales Manager",
    "type": "Report"
   },
   {
@@ -258,7 +251,6 @@
    "label": "Gross Margin",
    "link_to": "IB Gross Margin",
    "report_ref_doctype": "Sales Order",
-   "restrict_to_role": "Sales Manager",
    "type": "Report"
   },
   {
@@ -267,7 +259,6 @@
    "label": "Collections Report",
    "link_to": "IB Collections Report",
    "report_ref_doctype": "Sales Invoice",
-   "restrict_to_role": "Sales Manager",
    "type": "Report"
   },
   {
@@ -300,7 +291,6 @@
    "label": "Activity Log",
    "link_to": "IB Activity Log",
    "report_ref_doctype": "IB Customer Assignment",
-   "restrict_to_role": "Sales Manager",
    "type": "Report"
   },
   {
@@ -324,7 +314,6 @@
    "label": "Dispatch Report",
    "link_to": "IB Dispatch Report",
    "report_ref_doctype": "Delivery Note",
-   "restrict_to_role": "Sales Manager",
    "type": "Report"
   },
   {

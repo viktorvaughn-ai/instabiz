@@ -67,8 +67,7 @@ class IBDPRPage {
 		this.$btn_weekly = this.page.add_button("Weekly", () => this._set_mode("weekly"), { btn_class: "btn-default ib-dpr-toggle" });
 		this._highlight_mode_btn();
 
-		this.$refresh_label = $(`<span class="ib-dpr-refresh-time"></span>`);
-		this.page.add_inner_message(this.$refresh_label);
+		this.$refresh_label = this.page.add_inner_message("").addClass("ib-dpr-refresh-time");
 		this.page.add_button("Refresh", () => this.refresh(), { icon: "refresh" });
 	}
 

@@ -340,6 +340,11 @@ def run_hikvision_sync():
 	other daily jobs in this app use (e.g. auto_absent.py's per-record
 	savepoint isolation).
 	"""
+	# Scheduler invokes this as Administrator (implicitly has every role), so
+	# this gate only affects direct manual/API callers -- previously this was
+	# whitelisted with no check at all, unlike pull_terminal_events which it
+	# wraps per-terminal.
+	frappe.only_for(_ROLES)
 	terminals = frappe.get_all(
 		"IB Hikvision Terminal",
 		filters={"status": "Active", "sync_mode": ["in", ["Pull", "Both"]]},
