@@ -516,9 +516,8 @@ def transfer_documents(doctype, owner_field, names, to_user,
 # ── Floor price enforcement ───────────────────────────────────────────────────
 
 def _check_floor_price(doc):
-	"""Warn (privileged) or block (rep) when item rate is below cost + min margin."""
+	"""Warn when item rate is below cost + min margin. Never blocks save."""
 	from frappe.utils import flt
-	from instabiz.overrides.permissions import _is_privileged
 
 	if doc.get("currency") and doc.get("currency") != "INR":
 		return  # rate is in foreign currency; cannot compare to INR valuation_rate
@@ -566,10 +565,7 @@ def _check_floor_price(doc):
 		return
 
 	msg = _("Floor price breach:") + "<br>" + "<br>".join(violations)
-	if _is_privileged(frappe.session.user):
-		frappe.msgprint(msg, title=_("Floor Price Warning"), indicator="orange")
-	else:
-		frappe.throw(msg, title=_("Floor Price Breach"))
+	frappe.msgprint(msg, title=_("Floor Price Warning"), indicator="orange")
 
 
 # ── Document attachment stamping + tamper guard ───────────────────────────────

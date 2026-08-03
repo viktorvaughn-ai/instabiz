@@ -132,16 +132,8 @@ def assign_lead_owner(doc, method=None):
     if not doc.territory:
         return
 
-    # Never overwrite a manually assigned lead_owner — but ERPNext core's own
-    # Lead.lead_owner field ships with default="__user", so it's already
-    # populated to the creating/session user on every fresh Lead before this
-    # hook even runs. `if doc.lead_owner: return` therefore always saw a
-    # non-empty value and never actually engaged round-robin (confirmed dead
-    # since 2026-04-06 — 1650 of 2046 real leads were creator-owned, never
-    # rotated). Treat "still equal to the session user" as "still at the
-    # unmodified default", not a real manual assignment; only a lead_owner
-    # that's been explicitly changed to someone else counts as manual.
-    if doc.lead_owner and doc.lead_owner != frappe.session.user:
+    # Never overwrite a manually assigned lead_owner
+    if doc.lead_owner:
         return
 
     # On update, skip if territory hasn't changed
