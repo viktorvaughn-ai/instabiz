@@ -124,16 +124,34 @@ def set_territory_from_pincode(doc, method=None):
 
 
 def assign_lead_owner(doc, method=None):
-    """Assign lead_owner via round-robin based on the lead's territory.
+    """Assign lead_owner via round-robin, or default to the creator.
 
-    Called on after_insert and on_update (only when territory changes).
-    Never overwrites a lead that already has a manually assigned lead_owner.
+    Round-robin (via Lead Sales Team) is gated by site_config
+    "ib_lead_round_robin_enabled" (default off — Issue #7, 2026-08-04:
+    round-robin was misassigning/losing leads, follow-ups getting missed).
+    While off, a new Lead's lead_owner defaults to doc.owner (the creator)
+    on insert. Manual reassignment by Sales Manager/System Manager still
+    works via transfer_leads(). Never overwrites a manually assigned
+    lead_owner. Round-robin logic (_do_assign) is left intact, dormant,
+    for re-enabling later.
     """
-    if not doc.territory:
-        return
-
     # Never overwrite a manually assigned lead_owner
     if doc.lead_owner:
+        return
+
+    if not frappe.utils.cint(frappe.conf.get("ib_lead_round_robin_enabled", 0)):
+        if method != "after_insert":
+            return
+        full_name = frappe.db.get_value("User", doc.owner, "full_name") or doc.owner
+        frappe.db.set_value("Lead", doc.name, {
+            "lead_owner":             doc.owner,
+            "custom_lead_owner_name": full_name,
+        }, update_modified=False)
+        doc.lead_owner             = doc.owner
+        doc.custom_lead_owner_name = full_name
+        return
+
+    if not doc.territory:
         return
 
     # On update, skip if territory hasn't changed
