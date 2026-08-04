@@ -186,7 +186,7 @@ class IBCustomerBoard {
 		`);
 		$("#ib-cb-dormant-more").off("click").on("click", () => this._load_more_my_accounts());
 		$("#ib-cb-admin-banner-btn").off("click").on("click", () => {
-			frappe.set_route("Page", "ib-assignment-admin");
+			frappe.set_route("ib-assignment-admin");
 		});
 	}
 
