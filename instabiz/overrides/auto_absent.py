@@ -42,9 +42,21 @@ def run_auto_absent():
 		# Savepoint, not a full rollback — a full frappe.db.rollback() here would
 		# also discard every OTHER employee's already-inserted (but not yet
 		# committed) Attendance doc from earlier in this same loop.
-		save_point = f"auto_absent_{emp.name}"
-		frappe.db.savepoint(save_point)
+		# NOTE: MariaDB SAVEPOINT names are unquoted SQL identifiers. A raw
+		# employee docname (e.g. "HR-EMP-00162") contains hyphens, which is
+		# invalid syntax there and previously raised ProgrammingError 1064
+		# *before* the try/except below could catch it -- crashing the whole
+		# run on the very first employee, every single day (confirmed live via
+		# 5 consecutive days of "Failed" Scheduled Job Log entries 2026-07-30
+		# through 2026-08-03, and reproduced directly: `savepoint
+		# auto_absent_HR-EMP-00162` errors, `savepoint auto_absent_HR_EMP_00162`
+		# does not). Sanitized, and the savepoint() call itself now lives
+		# inside the try so a future savepoint-level failure is isolated
+		# per-employee like everything else here, instead of aborting the
+		# whole batch again.
+		save_point = f"auto_absent_{emp.name}".replace("-", "_")
 		try:
+			frappe.db.savepoint(save_point)
 			# Skip factory employees — biometric attendance, do not auto-absent
 			if _is_factory_employee(emp.department):
 				skipped_factory += 1

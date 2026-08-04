@@ -3,7 +3,14 @@ from frappe.utils import today, add_days
 
 
 _ALERT_DAYS = [15, 7, 1]
-_OPEN_STATUSES = ["Open", "Replied"]
+# NOTE: CustomQuotation.STATUS_MAP (instabiz/overrides/quotation.py) remaps the
+# raw ERPNext statuses "Open" and "Replied" to the single IB display label
+# "Pending" on every set_status() call (submit, etc.) -- that is what actually
+# gets persisted to the `status` column. Filtering on the raw ERPNext values
+# here matched zero rows in production (verified live: no submitted Quotation
+# has status "Open"/"Replied" in the DB), silently disabling both the 15/7/1
+# day expiry alerts and the auto-expire pass below.
+_OPEN_STATUSES = ["Pending"]
 
 
 def run_quotation_expiry():

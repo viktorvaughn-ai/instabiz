@@ -3,7 +3,16 @@ from frappe.utils import today, add_days, getdate
 
 
 def run_vendor_payment_alert():
-	"""Daily: notify Purchase roles when PO payment due within 7 days."""
+	"""Daily: notify Purchase roles when PO payment is due within 7 days, or is
+	already overdue.
+
+	Was `due_date BETWEEN today AND today+7` — no lower bound, so a payment that
+	actually went overdue silently dropped out of this query forever (it can
+	never re-enter a fixed 7-day-ahead window). The dedup marker is keyed by
+	po_name+due_date (not by "today"), so widening the range to also catch
+	already-overdue rows is safe — anyone already notified for a given
+	po+due_date still won't be re-notified.
+	"""
 	alert_date = getdate(add_days(today(), 7))
 	today_date  = getdate(today())
 
@@ -19,11 +28,11 @@ def run_vendor_payment_alert():
 		FROM `tabPayment Schedule` ps
 		INNER JOIN `tabPurchase Order` po ON po.name = ps.parent
 		WHERE po.docstatus = 1
-		AND ps.due_date BETWEEN %(today)s AND %(alert_date)s
+		AND ps.due_date <= %(alert_date)s
 		AND ps.outstanding > 0
 		ORDER BY ps.due_date ASC
 		""",
-		{"today": today_date, "alert_date": alert_date},
+		{"alert_date": alert_date},
 		as_dict=True,
 	)
 
@@ -57,8 +66,9 @@ def run_vendor_payment_alert():
 			if existing:
 				continue
 
+			label = f"overdue by {abs(days_left)}d" if days_left < 0 else f"due in {days_left}d"
 			base = (
-				f"Payment due in {days_left}d: {row.po_name} "
+				f"Payment {label}: {row.po_name} "
 				f"{row.supplier} {row.currency} {row.outstanding:,.0f} "
 				f"due {row.due_date}"
 			)

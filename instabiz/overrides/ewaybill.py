@@ -62,9 +62,17 @@ def _patch_ship_from(doc):
 	return _orig
 
 
-@frappe.whitelist()
 def _generate_ewaybill_async(doc_name):
-	"""Background job — runs after DN is committed, so failures don't affect DN docstatus."""
+	"""Background job — runs after DN is committed, so failures don't affect DN docstatus.
+
+	Not whitelisted (matches the sibling pattern in einvoice.py's
+	_generate_einvoice_background): this is only ever meant to be invoked via
+	frappe.enqueue() from run_ewaybill_on_submit below, which already applies
+	its own gating (self-pickup / not-configured / already-has-ewaybill
+	checks). @frappe.whitelist() previously made this directly callable over
+	/api/method by ANY authenticated user with an arbitrary doc_name and zero
+	permission check — see custom_generate_e_waybill() for the same bug class.
+	"""
 	doc = frappe.get_doc("Delivery Note", doc_name)
 	if doc.get("ewaybill"):
 		return
@@ -203,6 +211,13 @@ def custom_generate_e_waybill(
 	)
 
 	doc = frappe.get_doc(doctype, docname)
+	# This whitelisted endpoint overrides india_compliance's own generate_e_waybill
+	# (see hooks.py override_whitelisted_methods), whose original implementation
+	# goes through load_doc(doctype, docname, "submit") -> doc.check_permission("submit").
+	# This override dropped that check entirely, letting any authenticated user
+	# generate/mutate an e-way bill for a Delivery Note they have no access to
+	# (row-level Sales isolation bypassed). Restore the same check the original had.
+	doc.check_permission("submit")
 	txn_type = int(transaction_type) if transaction_type else None
 	loc = (doc.get("custom_location") or "").lower()
 	wh_name = LOCATION_WAREHOUSE.get(loc)

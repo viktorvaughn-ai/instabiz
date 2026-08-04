@@ -14,6 +14,14 @@ _GLOBAL_DNSI_SERIES = "IB-DNSI-"
 
 def get_warehouse_code(doc):
     location = (doc.get("custom_location") or "").strip().lower()
+    # custom_location's Custom Field default is the literal string "Select"
+    # (the Select field's own placeholder option), which is truthy — so a
+    # fresh doc where the user hasn't manually picked Location never falls
+    # through to the set_warehouse-derived fallback below, and instead hits
+    # the "Unknown location" throw further down for every save. Treat the
+    # placeholder the same as empty.
+    if location == "select":
+        location = ""
 
     if not location:
         warehouse = (

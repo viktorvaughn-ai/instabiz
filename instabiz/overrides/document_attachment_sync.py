@@ -117,11 +117,39 @@ def _copy_file_to_drive(team, folder_entity, file_url, file_title):
 
 
 def sync_document_attachments_to_drive(doc, method=None):
-	"""Called from Quotation/Sales Order/Delivery Note/Sales Invoice on_update."""
+	"""Called from Quotation/Sales Order/Delivery Note/Sales Invoice on_update.
+
+	Only enqueues a background job when there's real work to do — the actual
+	Drive I/O (folder creation, file copy) runs in a worker so a slow/unavailable
+	Drive backend can never add latency to a user's document save. Was previously
+	synchronous inline here; employee_drive.py's sync_employee_docs_to_drive
+	already used frappe.enqueue for the equivalent Drive-sync work (see its
+	after_save hook) — this brought the newer, direct on_update wiring in line
+	with that established pattern (same bug class as the n8n inline-webhook fix
+	documented for production.py).
+	"""
 	rows = doc.get(_FIELDNAME) or []
 	if not rows:
 		return
 
+	pending = [r for r in rows if r.attachment and not r.drive_file_id]
+	if not pending:
+		return
+
+	frappe.enqueue(
+		"instabiz.overrides.document_attachment_sync._sync_document_attachments_to_drive_job",
+		queue="short",
+		enqueue_after_commit=True,
+		doctype=doc.doctype,
+		docname=doc.name,
+	)
+
+
+def _sync_document_attachments_to_drive_job(doctype, docname):
+	"""Background worker body — does the actual Drive I/O. See
+	sync_document_attachments_to_drive() for why this runs off the request path."""
+	doc = frappe.get_doc(doctype, docname)
+	rows = doc.get(_FIELDNAME) or []
 	pending = [r for r in rows if r.attachment and not r.drive_file_id]
 	if not pending:
 		return

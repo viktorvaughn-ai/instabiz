@@ -12,6 +12,12 @@ def create_sales_person_for_user(doc, method=None):
     """
     Create a Sales Person master record when a new Sales User is created.
     Skips system users, users without a first name, and duplicates.
+
+    Wrapped in try/except: this is an auxiliary side-effect of user creation
+    (same class as the other two after_insert hooks below) — a failure here
+    (e.g. a duplicate-name race, or an unexpected Sales Person validation
+    error) must never block the real User record from being created. Errors
+    are logged, not swallowed silently.
     """
     if doc.name in SYSTEM_USERS:
         return
@@ -25,62 +31,78 @@ def create_sales_person_for_user(doc, method=None):
     if not first_name:
         return
 
-    # Avoid duplicate Sales Person records
-    existing = frappe.db.get_value("Sales Person", {"sales_person_name": first_name}, "name")
-    if existing:
-        return
+    try:
+        # Avoid duplicate Sales Person records
+        existing = frappe.db.get_value("Sales Person", {"sales_person_name": first_name}, "name")
+        if existing:
+            return
 
-    sp = frappe.new_doc("Sales Person")
-    sp.sales_person_name = first_name
-    sp.enabled = 1
-    sp.insert(ignore_permissions=True)
+        sp = frappe.new_doc("Sales Person")
+        sp.sales_person_name = first_name
+        sp.enabled = 1
+        sp.insert(ignore_permissions=True)
+    except Exception:
+        frappe.log_error("IB User Onboarding: Sales Person creation failed", frappe.get_traceback())
 
 
 def copy_admin_defaults(doc, method=None):
     """
     Copy every DefaultValue record from Administrator to the newly created user.
     Skips internal/session keys (prefixed with '_' or in the skip list).
+
+    Wrapped in try/except — same reasoning as create_sales_person_for_user
+    above: a cosmetic default-copy failure must never block real User creation.
     """
     if doc.name in SYSTEM_USERS:
         return
 
-    admin_defaults = frappe.db.get_all(
-        "DefaultValue",
-        filters={"parent": "Administrator"},
-        fields=["defkey", "defvalue"],
-    )
+    try:
+        admin_defaults = frappe.db.get_all(
+            "DefaultValue",
+            filters={"parent": "Administrator"},
+            fields=["defkey", "defvalue"],
+        )
 
-    for d in admin_defaults:
-        key = (d.defkey or "").strip()
-        if not key:
-            continue
-        if any(key.startswith(p) for p in _SKIP_PREFIXES):
-            continue
-        if key in _SKIP_KEYS:
-            continue
-        frappe.defaults.set_user_default(key, d.defvalue, user=doc.name)
+        for d in admin_defaults:
+            key = (d.defkey or "").strip()
+            if not key:
+                continue
+            if any(key.startswith(p) for p in _SKIP_PREFIXES):
+                continue
+            if key in _SKIP_KEYS:
+                continue
+            frappe.defaults.set_user_default(key, d.defvalue, user=doc.name)
+    except Exception:
+        frappe.log_error("IB User Onboarding: copy_admin_defaults failed", frappe.get_traceback())
 
 
 def copy_admin_ui_settings(doc, method=None):
     """
     Copy list view / column / sort settings from Administrator's __UserSettings
     to the newly created user. Skips rows with empty data ({}).
+
+    Wrapped in try/except — same reasoning as the other two after_insert hooks
+    above: a cosmetic UI-settings-copy failure must never block real User
+    creation.
     """
     if doc.name in SYSTEM_USERS:
         return
 
-    rows = frappe.db.sql(
-        "SELECT doctype, data FROM `__UserSettings` WHERE user = 'Administrator' AND data != '{}'",
-        as_dict=True,
-    )
-
-    for row in rows:
-        # INSERT ... ON DUPLICATE KEY UPDATE so re-running never creates duplicates
-        frappe.db.sql(
-            """
-            INSERT INTO `__UserSettings` (user, doctype, data)
-            VALUES (%s, %s, %s)
-            ON DUPLICATE KEY UPDATE data = VALUES(data)
-            """,
-            (doc.name, row.doctype, row.data),
+    try:
+        rows = frappe.db.sql(
+            "SELECT doctype, data FROM `__UserSettings` WHERE user = 'Administrator' AND data != '{}'",
+            as_dict=True,
         )
+
+        for row in rows:
+            # INSERT ... ON DUPLICATE KEY UPDATE so re-running never creates duplicates
+            frappe.db.sql(
+                """
+                INSERT INTO `__UserSettings` (user, doctype, data)
+                VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE data = VALUES(data)
+                """,
+                (doc.name, row.doctype, row.data),
+            )
+    except Exception:
+        frappe.log_error("IB User Onboarding: copy_admin_ui_settings failed", frappe.get_traceback())

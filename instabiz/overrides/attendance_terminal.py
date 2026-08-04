@@ -7,10 +7,20 @@ from frappe.utils import now_datetime, today
 _FACTORY_KEYWORDS = ("factory",)
 
 _PRIVILEGED_ROLES = {"System Manager", "HR Manager", "HR User"}
+# Mirrors the Page's own Has Role list (attendance-terminal: HR Manager, HR User,
+# HR Attendance Terminal User) — the RPC methods below previously had no gate of
+# their own, so anyone with an authenticated session could call them directly via
+# /api/method regardless of whether they could even open the page.
+_TERMINAL_ROLES = _PRIVILEGED_ROLES | {"HR Attendance Terminal User"}
 
 
 def _is_privileged():
 	return bool(_PRIVILEGED_ROLES & set(frappe.get_roles(frappe.session.user)))
+
+
+def _require_terminal_access():
+	if not (_TERMINAL_ROLES & set(frappe.get_roles(frappe.session.user))):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
 
 
 def _is_factory_dept(dept):
@@ -30,6 +40,7 @@ def get_employees_with_status(search=None, department=None, employee_category=No
 	Return paginated active employees with attendance status for the given date (default today).
 	employee_category: "office" | "factory" | None (all) — non-privileged users are forced to "office".
 	"""
+	_require_terminal_access()
 	limit  = int(limit)
 	offset = int(offset)
 	if not date:
@@ -186,6 +197,7 @@ def _assert_employee_markable(employee):
 @frappe.whitelist()
 def create_checkin(employee, log_type, late_reason=None):
 	"""Create an Employee Checkin from the Attendance Terminal."""
+	_require_terminal_access()
 	if log_type not in ("IN", "OUT"):
 		frappe.throw(_("Invalid log_type"))
 	_assert_employee_markable(employee)
@@ -210,6 +222,7 @@ def create_checkin(employee, log_type, late_reason=None):
 @frappe.whitelist()
 def mark_absent(employee):
 	"""Submit an Absent attendance record for today."""
+	_require_terminal_access()
 	_assert_employee_markable(employee)
 	# Replicate mark_attendance() with ignore_permissions so terminal users
 	# (who lack Attendance create/submit roles) can still mark absent.

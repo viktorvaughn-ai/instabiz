@@ -116,7 +116,17 @@ def _queue(agent, action_type, title, summary, draft, reference_doctype=None,
 		"reference_name": reference_name,
 		"ai_generated": int(ai_generated),
 	})
-	doc.insert(ignore_permissions=True)
+	# ignore_links: some agents (demand_forecast, prod_job_bundle, hr_payroll_nudge)
+	# queue with reference_doctype=None + a synthetic reference_name used only for
+	# same-day dedup (no single real document backs the action). Frappe's Dynamic
+	# Link validation throws "Reference DocType must be set first" whenever
+	# reference_name is set but reference_doctype is empty — that silently failed
+	# every run for those 3 agents since inception (confirmed via IB Agent Run Log:
+	# status=failed, 0 IB AI Action rows ever created for any of them). Skipping
+	# link validation here is safe: reference_doctype/reference_name are otherwise
+	# always valid real values for every other agent, this only restores the
+	# doctype-less dedup-key case to working.
+	doc.insert(ignore_permissions=True, ignore_links=True)
 	frappe.db.commit()
 	return doc.name
 
@@ -275,6 +285,8 @@ def run_smart_reorder(trigger="schedule"):
 			  AND ir.warehouse_reorder_level > 0
 			GROUP BY i.item_code, i.item_name, i.item_group
 			HAVING stock_qty <= reorder_level
+			ORDER BY (reorder_level - stock_qty) DESC
+			LIMIT 30
 		""", as_dict=True)
 		records = len(items)
 		for it in items:
@@ -333,6 +345,8 @@ def run_collections(trigger="schedule"):
 			  AND si.outstanding_amount > 0
 			  AND si.due_date < CURDATE()
 			  AND si.is_return = 0
+			ORDER BY si.due_date ASC
+			LIMIT 30
 		""", as_dict=True)
 		records = len(overdue)
 		for inv in overdue:
@@ -394,6 +408,8 @@ def run_istix_enforcer(trigger="schedule"):
 			WHERE wo.status = 'In Progress'
 			  AND wo.started_at IS NOT NULL
 			  AND TIMESTAMPDIFF(HOUR, wo.started_at, NOW()) >= 8
+			ORDER BY hours_running DESC
+			LIMIT 20
 		""", as_dict=True)
 		records = len(stalled)
 		for wo in stalled:
@@ -509,6 +525,8 @@ def run_prod_advance(trigger="schedule"):
 			  AND wo.target_qty > 0
 			  AND wo.completed_qty / wo.target_qty >= 0.85
 			  AND TIMESTAMPDIFF(HOUR, wo.started_at, NOW()) >= 2
+			ORDER BY hours_running DESC
+			LIMIT 30
 		""", as_dict=True)
 		records = len(wos)
 		for wo in wos:
@@ -613,6 +631,8 @@ def run_prod_notify_ready(trigger="schedule"):
 			GROUP BY os.name, os.sales_order, os.customer_name,
 			         os.priority, os.delivery_date, so.custom_sales_person_user
 			HAVING total_items > 0 AND total_items = rtd_count
+			ORDER BY os.delivery_date ASC
+			LIMIT 30
 		""", as_dict=True)
 		records = len(os_rows)
 		for os_row in os_rows:

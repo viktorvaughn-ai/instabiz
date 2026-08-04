@@ -266,6 +266,10 @@ def test_notify(employee_name="Test Employee", item_count=2, handover_name="EXH-
     Run from console:
         frappe.call("instabiz.overrides.employee_exit.test_notify")
     """
+    # Previously had no gate at all: any authenticated user could call this and
+    # push a real bell + real-time toast notification, with attacker-controlled
+    # text (employee_name/item_count), to every enabled HR Manager.
+    frappe.only_for(["HR Manager", "System Manager"])
     doc = frappe._dict(
         employee_name = employee_name,
         name          = handover_name,

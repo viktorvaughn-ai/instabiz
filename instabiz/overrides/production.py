@@ -997,8 +997,16 @@ def assign_machine(work_order, machine):
 	doc = frappe.get_doc("IB Work Order", work_order)
 	if doc.status != "Pending":
 		frappe.throw(_("Machine can only be assigned to a Pending work order. Current status: {0}").format(doc.status))
-	if not frappe.db.exists("IB Machine", machine):
+	machine_type = frappe.db.get_value("IB Machine", machine, "machine_type")
+	if machine_type is None:
 		frappe.throw(_("Machine {0} does not exist").format(machine))
+	required_type = _STAGE_MACHINE_TYPE.get(doc.stage)
+	if required_type and machine_type != required_type:
+		frappe.throw(
+			_("Machine {0} is a {1} machine; Work Order stage {2} requires a {3} machine.").format(
+				machine, machine_type, doc.stage, required_type
+			)
+		)
 	doc.machine = machine
 	doc.save(ignore_permissions=True)
 	frappe.db.commit()
@@ -1031,6 +1039,10 @@ def start_work_order(work_order):
 		started_at = now()
 		doc.started_at = started_at
 		apply_workflow(doc, "Resume" if doc.status == "On Hold" else "Start")
+		# Same fix as complete_work_order()/advance_to_next_stage(): apply_workflow's
+		# internal load_from_db() discards the started_at set above before its own
+		# doc.save(), so it must be persisted explicitly or it silently stays NULL.
+		frappe.db.set_value("IB Work Order", doc.name, "started_at", started_at)
 		frappe.db.commit()
 		_notify_floor_update()
 		return {"status": "ok", "started_at": started_at}
@@ -1127,8 +1139,22 @@ def create_work_orders_for_item(order_sheet, item_code, stages):
 		frappe.throw(_("Item {0} not found in Order Sheet {1}").format(item_code, order_sheet))
 	osi = frappe.get_doc("IB Order Sheet Item", osi_name)
 
+	# Requested stage must be part of THIS item's actual route (route-aware — item
+	# group / warehouse-only location can both drop stages). Without this check, the
+	# manual "+" picker (which lists all 7 canonical stages regardless of route)
+	# could silently create an orphan Work Order for a stage the item never needs —
+	# same bug class already fixed in move_work_order_stage() (see its comment).
+	location = _get_os_location(order_sheet)
+	stage_route = _get_stage_route(osi.item_code, location)
+
 	created = []
 	for stage in stages:
+		if stage not in stage_route:
+			frappe.throw(
+				_("{0} is not a valid stage for item {1}'s production route ({2}).").format(
+					stage, osi.item_code, " → ".join(stage_route)
+				)
+			)
 		# Skip if a WO already exists for this order_sheet + item_code + stage
 		existing = frappe.db.exists(
 			"IB Work Order",
@@ -1411,6 +1437,28 @@ def get_weekly_dpr(week_start=None, date=None):
 		as_dict=True,
 	)
 
+	# WO completions per day — same fallback get_dpr()/get_machine_wise_dashboard()
+	# already use: IB Production Entry has zero rows system-wide by design, so the
+	# query above always returns empty and this report always showed all-zero
+	# regardless of real production. Used per-day, only when that day has no
+	# Production Entry rows, so a future real entry-capture flow still wins.
+	wo_rows = frappe.db.sql(
+		"""
+		SELECT DATE(COALESCE(completed_at, modified)) AS day,
+			COUNT(*) AS wo_completed,
+			SUM(completed_qty) AS total_output_qty,
+			AVG(NULLIF(wastage_pct, 0)) AS avg_wastage_pct,
+			SUM(TIMESTAMPDIFF(MINUTE, started_at, completed_at)) AS total_minutes
+		FROM `tabIB Work Order`
+		WHERE status = 'Completed'
+			AND DATE(COALESCE(completed_at, modified)) BETWEEN %s AND %s
+		GROUP BY DATE(COALESCE(completed_at, modified))
+		""",
+		(week_start, week_end),
+		as_dict=True,
+	)
+	wo_row_map = {str(r.day): r for r in wo_rows}
+
 	# Build day-by-day map with zeros for missing days
 	row_map = {str(r.entry_date): r for r in rows}
 	result = []
@@ -1418,14 +1466,26 @@ def get_weekly_dpr(week_start=None, date=None):
 		day = add_days(week_start, i)
 		day_str = str(day)
 		r = row_map.get(day_str)
+		if r:
+			result.append({
+				"date": day_str,
+				"entries":     r.entries,
+				"input_qty":   flt(r.total_input_qty),
+				"output_qty":  flt(r.total_output_qty),
+				"wastage_qty": flt(r.total_wastage_qty),
+				"wastage_pct": round(flt(r.avg_wastage_pct), 1),
+				"hours":       round(flt(r.total_minutes) / 60, 2),
+			})
+			continue
+		wr = wo_row_map.get(day_str)
 		result.append({
 			"date": day_str,
-			"entries":     r.entries if r else 0,
-			"input_qty":   flt(r.total_input_qty)  if r else 0.0,
-			"output_qty":  flt(r.total_output_qty) if r else 0.0,
-			"wastage_qty": flt(r.total_wastage_qty) if r else 0.0,
-			"wastage_pct": round(flt(r.avg_wastage_pct), 1) if r else 0.0,
-			"hours":       round(flt(r.total_minutes) / 60, 2) if r else 0.0,
+			"entries":     wr.wo_completed if wr else 0,
+			"input_qty":   0.0,
+			"output_qty":  flt(wr.total_output_qty) if wr else 0.0,
+			"wastage_qty": 0.0,
+			"wastage_pct": round(flt(wr.avg_wastage_pct), 1) if wr else 0.0,
+			"hours":       round(flt(wr.total_minutes) / 60, 2) if wr and wr.total_minutes else 0.0,
 		})
 
 	total_output = sum(d["output_qty"] for d in result)
@@ -2213,15 +2273,32 @@ def get_so_production_status(sales_order):
 	location = frappe.db.get_value("Sales Order", sales_order, "custom_location")
 	items_out = []
 
+	# Fetch all non-cancelled WOs for the order sheet once, then partition per
+	# item by order_sheet_item (preferred) with item_code as a legacy-only
+	# fallback — same pattern already used in get_order_sheet_detail's
+	# order_wise_view. Without this, two Order Sheet Items sharing the same
+	# item_code (e.g. one SKU ordered as two line items at different qty)
+	# both matched every WO for that item_code, so both items displayed the
+	# same merged/wrong stage data (confirmed live via a disposable Order
+	# Sheet with a duplicate item_code: the qty=1500 row showed the qty=500
+	# row's Work Orders).
+	all_wos = frappe.db.get_all(
+		"IB Work Order",
+		filters={"order_sheet": os_name, "status": ["not in", ["Cancelled"]]},
+		fields=["name", "item_code", "order_sheet_item", "stage", "status", "machine",
+		        "target_qty", "completed_qty", "wastage_pct", "started_at", "completed_at"],
+	)
+	wo_by_osi = {}
+	wo_by_item_legacy = {}
+	for wo in all_wos:
+		if wo.order_sheet_item:
+			wo_by_osi.setdefault(wo.order_sheet_item, []).append(wo)
+		else:
+			wo_by_item_legacy.setdefault(wo.item_code, []).append(wo)
+
 	for item in os_doc.items:
 		stage_route = _get_stage_route(item.item_code, location)
-		wos = frappe.db.get_all(
-			"IB Work Order",
-			filters={"order_sheet": os_name, "item_code": item.item_code,
-			         "status": ["not in", ["Cancelled"]]},
-			fields=["name", "stage", "status", "machine", "target_qty",
-			        "completed_qty", "wastage_pct", "started_at", "completed_at"],
-		)
+		wos = wo_by_osi.get(item.name) or wo_by_item_legacy.get(item.item_code, [])
 		wo_by_stage = {wo.stage: wo for wo in wos}
 
 		stages_out = []
@@ -2689,9 +2766,23 @@ def batch_assign_machine(work_orders, machine, batch_group=None):
 	_require_production_role()
 	if isinstance(work_orders, str):
 		work_orders = json.loads(work_orders)
-	machine_row = frappe.db.get_value("IB Machine", machine, ["name", "capacity"], as_dict=True)
+	machine_row = frappe.db.get_value("IB Machine", machine, ["name", "capacity", "machine_type"], as_dict=True)
 	if not machine_row:
 		frappe.throw(_("Machine {0} does not exist").format(machine))
+
+	# Machine type must match the stage of every WO in the batch — same mapping
+	# _assign_machine_load_balanced() already respects for its own suggestions;
+	# this endpoint previously let any machine be batch-assigned to any stage.
+	if work_orders:
+		wo_stages = frappe.db.get_all("IB Work Order", filters={"name": ["in", work_orders]}, fields=["name", "stage"])
+		for wo in wo_stages:
+			required_type = _STAGE_MACHINE_TYPE.get(wo.stage)
+			if required_type and machine_row.machine_type != required_type:
+				frappe.throw(
+					_("Machine {0} is a {1} machine; Work Order {2} (stage {3}) requires a {4} machine.").format(
+						machine, machine_row.machine_type, wo.name, wo.stage, required_type
+					)
+				)
 
 	# Capacity check — _assign_machine_load_balanced() only ever *suggests* a
 	# machine respecting capacity; this endpoint previously assigned an unlimited
@@ -2853,6 +2944,13 @@ def update_production_qty(work_order, pcs_to_make=None, logs_to_make=None):
 
 	if not values:
 		frappe.throw(_("Provide at least one of pcs_to_make or logs_to_make"))
+
+	# Was previously silently accepting negative values (confirmed live: -5 and
+	# -100 both persisted with no error) — a negative pieces/logs count is never
+	# meaningful here and prints garbage onto the Job Order ("Pieces to Make: -5").
+	for field, val in values.items():
+		if val < 0:
+			frappe.throw(_("{0} cannot be negative").format(field))
 
 	frappe.db.set_value("IB Work Order", work_order, values)
 	frappe.db.commit()
