@@ -138,7 +138,8 @@ fixtures = [
     },
     {
         "dt": "Property Setter",
-        "filters": [["doc_type", "in", ["Quotation", "Sales Order", "Lead", "Delivery Note", "Customer",
+        "filters": [["doc_type", "in", ["Quotation", "Quotation Item", "Sales Order", "Sales Order Item",
+                                          "Lead", "Delivery Note", "Customer",
                                           "IB Credit Note", "IB Debit Note", "Purchase Invoice",
                                           "Purchase Order", "Purchase Receipt", "Sales Invoice",
                                           "Salary Slip", "IB Work Order", "IB Order Sheet"]]]
