@@ -94,8 +94,16 @@ class IBCustomerBoard {
 	// ── Skeleton ─────────────────────────────────────────────────────────────
 
 	_build_skeleton() {
+		const admin_banner = this._is_manager ? `
+			<div id="ib-cb-admin-banner" class="ib-cb-admin-banner">
+				${IB_ICONS.svg("users", 14)}
+				<span class="ib-cb-admin-banner-text">Managing the team? Open Master Control for full team oversight.</span>
+				<button class="btn btn-xs btn-primary ib-cb-admin-banner-btn" id="ib-cb-admin-banner-btn">Open Master Control &rarr;</button>
+			</div>
+		` : "";
 		this.$main.html(`
 			<div class="ib-cb-board">
+				${admin_banner}
 				<div class="ib-cb-stats-row">
 					<div class="ib-cb-stat-card ib-cb-stat-card--completed">
 						<span class="ib-cb-stat-num" id="ib-cb-stat-completed-val">0</span>
@@ -177,6 +185,9 @@ class IBCustomerBoard {
 			</div>
 		`);
 		$("#ib-cb-dormant-more").off("click").on("click", () => this._load_more_my_accounts());
+		$("#ib-cb-admin-banner-btn").off("click").on("click", () => {
+			frappe.set_route("Page", "ib-assignment-admin");
+		});
 	}
 
 	// ── Data load ─────────────────────────────────────────────────────────────
