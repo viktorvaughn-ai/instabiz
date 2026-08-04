@@ -18,7 +18,6 @@ from instabiz.overrides.utils import (
     COMMON_PARENT_FIELD_MAP,
     COMMON_CHILD_FIELD_MAP,
     LOCATION_WAREHOUSE,
-    _check_floor_price,
     _check_item_lifecycle,
     _check_customer_item_spec,
     _guard_document_attachments,
@@ -68,7 +67,6 @@ class CustomSalesOrder(IbStatusMixin, SalesOrder):
         sync_sales_team(self)
         recalculate_items(self)
         apply_location_cost_center(self)
-        _check_floor_price(self)
         _check_item_lifecycle(self)
         _check_customer_item_spec(self)
         _guard_document_attachments(self)

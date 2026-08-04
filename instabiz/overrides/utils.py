@@ -513,61 +513,6 @@ def transfer_documents(doctype, owner_field, names, to_user,
     return len(names)
 
 
-# ── Floor price enforcement ───────────────────────────────────────────────────
-
-def _check_floor_price(doc):
-	"""Warn when item rate is below cost + min margin. Never blocks save."""
-	from frappe.utils import flt
-
-	if doc.get("currency") and doc.get("currency") != "INR":
-		return  # rate is in foreign currency; cannot compare to INR valuation_rate
-
-	violations = []
-	for row in doc.get("items") or []:
-		if not row.item_code or not flt(row.rate):
-			continue
-		item = frappe.db.get_value(
-			"Item", row.item_code,
-			["valuation_rate", "custom_min_margin_pct"],
-			as_dict=True,
-		)
-		if not item:
-			continue
-		# Item.valuation_rate is 0 on every real Item in this system — real cost
-		# lives on Bin.valuation_rate instead, so this check was a complete no-op
-		# in production despite reading as functional. Prefer the row's own
-		# warehouse's Bin; fall back to Item.valuation_rate (kept in case it's
-		# ever populated some other way), then to the highest valuation_rate
-		# across any warehouse for this item (a conservative floor is better
-		# than skipping the check entirely when the exact warehouse isn't set,
-		# e.g. on a Quotation row with no warehouse chosen yet).
-		cost = flt(item.valuation_rate)
-		if not cost and row.get("warehouse"):
-			cost = flt(frappe.db.get_value(
-				"Bin", {"item_code": row.item_code, "warehouse": row.warehouse}, "valuation_rate"
-			))
-		if not cost:
-			cost = flt(frappe.db.sql(
-				"SELECT MAX(valuation_rate) FROM `tabBin` WHERE item_code=%s", row.item_code
-			)[0][0])
-		if not cost:
-			continue
-		min_margin = flt(item.custom_min_margin_pct or 0)
-		floor = cost * (1 + min_margin / 100)
-		if flt(row.rate) < floor:
-			violations.append(
-				f"Row {row.idx}: {row.item_code} — "
-				f"rate ₹{flt(row.rate):.2f} below floor ₹{floor:.2f} "
-				f"(cost ₹{cost:.2f} + {min_margin:.0f}% min margin)"
-			)
-
-	if not violations:
-		return
-
-	msg = _("Floor price breach:") + "<br>" + "<br>".join(violations)
-	frappe.msgprint(msg, title=_("Floor Price Warning"), indicator="orange")
-
-
 # ── Document attachment stamping + tamper guard ───────────────────────────────
 
 def _stamp_document_attachments(doc, fieldname="custom_document_attachments"):

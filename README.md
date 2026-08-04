@@ -89,12 +89,6 @@ Runs both server-side (`recalculate_items()` on validate) and client-side (debou
 
 Custom mappers carry all product dimensions, transport, location, billing/shipping addresses, and sales person across the chain. Rate contracts (ERPNext Pricing Rules) auto-apply on Quotation and SO — rates are locked at Q time and carried forward.
 
-### Floor Price Enforcement
-
-Set `custom_min_margin_pct` on each Item. On Q or SO save:
-- **Sales User** → blocked from saving if margin below floor
-- **Sales Manager / System Manager** → warning only
-
 ### SO Cancellation Reason
 
 `custom_cancel_reason` is mandatory before a Sales Order can be cancelled. The field appears on submitted SO rows and is saved in the cancel audit trail.
