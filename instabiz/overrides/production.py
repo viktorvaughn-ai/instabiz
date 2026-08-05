@@ -590,14 +590,26 @@ def get_available_sales_orders():
 
 @frappe.whitelist()
 def get_stage_pipeline(location=None):
-	"""Return Pending + In Progress + On Hold work orders grouped by stage —
-	powers the Stage-wise view (a stage picker + flat table, not the old
-	drag-and-drop Kanban this function originally backed — that was removed
-	2026-07-30 for being confusing, see item 119; this query survived,
-	unwired, until now). On Hold is included deliberately: a stage
-	supervisor's most important row is what's stuck at their own station,
-	not just what's actively moving — the old Kanban-era query only ever
-	showed Pending/In Progress.
+	"""Return each item's CURRENT stage only, grouped by stage — powers the
+	Stage-wise view (a stage picker + flat table, not the old drag-and-drop
+	Kanban this function originally backed — that was removed 2026-07-30 for
+	being confusing, see item 119; this query survived, unwired, until now).
+	On Hold is included deliberately: a stage supervisor's most important row
+	is what's stuck at their own station, not just what's actively moving —
+	the old Kanban-era query only ever showed Pending/In Progress.
+
+	auto_create_all_stage_wos() pre-creates one IB Work Order per stage in an
+	item's whole route up front (see item 84) — a 4-stage item that hasn't
+	started yet already has 4 real WO rows, all sitting Pending. A naive
+	"every Pending/In Progress/On Hold WO" query (the original shape of this
+	function) therefore showed that one item at all 4 of its stages
+	simultaneously, before it had actually reached any of them — confirmed
+	live 2026-08-05. Fixed by grouping WOs per item (order_sheet_item, same
+	key _update_order_sheet_item() uses, falling back to order_sheet+item_code
+	for legacy WOs missing it) and keeping only that item's CURRENT stage: the
+	first stage in STAGES order that's In Progress/On Hold, else the earliest
+	Pending one — same "current_stage" rule already used elsewhere in this
+	file (see get_production_plan()'s order_wise item loop).
 
 	Returns everything for every stage in one call (counts double as each
 	stage pill's badge) rather than a per-stage endpoint — this page's real
@@ -616,6 +628,7 @@ def get_stage_pipeline(location=None):
 		SELECT wo.name, wo.item_code, wo.stage, wo.machine, wo.status,
 			wo.target_qty, wo.target_uom, wo.completed_qty, wo.wastage_pct,
 			wo.order_sheet, wo.order_sheet_item, wo.sales_order, wo.priority AS wo_priority,
+			wo.creation,
 			COALESCE(osi.item_name, wo.item_name) AS item_name,
 			os.priority, os.customer_name, os.delivery_date
 		FROM `tabIB Work Order` wo
@@ -629,13 +642,25 @@ def get_stage_pipeline(location=None):
 		as_dict=True,
 	)
 
+	stage_rank = {s: i for i, s in enumerate(STAGES)}
+	groups = {}
+	for row in rows:
+		key = row.order_sheet_item or f"{row.order_sheet}::{row.item_code}"
+		groups.setdefault(key, []).append(row)
+
 	def _sk(s):
 		return s.lower().replace(" ", "_")
 
 	pipeline = {_sk(stage): [] for stage in STAGES}
-	for row in rows:
-		stage = row.get("stage", "")
-		key = _sk(stage)
+	for wos in groups.values():
+		wos.sort(key=lambda r: stage_rank.get(r.stage, 999))
+		current = next((r for r in wos if r.status in ("In Progress", "On Hold")), None)
+		if not current:
+			current = next((r for r in wos if r.status == "Pending"), None)
+		if not current:
+			continue
+		row = current
+		key = _sk(row.get("stage", ""))
 		entry = {
 			"name": row.name,
 			"item_code": row.item_code,
