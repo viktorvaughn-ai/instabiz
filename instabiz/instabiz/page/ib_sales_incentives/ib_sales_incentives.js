@@ -250,7 +250,7 @@ class IBSalesIncentives {
 		if (this._is_manager) {
 			this.$wrap.find("#ib-si-target").on("click", () => this._show_bulk_target_dialog());
 			this.$wrap.find("#ib-si-slabs").on("click", () => this._show_slab_dialog());
-			this.$wrap.find("#ib-si-goto-admin").on("click", () => frappe.set_route("ib-assignment-admin"));
+			this.$wrap.find("#ib-si-goto-admin").on("click", () => frappe.set_route("ib-customer-board", "team"));
 			this.$wrap.find("#ib-si-sp").on("change", e => {
 				this._sales_person = e.target.value || null;
 				this.load();

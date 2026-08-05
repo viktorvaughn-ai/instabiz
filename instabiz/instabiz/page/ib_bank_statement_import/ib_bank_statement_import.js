@@ -342,9 +342,12 @@ class IBBankStatementImport {
 
 		if (res.created) {
 			html += `
-				<div style="margin-top:16px;">
+				<div style="margin-top:16px;display:flex;gap:10px;">
 					<a href="/app/bank-reconciliation-tool" class="btn btn-sm btn-default">
 						Open Bank Reconciliation Tool →
+					</a>
+					<a href="/app/query-report/IB Bank Reconciliation" class="btn btn-sm btn-default">
+						View Reconciliation Status →
 					</a>
 				</div>
 			`;

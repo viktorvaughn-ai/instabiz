@@ -41,4 +41,19 @@ frappe.query_reports["IB Bank Reconciliation"] = {
 			$(report.chart_wrapper).find(".chart-legend").css("flex-wrap", "wrap");
 		}
 	},
+	// This report is one stage of a 3-stage pipeline (Bank Statement Import
+	// -> native Bank Reconciliation Tool -> this report, a read-only cleared/
+	// uncleared audit view of the same Payment Entries the Tool matches) —
+	// previously reachable from neither of the other two. Cross-nav buttons
+	// added both ways instead of merging this into a page: it's a genuine
+	// Script Report (native filter bar/datatable/chart/export), forcing it
+	// into custom-page HTML would throw all of that away for no real gain.
+	onload(report) {
+		report.page.add_inner_button(__("Match Transactions →"), () => {
+			frappe.set_route("bank-reconciliation-tool");
+		});
+		report.page.add_inner_button(__("Import More →"), () => {
+			frappe.set_route("ib-bank-statement-import");
+		});
+	},
 };

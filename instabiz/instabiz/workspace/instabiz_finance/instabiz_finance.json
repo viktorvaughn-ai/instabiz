@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz Finance",
  "links": [],
- "modified": "2026-07-31 13:12:13.517224",
+ "modified": "2026-08-05 05:03:56.129562",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz Finance",
@@ -134,7 +134,7 @@
    "color": "Grey",
    "doc_view": "",
    "label": "Stock Ledger",
-   "link_to": "ib-stock-ledger",
+   "link_to": "ib-stock-dashboard",
    "type": "Page"
   },
   {

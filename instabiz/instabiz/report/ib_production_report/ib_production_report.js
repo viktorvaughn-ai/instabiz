@@ -45,13 +45,4 @@ frappe.query_reports["IB Production Report"] = {
 		const $legend = $(report.wrapper).find(".chart-legend");
 		if ($legend.length) $legend.css("flex-wrap", "wrap");
 	},
-
-	formatter(value, row, column, data) {
-		if (column.fieldname === "wastage_pct" && data) {
-			const pct = parseFloat(value) || 0;
-			const color = pct > 5 ? "#dc2626" : pct > 2 ? "#d97706" : "#16a34a";
-			return `<span style="color:${color};font-weight:600">${frappe.format(value, column)}</span>`;
-		}
-		return value;
-	},
 };

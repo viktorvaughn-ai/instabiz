@@ -10,7 +10,8 @@
   "qty",
   "uom",
   "completed_qty",
-  "status"
+  "status",
+  "sales_order_item"
  ],
  "fields": [
   {
@@ -55,6 +56,14 @@
    "label": "Status",
    "options": "Pending\nIn Progress\nCompleted",
    "default": "Pending"
+  },
+  {
+   "fieldname": "sales_order_item",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Sales Order Item Row",
+   "read_only": 1,
+   "description": "Exact source Sales Order Item child row name — lets Create Delivery Note map back to precisely this row, not just this item_code (a Sales Order can carry the same item on multiple separate lines with different quantities)."
   }
  ],
  "istable": 1,

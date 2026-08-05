@@ -218,16 +218,27 @@ def reopen_sales_order(name):
 # ── Mapper: Sales Order → Delivery Note ──────────────────────────────────────
 
 @frappe.whitelist()
-def custom_make_delivery_note(source_name, target_doc=None, item_code=None):
+def custom_make_delivery_note(source_name, target_doc=None, item_code=None, order_sheet_item=None):
     """Map a Sales Order to a Delivery Note.
 
-    item_code: when set, only that item's row is carried across (used by the
-    Production Stages "Create Delivery Note" button, which fires per Work
-    Order/item as it reaches Ready to Deliver — pulling the whole order's
-    items there would ship items other stages haven't finished yet). Blank
-    keeps the existing whole-order behavior used by the SO form's own
-    "Create > Delivery Note" button.
+    order_sheet_item: preferred scoping — the IB Order Sheet Item row (from
+    IB Work Order.order_sheet_item) whose own sales_order_item field points
+    at the *exact* Sales Order Item child row this WO is for. Resolved to a
+    row-name match below, not an item_code match — a Sales Order can carry
+    the same item_code on multiple separate lines with different quantities
+    (a real, valid scenario — see item 119's identical Work Order grouping
+    fix), so matching by item_code alone would pull every line sharing that
+    code into the Delivery Note, including ones other stages haven't
+    finished producing yet. item_code is kept as a fallback only for legacy
+    WOs that predate the sales_order_item field being populated (2026-08-05).
+    Blank (both) keeps the existing whole-order behavior used by the SO
+    form's own "Create > Delivery Note" button.
     """
+    sales_order_item_row = None
+    if order_sheet_item:
+        sales_order_item_row = frappe.db.get_value(
+            "IB Order Sheet Item", order_sheet_item, "sales_order_item"
+        )
     def postprocess_parent(source_doc, target_doc, source_parent):
         if source_doc.get("customer"):
             target_doc.customer = source_doc.customer
@@ -268,8 +279,11 @@ def custom_make_delivery_note(source_name, target_doc=None, item_code=None):
             "Sales Order Item": {
                 "doctype": "Delivery Note Item",
                 "postprocess": dn_item_postprocess,
-                "condition": (lambda row: row.qty != 0 and row.item_code == item_code) if item_code
-                    else (lambda row: row.qty != 0),
+                "condition": (
+                    (lambda row: row.qty != 0 and row.name == sales_order_item_row) if sales_order_item_row
+                    else (lambda row: row.qty != 0 and row.item_code == item_code) if item_code
+                    else (lambda row: row.qty != 0)
+                ),
                 "field_map": {
                     **COMMON_CHILD_FIELD_MAP,
                     "name":   "so_detail",

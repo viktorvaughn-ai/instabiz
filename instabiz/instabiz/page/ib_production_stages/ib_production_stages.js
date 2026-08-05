@@ -49,12 +49,43 @@ const STAGE_ABBR = {
 	"Packing": "PK", "Ready to Deliver": "RTD", "Delivered": "DL",
 };
 
+// Frappe's own indicator-pill color words (frappe/public/scss/common/indicator.scss)
+// — theme-aware via --bg-{color}/--text-on-{color} CSS vars, unlike the hardcoded
+// hex this page used to carry in 3 separate places (JS meta, a dead :root block,
+// and ~15 CSS blocks). Priority and Work Order status both reuse this single
+// mapping so the same word always means the same color everywhere on this page.
 const IB_PRIORITY_META = {
-	Urgent: { cls: "ib-ps-badge--urgent", label: "Urgent" },
-	High: { cls: "ib-ps-badge--high", label: "High" },
-	Normal: { cls: "ib-ps-badge--normal", label: "Normal" },
-	Low: { cls: "ib-ps-badge--low", label: "Low" },
+	Urgent: { color: "red", label: "Urgent" },
+	High: { color: "orange", label: "High" },
+	Normal: { color: "blue", label: "Normal" },
+	Low: { color: "gray", label: "Low" },
 };
+
+const IB_STATUS_COLOR = {
+	"Pending": "gray",
+	"In Progress": "blue",
+	"Completed": "green",
+	"On Hold": "orange",
+	"Cancelled": "red",
+	// Product-wise stage-cell states aren't real IB Work Order statuses but
+	// map onto the same visual vocabulary (done=green, active=blue, etc.).
+	"done": "green",
+	"active": "blue",
+	"none": "gray",
+};
+
+function _ib_status_color(text) {
+	return IB_STATUS_COLOR[text] || IB_PRIORITY_META[text]?.color || "gray";
+}
+
+/* Renders a Frappe-native indicator-pill for any status/priority word above.
+   `size` "sm" applies this page's own compact density override (Frappe's
+   default pill is roomy — 20px tall — too large for a table cell packed with
+   several per row); omit for the default Frappe size. */
+function _ib_status_pill(text, size) {
+	const cls = size === "sm" ? "indicator-pill ib-ps-pill-sm" : "indicator-pill";
+	return `<span class="${cls} ${_ib_status_color(text)}">${frappe.utils.escape_html(text || "")}</span>`;
+}
 
 // ---------------------------------------------------------------------------
 // Stage-specific entry fields
@@ -135,6 +166,12 @@ class IBProductionStages {
 		this.active_wo = null;
 		this.machines_cache = null;
 		this.item_wise_search = "";
+		this.stage_wise_search = "";
+		// Selected stage pill for the Stage-wise tab — defaults to Coating,
+		// overridden by a route deep-link's ?stage= (see _route_stage_filter
+		// below, shared with Item-wise's existing stage highlight).
+		this.stage_wise_pill = "coating";
+		this.stage_wise_cache = null;
 		// Client-side stage highlight for the Item-wise tab, set via
 		// frappe.route_options.stage (e.g. a Dashboard pipeline card deep-link).
 		this._route_stage_filter = null;
@@ -184,7 +221,7 @@ class IBProductionStages {
 		const ro = frappe.route_options;
 		if (!ro) return;
 
-		const VALID_TABS = ["order_wise", "item_wise", "job_bundles", "machine_wise"];
+		const VALID_TABS = ["order_wise", "item_wise", "job_bundles", "machine_wise", "stage_wise"];
 		if (ro.tab && VALID_TABS.includes(ro.tab)) {
 			this.active_tab = ro.tab;
 			delete ro.tab;
@@ -253,13 +290,17 @@ class IBProductionStages {
 					<iconify-icon icon="lucide:box" width="12" height="12" style="vertical-align:middle;margin-right:4px"></iconify-icon>
 					Item-wise
 				</button>
-				<button class="ib-ps-tab" data-tab="job_bundles">
-					<iconify-icon icon="lucide:layers" width="12" height="12" style="vertical-align:middle;margin-right:4px"></iconify-icon>
-					Job Bundles
+				<button class="ib-ps-tab" data-tab="stage_wise">
+					<iconify-icon icon="lucide:git-branch" width="12" height="12" style="vertical-align:middle;margin-right:4px"></iconify-icon>
+					Stage-wise
 				</button>
 				<button class="ib-ps-tab" data-tab="machine_wise">
 					<iconify-icon icon="lucide:settings-2" width="12" height="12" style="vertical-align:middle;margin-right:4px"></iconify-icon>
 					Machine-wise
+				</button>
+				<button class="ib-ps-tab" data-tab="job_bundles">
+					<iconify-icon icon="lucide:layers" width="12" height="12" style="vertical-align:middle;margin-right:4px"></iconify-icon>
+					Job Bundles
 				</button>
 				<span style="flex:1"></span>
 				<div class="ib-ps-loc-group">
@@ -343,6 +384,8 @@ class IBProductionStages {
 			this._load_machine_wise();
 		} else if (this.active_tab === "job_bundles") {
 			this._load_job_bundles();
+		} else if (this.active_tab === "stage_wise") {
+			this._load_stage_wise();
 		}
 	}
 
@@ -505,7 +548,7 @@ class IBProductionStages {
 			return `<tr>
 				<td><span class="ib-ps-stage-chip" style="background:${color};color:#fff">${frappe.utils.escape_html(wo.stage || "")}</span></td>
 				<td><code style="font-size:11px">${frappe.utils.escape_html(wo.name)}</code></td>
-				<td><span class="ib-ps-status-chip ib-ps-status--${(wo.status || "").toLowerCase().replace(/ /g, "_")}">${frappe.utils.escape_html(wo.status || "")}</span></td>
+				<td>${_ib_status_pill(wo.status, "sm")}</td>
 				<td>${wo.machine ? frappe.utils.escape_html(wo.machine) : "—"}</td>
 				<td>
 					<div class="ib-ps-progress-wrap" style="min-width:60px"><div class="ib-ps-progress-bar" style="width:${pct}%;background:${color}"></div></div>
@@ -523,7 +566,7 @@ class IBProductionStages {
 				return `
 					<div class="ib-iw-batch-block">
 						<div class="ib-iw-batch-header">
-							<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
+							<iconify-icon icon="lucide:circle" width="12" height="12"></iconify-icon>
 							<strong>${frappe.utils.escape_html(jr.batch_no || jr.name || "JR")}</strong>
 							<span class="ib-iw-jr-status ib-iw-jr-${(jr.status || "").toLowerCase().replace(/ /g, "_")}">${frappe.utils.escape_html(jr.status || "")}</span>
 							${jr.width_mm ? `<span style="font-size:11px;color:var(--text-muted)">${jr.gsm ? jr.gsm + " GSM · " : ""}${jr.width_mm}mm × ${jr.length_mtr}m = ${jr.sqm || ((jr.width_mm / 1000) * jr.length_mtr).toFixed(2)} SQMT</span>` : ""}
@@ -562,6 +605,115 @@ class IBProductionStages {
 		// on every call, same bug class as the WO side panel fix.
 		$c.off();
 		$c.on("click", "#ib-iw-back", () => this._load_item_wise());
+	}
+
+	// -----------------------------------------------------------------------
+	// TAB — Stage-wise view (stage picker + flat WO table, not the old
+	// drag-and-drop Kanban removed 2026-07-30 — see get_stage_pipeline()'s
+	// own docstring). "What's sitting at MY station right now, across every
+	// order" — the one question Order-wise/Item-wise/Machine-wise don't
+	// answer directly.
+	// -----------------------------------------------------------------------
+	_load_stage_wise() {
+		const $c = this._content();
+		$c.html('<div class="ib-ps-loading">Loading stage view…</div>');
+		// Deep-link stage (Dashboard pipeline card etc.) picks which pill opens
+		// first — consumed once, same pattern Item-wise's _route_stage_filter
+		// already uses, then cleared so a later manual pill click isn't
+		// fighting a stale route value on every re-render.
+		if (this._route_stage_filter) {
+			const key = IB_STAGES.find((s) => s.label === this._route_stage_filter)?.key;
+			if (key) this.stage_wise_pill = key;
+			this._route_stage_filter = null;
+		}
+		frappe.call({
+			method: "instabiz.overrides.production.get_stage_pipeline",
+			args: { location: this.location_filter || null },
+			callback: (r) => {
+				if (r.exc) {
+					$c.html('<div class="ib-ps-empty">Failed to load stage view.</div>');
+					return;
+				}
+				this.stage_wise_cache = r.message || {};
+				this._render_stage_wise();
+			},
+		});
+	}
+
+	_render_stage_wise() {
+		const $c = this._content();
+		const pipeline = this.stage_wise_cache || {};
+
+		const pills = IB_STAGES.map((s) => {
+			const count = (pipeline[s.key] || []).length;
+			const active = s.key === this.stage_wise_pill;
+			return `<button type="button" class="ib-ps-tab ib-sw-pill${active ? " active" : ""}" data-stage="${s.key}"
+					style="${active ? `background:${s.color};border-color:${s.color}` : ""}">
+					${frappe.utils.escape_html(s.label)} <span class="ib-ps-tab-badge">${count}</span>
+				</button>`;
+		}).join("");
+
+		const rows = pipeline[this.stage_wise_pill] || [];
+		const filtered = window.ib_multi_token_filter(rows, ["item_code", "item_name", "sales_order", "customer_name", "machine"], this.stage_wise_search);
+
+		const toolbar = `
+			<div class="ib-ps-os-toolbar" style="margin:14px 0 12px">
+				<input class="ib-ps-search-input form-control" id="ib-sw-search" placeholder="Search item, order, customer, machine…" value="${frappe.utils.escape_html(this.stage_wise_search || "")}">
+				<span class="ib-ps-stat-pill">${filtered.length} of ${rows.length}</span>
+			</div>`;
+
+		const table_rows = filtered.length
+			? filtered.map((row) => {
+				this._wo_data.set(row.name, row);
+				const pct = row.target_qty > 0 ? Math.min(100, Math.round((row.completed_qty / row.target_qty) * 100)) : 0;
+				return `<tr class="ib-ps-wo-sub-item--clickable" data-woid="${frappe.utils.escape_html(row.name)}">
+					<td>${frappe.utils.escape_html(row.item_code || "")}</td>
+					<td>${row.sales_order ? `<a class="ib-ps-os-link" data-so-nav="${frappe.utils.escape_html(row.sales_order)}">${frappe.utils.escape_html(row.sales_order)}</a>` : "—"}</td>
+					<td>${frappe.utils.escape_html(row.customer_name || "")}</td>
+					<td>${row.machine ? frappe.utils.escape_html(row.machine) : `<span style="color:var(--text-muted)">Unassigned</span>`}</td>
+					<td>${_ib_status_pill(row.priority || "Normal", "sm")}</td>
+					<td>${_ib_status_pill(row.status, "sm")}</td>
+					<td>
+						<div class="ib-ps-progress-wrap" style="min-width:70px">
+							<div class="ib-ps-progress-bar" style="width:${pct}%;background:var(--ib-primary)"></div>
+						</div>
+						<small>${row.completed_qty || 0}/${row.target_qty || 0} ${frappe.utils.escape_html(row.target_uom || "")}</small>
+					</td>
+					<td>${row.delivery_date ? frappe.datetime.str_to_user(row.delivery_date) : "—"}</td>
+				</tr>`;
+			}).join("")
+			: `<tr><td colspan="8"><div class="ib-ps-empty">Nothing at this stage${this.stage_wise_search ? " matching your search" : ""}.</div></td></tr>`;
+
+		$c.html(`
+			<div class="ib-sw-pills">${pills}</div>
+			${toolbar}
+			<div class="ib-ps-table-wrap">
+				<table class="ib-ps-table">
+					<thead><tr>
+						<th>Item Code</th><th>Sales Order</th><th>Customer</th><th>Machine</th>
+						<th>Priority</th><th>Status</th><th>Progress</th><th>ETD</th>
+					</tr></thead>
+					<tbody>${table_rows}</tbody>
+				</table>
+			</div>`);
+
+		$c.off();
+		$c.on("click", ".ib-sw-pill", (e) => {
+			this.stage_wise_pill = $(e.currentTarget).data("stage");
+			this._render_stage_wise();
+		});
+		$c.on("input", "#ib-sw-search", (e) => {
+			this.stage_wise_search = e.target.value;
+			this._render_stage_wise();
+		});
+		$c.on("click", "[data-so-nav]", (e) => {
+			e.stopPropagation();
+			frappe.set_route("Form", "Sales Order", $(e.currentTarget).data("so-nav"));
+		});
+		$c.on("click", "tr[data-woid]", (e) => {
+			const wo = this._wo_data.get($(e.currentTarget).data("woid"));
+			if (wo) this._open_wo_panel(wo, IB_STAGES.find((s) => s.label === wo.stage)?.key || this.stage_wise_pill);
+		});
 	}
 
 	// -----------------------------------------------------------------------
@@ -627,7 +779,6 @@ class IBProductionStages {
 			table_html = '<div class="ib-ps-empty">No production started yet.</div>';
 		} else {
 			const rows_html = pageRows.map((os) => {
-				const pm = IB_PRIORITY_META[os.priority] || IB_PRIORITY_META["Normal"];
 				const pct = os.progress_pct || 0;
 				// Sales Order is the only identifier shown — the underlying Order
 				// Sheet id (os.name) still drives the detail-view click via the row
@@ -647,8 +798,8 @@ class IBProductionStages {
 							</div>
 							<small>${pct}%</small>
 						</td>
-						<td><span class="ib-ps-priority-badge ${pm.cls}">${pm.label}</span></td>
-						<td><span class="ib-ps-status-chip">${frappe.utils.escape_html(os.status || "")}</span></td>
+						<td>${_ib_status_pill(os.priority || "Normal", "sm")}</td>
+						<td>${_ib_status_pill(os.status, "sm")}</td>
 						<td>
 							<div style="display:flex;gap:6px">
 								<button class="ib-ps-btn-sm ib-ps-os-view-btn" data-os="${frappe.utils.escape_html(os.name)}">View</button>
@@ -762,7 +913,6 @@ class IBProductionStages {
 	_render_os_detail(detail) {
 		const $c = this._content();
 		const os = detail.order_sheet || {};
-		const pm = IB_PRIORITY_META[os.priority] || IB_PRIORITY_META["Normal"];
 
 		const so_link = os.sales_order
 			? `<a class="ib-ps-os-link" style="cursor:pointer" data-so-nav="${frappe.utils.escape_html(os.sales_order)}">${frappe.utils.escape_html(os.sales_order)}</a>`
@@ -776,8 +926,8 @@ class IBProductionStages {
 					<span class="ib-ps-detail-customer">${frappe.utils.escape_html(os.customer || "")}</span>
 					<span style="font-size:11px;color:var(--text-muted)">Order: ${date_fmt(os.order_date)}</span>
 					${os.delivery_date ? `<span style="font-size:11px;color:#dc2626">Deliver: ${date_fmt(os.delivery_date)}</span>` : ""}
-					<span class="ib-ps-priority-badge ${pm.cls}">${pm.label}</span>
-					<span class="ib-ps-status-chip">${frappe.utils.escape_html(os.status || "")}</span>
+					${_ib_status_pill(os.priority || "Normal", "sm")}
+					${_ib_status_pill(os.status, "sm")}
 				</div>
 			</div>`;
 
@@ -864,11 +1014,11 @@ class IBProductionStages {
 			const chips = wos.map((wo) => {
 				this._wo_data.set(wo.name, { ...wo, delivery_date: (detail.order_sheet || {}).delivery_date });
 				const abbr = STAGE_ABBR[wo.stage] || (wo.stage || "").substring(0, 2).toUpperCase();
-				const statusKey = (wo.status || "").toLowerCase().replace(/ /g, "_");
 				const created = wo.creation ? frappe.datetime.str_to_user(wo.creation) : "—";
 				const title = `${wo.stage || ""}: ${wo.name || ""} — ${wo.status || ""} `
 					+ `(${wo.completed_qty || 0}/${wo.target_qty || 0}) — Created: ${created}`;
-				return `<span class="ib-ps-wo-chip ib-ps-wo-chip--${statusKey}"
+				const cancelled_cls = wo.status === "Cancelled" ? " ib-ps-wo-chip--cancelled" : "";
+				return `<span class="ib-ps-wo-chip indicator-pill ib-ps-pill-sm ${_ib_status_color(wo.status)}${cancelled_cls}"
 					data-woid="${frappe.utils.escape_html(wo.name)}"
 					title="${frappe.utils.escape_html(title)}">${abbr}</span>`;
 			}).join("");
@@ -941,23 +1091,23 @@ class IBProductionStages {
 							data-item="${frappe.utils.escape_html(item.item_code)}"
 							data-os="${frappe.utils.escape_html((detail.order_sheet || {}).name || "")}"
 							data-stage="${s.key}">
-							<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+							<iconify-icon icon="lucide:plus" width="12" height="12"></iconify-icon>
 						</div>`;
 				} else if (wo.status === "Completed") {
 					cell_html = `
 						<div class="ib-ps-stage-cell ib-ps-stage-cell--done" title="${s.label}: Completed">
-							<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+							<iconify-icon icon="lucide:check" width="12" height="12"></iconify-icon>
 						</div>`;
 				} else if (wo.status === "In Progress") {
 					cell_html = `
 						<div class="ib-ps-stage-cell ib-ps-stage-cell--active ib-ps-pulse" title="${s.label}: In Progress">
-							<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+							<iconify-icon icon="lucide:play" width="12" height="12"></iconify-icon>
 						</div>`;
 				} else {
 					// Pending WO
 					cell_html = `
 						<div class="ib-ps-stage-cell ib-ps-stage-cell--pending" title="${s.label}: ${wo.status || 'Pending'}">
-							<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+							<iconify-icon icon="lucide:clock" width="12" height="12"></iconify-icon>
 						</div>`;
 				}
 				return `<td style="text-align:center">${cell_html}</td>`;
@@ -1027,7 +1177,7 @@ class IBProductionStages {
 				return `<li class="ib-ps-wo-sub-item ib-ps-wo-sub-item--clickable" data-woid="${frappe.utils.escape_html(wo.name)}" title="Click to open this Work Order">
 					<span class="ib-ps-stage-chip" style="background:${this._stage_color(wo.stage)}">${frappe.utils.escape_html(wo.stage || "")}</span>
 					<span>${frappe.utils.escape_html(wo.name || "")}</span>
-					<span class="ib-ps-status-chip">${frappe.utils.escape_html(wo.status || "")}</span>
+					${_ib_status_pill(wo.status, "sm")}
 					<span style="font-size:10px;color:var(--text-muted)">Created: ${wo.creation ? frappe.datetime.str_to_user(wo.creation) : "—"}</span>
 				</li>`;
 			}).join("");
@@ -1104,6 +1254,7 @@ class IBProductionStages {
 		$c.html('<div class="ib-ps-loading">Loading machine dashboard…</div>');
 		frappe.call({
 			method: "instabiz.overrides.production.get_machine_wise_dashboard",
+			args: { location: this.location_filter || "" },
 			callback: (r) => {
 				if (r.exc) {
 					$c.html('<div class="ib-ps-empty">Failed to load machine dashboard.</div>');
@@ -1197,14 +1348,13 @@ class IBProductionStages {
 				const stg = IB_STAGES.find((x) => x.label === wo.stage);
 				const color = stg ? stg.color : "#888";
 				const pct = wo.target_qty > 0 ? Math.min(100, Math.round((wo.completed_qty / wo.target_qty) * 100)) : 0;
-				const status_cls = wo.status === "In Progress" ? "ib-ps-status--in_progress" : "ib-ps-status--pending";
 				const created_str = wo.creation ? frappe.datetime.str_to_user(wo.creation) : "—";
 				const etd_str = wo.delivery_date ? frappe.datetime.str_to_user(wo.delivery_date) : "—";
 				return `<div class="ib-mw-wo-row">
 					<span class="ib-mw-stage-dot" style="background:${color}" title="${frappe.utils.escape_html(wo.stage || "")}"></span>
 					<span class="ib-mw-wo-item" title="${frappe.utils.escape_html(wo.item_code || "")}">${frappe.utils.escape_html((wo.item_code || "").substring(0, 22))}</span>
 					<div class="ib-mw-wo-right">
-						<span class="ib-ps-status-chip ${status_cls}">${frappe.utils.escape_html(wo.status || "")}</span>
+						${_ib_status_pill(wo.status, "sm")}
 						<div class="ib-mw-wo-bar-wrap">
 							<div class="ib-mw-wo-bar" style="width:${pct}%;background:${color}"></div>
 						</div>
@@ -1222,7 +1372,7 @@ class IBProductionStages {
 						<div class="ib-mw-code-row">
 							<code class="ib-ps-machine-code" style="color:${type_color}">${frappe.utils.escape_html(m.machine_code || "")}</code>
 							<span class="ib-ps-type-chip" style="background:${type_color}18;color:${type_color};border:1px solid ${type_color}30">${frappe.utils.escape_html(m.machine_type || "")}</span>
-							<span class="ib-ps-status-dot ib-ps-status-dot--active" style="margin-left:auto" title="Active"></span>
+							<span class="indicator green" style="margin-left:auto" title="Active"></span>
 						</div>
 						<div class="ib-mw-name-row">
 							<span class="ib-ps-machine-name">${frappe.utils.escape_html(m.machine_name || "")}</span>
@@ -1265,7 +1415,16 @@ class IBProductionStages {
 					fieldname: "machine_type",
 					label: "Machine Type",
 					fieldtype: "Select",
-					options: ["Coating", "Slitting", "Rewinding", "Cutting", "Packing"],
+					// Matches IB Machine.machine_type's real Select options exactly
+					// (instabiz/instabiz/doctype/ib_machine/ib_machine.json) — this
+					// dialog previously hardcoded only 5 of the 7 real values,
+					// missing Despatch and Quality Control entirely. Root cause of
+					// a live bug: DS-01 ("Despatch Station 1") could never actually
+					// be typed Despatch through this dialog, so it was mislabeled
+					// Packing — batch-assign to any Ready-to-Deliver/Delivered WO
+					// then correctly rejected it server-side, since 0 machines
+					// system-wide had machine_type="Despatch" until fixed 2026-08-05.
+					options: ["Coating", "Slitting", "Rewinding", "Cutting", "Packing", "Quality Control", "Despatch"],
 					default: machine?.machine_type || "Coating",
 				},
 				{
@@ -1337,54 +1496,66 @@ class IBProductionStages {
 	_render_wo_panel(wo, stage_key) {
 		const $panel = this.$body.find("#ib-ps-side-panel");
 		const stage = IB_STAGES.find((s) => s.key === stage_key) || { label: stage_key, color: "#888" };
-		const pm = IB_PRIORITY_META[wo.priority] || IB_PRIORITY_META["Normal"];
 
-		const assign_btn = !wo.machine
-			? `<button class="ib-ps-btn-primary ib-ps-panel-btn btn btn-primary btn-sm" id="ib-wo-assign-machine">Assign Machine</button>`
+		// One primary action per state — the single next thing a floor worker
+		// actually needs to do, instead of the old row of 5+ equal-weight
+		// buttons. "Resume" (On Hold -> In Progress) is new: start_work_order()
+		// has handled this transition correctly since the native-workflow
+		// migration (picks "Resume" vs "Start" based on current status — see
+		// its own docstring) but no button ever called it for an On Hold WO,
+		// a real dead-end this redesign also fixes.
+		let primary_btn = "";
+		if (!wo.machine && wo.status === "Pending") {
+			primary_btn = `<button class="ib-ps-btn-primary ib-ps-panel-primary btn btn-primary" id="ib-wo-assign-machine">Assign Machine</button>`;
+		} else if (wo.status === "Pending") {
+			primary_btn = `<button class="ib-ps-btn-success ib-ps-panel-primary btn btn-success" id="ib-wo-start">
+					<iconify-icon icon="lucide:play" width="13" height="13" style="vertical-align:middle;margin-right:4px"></iconify-icon>Start</button>`;
+		} else if (wo.status === "On Hold") {
+			primary_btn = `<button class="ib-ps-btn-success ib-ps-panel-primary btn btn-success" id="ib-wo-start">
+					<iconify-icon icon="lucide:play" width="13" height="13" style="vertical-align:middle;margin-right:4px"></iconify-icon>Resume</button>`;
+		} else if (wo.status === "In Progress" && stage_key === "ready_to_deliver") {
+			primary_btn = `<button class="ib-ps-btn-success ib-ps-panel-primary btn btn-success" id="ib-wo-complete">Complete</button>`;
+		} else if (wo.status === "In Progress") {
+			primary_btn = `<button class="ib-ps-btn-success ib-ps-panel-primary btn btn-success" id="ib-wo-advance">Next Stage →</button>`;
+		} else if (wo.status === "Completed" && stage_key === "ready_to_deliver" && wo.sales_order) {
+			// Whether this item's own WO is Completed at RTD is necessary but not
+			// sufficient — other items on the same Sales Order might still be
+			// mid-production. Placeholder now, resolved async right after this
+			// panel renders — see _hydrate_dn_slot().
+			primary_btn = `<span id="ib-wo-dn-slot"></span>`;
+		}
+
+		// Everything else lives behind one "More actions" menu instead of
+		// competing with the primary button for attention. Print is always
+		// offered; Hold matches the real workflow (valid from Pending AND In
+		// Progress, not just In Progress as the old single hold_btn assumed);
+		// Adjust Qty / Move Stage keep their existing conditions.
+		const can_hold = wo.status === "Pending" || wo.status === "In Progress";
+		const can_move = wo.status !== "Completed";
+		const menu_items = [
+			can_hold ? `<a class="dropdown-item" href="#" id="ib-wo-hold"><iconify-icon icon="lucide:pause" width="12" height="12" style="vertical-align:middle;margin-right:6px"></iconify-icon>Put On Hold</a>` : "",
+			`<a class="dropdown-item" href="#" id="ib-wo-print-job-order"><iconify-icon icon="lucide:printer" width="12" height="12" style="vertical-align:middle;margin-right:6px"></iconify-icon>Print Job Order</a>`,
+			(wo.target_uom === "PCS" || wo.target_uom === "SQMT")
+				? `<a class="dropdown-item" href="#" id="ib-wo-adjust-qty"><iconify-icon icon="lucide:sliders-horizontal" width="12" height="12" style="vertical-align:middle;margin-right:6px"></iconify-icon>Adjust Qty</a>`
+				: "",
+			can_move ? `<a class="dropdown-item" href="#" id="ib-wo-move-toggle" title="Escape hatch for out-of-sequence corrections only"><iconify-icon icon="lucide:move-right" width="12" height="12" style="vertical-align:middle;margin-right:6px"></iconify-icon>Move to Different Stage</a>` : "",
+		].filter(Boolean).join("");
+		const more_menu = menu_items
+			? `<div class="dropdown ib-ps-panel-more">
+					<button class="btn btn-default btn-sm dropdown-toggle" data-toggle="dropdown" aria-expanded="false" title="More actions">
+						<iconify-icon icon="lucide:more-vertical" width="14" height="14"></iconify-icon>
+					</button>
+					<div class="dropdown-menu dropdown-menu-right">${menu_items}</div>
+				</div>`
 			: "";
-		const start_btn = wo.status === "Pending" || wo.status === "Draft"
-			? `<button class="ib-ps-btn-success ib-ps-panel-btn btn btn-success btn-sm" id="ib-wo-start">Start</button>`
-			: "";
-		const hold_btn = wo.status === "In Progress"
-			? `<button class="ib-ps-btn-warn ib-ps-panel-btn btn btn-warning btn-sm" id="ib-wo-hold">On Hold</button>`
-			: "";
-		// Ready to Deliver has nowhere further to advance to — "Complete" is the
-		// terminal action there; every earlier stage uses advance_to_next_stage
-		// (completes current WO + auto-creates/assigns the next stage's machine).
-		const complete_btn = wo.status === "In Progress" && stage_key === "ready_to_deliver"
-			? `<button class="ib-ps-btn-success ib-ps-panel-btn btn btn-success btn-sm" id="ib-wo-complete">Complete</button>`
-			: "";
-		const advance_btn = wo.status === "In Progress" && stage_key !== "ready_to_deliver"
-			? `<button class="ib-ps-btn-success ib-ps-panel-btn btn btn-success btn-sm" id="ib-wo-advance">Next Stage →</button>`
-			: "";
-		const dn_btn = wo.status === "Completed" && stage_key === "ready_to_deliver" && wo.sales_order
-			? `<button class="ib-ps-btn-primary ib-ps-panel-btn btn btn-primary btn-sm" id="ib-wo-create-dn">
-					<iconify-icon icon="lucide:truck" width="11" height="11" style="vertical-align:middle;margin-right:3px"></iconify-icon>
-					Create Delivery Note
-				</button>`
-			: "";
-		// Print Job Order — floor-facing document, no customer data. Uses the
-		// dedicated "IB Job Order" print format (set as IB Work Order's default
-		// print format via Property Setter, see hooks.py fixtures), so this just
-		// opens Frappe's own print view rather than duplicating layout here.
-		const print_btn = `<button class="ib-ps-panel-btn btn btn-default btn-sm" id="ib-wo-print-job-order">
-				<iconify-icon icon="lucide:printer" width="11" height="11" style="vertical-align:middle;margin-right:3px"></iconify-icon>
-				Print Job Order
-			</button>`;
-		// Adjust Qty — factory-manager-only reconciliation of pcs/logs to make,
-		// gated the same way every other panel action is (_require_production_role
-		// server-side; this page is itself Has-Role restricted to production roles).
-		const adjust_qty_btn = (wo.target_uom === "PCS" || wo.target_uom === "SQMT")
-			? `<button class="ib-ps-panel-btn btn btn-default btn-sm" id="ib-wo-adjust-qty">
-					<iconify-icon icon="lucide:sliders-horizontal" width="11" height="11" style="vertical-align:middle;margin-right:3px"></iconify-icon>
-					Adjust Qty
-				</button>`
-			: "";
+
 		// Manual stage-picker — jump this WO to any stage, bypassing the linear
-		// route order (e.g. correcting a mis-routed item). Not offered once
-		// Completed (backend blocks moving a completed WO).
-		const stage_picker = wo.status !== "Completed"
-			? `<div class="ib-ps-panel-move-row">
+		// route order (e.g. correcting a mis-routed item). Backend blocks moving
+		// a completed WO. Row stays hidden until "Move to Different Stage" is
+		// clicked in the More menu — out-of-sequence escape hatch, not an
+		// everyday action.
+		const stage_picker = can_move
+			? `<div class="ib-ps-panel-move-row" id="ib-wo-move-row" style="display:none">
 					<select id="ib-wo-move-stage" class="ib-ps-select form-control">
 						${IB_STAGES.filter(s => s.key !== stage_key).map(s => `<option value="${s.label}">${s.label}</option>`).join("")}
 					</select>
@@ -1394,14 +1565,6 @@ class IBProductionStages {
 					</button>
 				</div>`
 			: "";
-
-		const entries_html = (wo.entries || []).map((entry) => `
-			<div class="ib-ps-entry-row">
-				<span class="ib-ps-entry-date">${frappe.utils.escape_html(entry.entry_date || "")}</span>
-				<span>Output: ${entry.output_qty || 0} ${frappe.utils.escape_html(entry.output_uom || "")}</span>
-				<span>Wastage: ${entry.wastage_pct || 0}%</span>
-				<span>Hours: ${entry.hours || 0}</span>
-			</div>`).join("") || '<div class="ib-ps-empty" style="padding:8px">No entries yet.</div>';
 
 		$panel.html(`
 			<div class="ib-ps-panel-inner">
@@ -1413,8 +1576,8 @@ class IBProductionStages {
 					<div class="ib-ps-panel-meta">
 						<span class="ib-ps-item-code">${frappe.utils.escape_html(wo.item_code || "")}</span>
 						<span class="ib-ps-stage-chip" style="background:${stage.color};color:#fff">${stage.label}</span>
-						<span class="ib-ps-priority-badge ${pm.cls}">${pm.label}</span>
-						<span class="ib-ps-status-chip">${frappe.utils.escape_html(wo.status || "")}</span>
+						${_ib_status_pill(wo.priority || "Normal", "sm")}
+						${_ib_status_pill(wo.status, "sm")}
 					</div>
 					<div class="ib-ps-panel-meta" style="margin-top:4px">
 						<span style="font-size:10px;color:var(--text-muted)">Created: ${wo.creation ? frappe.datetime.str_to_user(wo.creation) : "—"}</span>
@@ -1424,9 +1587,7 @@ class IBProductionStages {
 				</div>
 
 				<div class="ib-ps-panel-actions">
-					${assign_btn}${start_btn}${advance_btn}${hold_btn}${complete_btn}${dn_btn}
-					<button class="ib-ps-btn-primary ib-ps-panel-btn btn btn-primary btn-sm" id="ib-wo-new-entry">+ New Entry</button>
-					${print_btn}${adjust_qty_btn}
+					${primary_btn}${more_menu}
 				</div>
 				${(wo.pcs_to_make || wo.logs_to_make) ? `<div class="ib-ps-panel-machine" style="padding:0 16px 8px">
 					${wo.target_uom === "PCS" ? `Pieces to Make: <strong>${wo.pcs_to_make || 0}</strong>` : ""}
@@ -1434,11 +1595,6 @@ class IBProductionStages {
 				</div>` : ""}
 				${wo.jumbo_roll ? `<div class="ib-ps-panel-machine" style="padding:0 16px 8px">Jumbo Roll: <strong>${frappe.utils.escape_html(wo.jumbo_roll)}</strong></div>` : ""}
 				${stage_picker}
-
-				<div class="ib-ps-panel-section">
-					<div class="ib-ps-panel-section-title">Entries</div>
-					<div class="ib-ps-entries-list" id="ib-ps-entries-list">${entries_html}</div>
-				</div>
 			</div>`);
 
 		// $panel is a persistent DOM node reused across every re-render (only its
@@ -1452,7 +1608,7 @@ class IBProductionStages {
 		$panel.on("click", "#ib-panel-close", () => this._close_side_panel());
 		$panel.on("click", "#ib-wo-assign-machine", () => this._assign_machine_to_wo(wo, stage_key));
 		$panel.on("click", "#ib-wo-start", () => this._update_wo_status(wo, "In Progress", stage_key));
-		$panel.on("click", "#ib-wo-hold", () => this._update_wo_status(wo, "On Hold", stage_key));
+		$panel.on("click", "#ib-wo-hold", (e) => { e.preventDefault(); this._update_wo_status(wo, "On Hold", stage_key); });
 		$panel.on("click", "#ib-wo-advance", () => this._advance_wo(wo, stage_key));
 		$panel.on("click", "#ib-wo-create-dn", (e) => {
 			// Belt-and-braces guard against any future double-bind: disable
@@ -1467,10 +1623,46 @@ class IBProductionStages {
 			const new_stage = $panel.find("#ib-wo-move-stage").val();
 			this._move_wo_manual(wo, new_stage, stage_key);
 		});
+		$panel.on("click", "#ib-wo-move-toggle", (e) => {
+			e.preventDefault();
+			$panel.find("#ib-wo-move-row").toggle();
+		});
 		$panel.on("click", "#ib-wo-complete", () => this._update_wo_status(wo, "Completed", stage_key));
-		$panel.on("click", "#ib-wo-new-entry", () => this._show_entry_dialog(wo, stage_key));
-		$panel.on("click", "#ib-wo-print-job-order", () => this._print_job_order(wo));
-		$panel.on("click", "#ib-wo-adjust-qty", () => this._show_adjust_qty_dialog(wo, stage_key));
+		$panel.on("click", "#ib-wo-print-job-order", (e) => { e.preventDefault(); this._print_job_order(wo); });
+		$panel.on("click", "#ib-wo-adjust-qty", (e) => { e.preventDefault(); this._show_adjust_qty_dialog(wo, stage_key); });
+
+		if ($panel.find("#ib-wo-dn-slot").length) this._hydrate_dn_slot($panel, wo);
+	}
+
+	// Resolves whether the WHOLE Sales Order (not just this item) is ready to
+	// ship, and swaps the real button (or a waiting note) into the placeholder
+	// _render_wo_panel left in the DOM. $panel.off("click") + delegated binding
+	// above already covers this node regardless of when it's filled in.
+	_hydrate_dn_slot($panel, wo) {
+		frappe.call({
+			method: "instabiz.overrides.production.get_order_dn_readiness",
+			args: { order_sheet: wo.order_sheet },
+			callback: (r) => {
+				const $slot = $panel.find("#ib-wo-dn-slot");
+				if (!$slot.length) return; // panel moved on to a different WO meanwhile
+				if (r.message && r.message.ready) {
+					$slot.replaceWith(
+						`<button class="ib-ps-btn-primary ib-ps-panel-btn btn btn-primary btn-sm" id="ib-wo-create-dn">
+							<iconify-icon icon="lucide:truck" width="11" height="11" style="vertical-align:middle;margin-right:3px"></iconify-icon>
+							Create Delivery Note
+						</button>`
+					);
+				} else {
+					$slot.replaceWith(
+						`<span style="font-size:11px;color:var(--text-muted);display:inline-flex;align-items:center"
+							title="Every item on this Sales Order needs to reach Ready to Deliver before a Delivery Note can be created">
+							<iconify-icon icon="lucide:clock" width="11" height="11" style="vertical-align:middle;margin-right:3px"></iconify-icon>
+							Waiting for other items
+						</span>`
+					);
+				}
+			},
+		});
 	}
 
 	// Opens Frappe's own print view for this WO. "IB Job Order" is set as the
@@ -1708,10 +1900,13 @@ class IBProductionStages {
 		}
 		frappe.call({
 			method: "instabiz.overrides.sales_order.custom_make_delivery_note",
-			// item_code scopes the DN to just this WO's item — otherwise the mapper
-			// pulls every item on the Sales Order, including ones other stages
-			// haven't finished yet.
-			args: { source_name: wo.sales_order, item_code: wo.item_code },
+			// order_sheet_item scopes the DN to the exact Sales Order Item row
+			// this WO is for (resolved server-side via IB Order Sheet Item's
+			// sales_order_item field) — item_code alone would incorrectly pull
+			// every line sharing that item_code if the SO has the same item on
+			// multiple separate rows with different quantities. item_code kept
+			// as a fallback for legacy WOs from before this field existed.
+			args: { source_name: wo.sales_order, order_sheet_item: wo.order_sheet_item, item_code: wo.item_code },
 			callback: (r) => {
 				if (!r.message) {
 					frappe.show_alert({ message: "Failed to create Delivery Note.", indicator: "red" });
@@ -2184,16 +2379,6 @@ class IBProductionStages {
 /* ============================================================
    IB Production Stages — Page Styles
    ============================================================ */
-:root {
-	--ib-ps-coating:   #7c3aed;
-	--ib-ps-slitting:  #2563eb;
-	--ib-ps-rewinding: #0891b2;
-	--ib-ps-cutting:   #059669;
-	--ib-ps-packing:   #d97706;
-	--ib-ps-rtd:       #ea580c;
-	--ib-ps-delivered: #10b981;
-}
-
 /* Tabs toolbar */
 .ib-ps-tabs {
 	display: flex;
@@ -2221,6 +2406,13 @@ class IBProductionStages {
 	color: #fff;
 	font-weight: 600;
 }
+.ib-ps-tab-badge {
+	display: inline-block; margin-left: 4px; padding: 0 6px;
+	border-radius: 10px; font-size: 10px; font-weight: 700;
+	background: rgba(0,0,0,0.08); vertical-align: middle;
+}
+.ib-ps-tab.active .ib-ps-tab-badge { background: rgba(255,255,255,0.25); }
+.ib-sw-pills { display: flex; gap: 6px; flex-wrap: wrap; }
 .ib-ps-refresh-btn {
 	margin-left: auto;
 	display: flex; align-items: center; gap: 5px;
@@ -2348,26 +2540,16 @@ class IBProductionStages {
 .ib-ps-action-hold-btn { flex: 0 0 auto; background: #fffbeb; color: #92400e; border-color: #fde68a; padding: 4px 8px; }
 .ib-ps-action-hold-btn:hover { background: #fde68a; }
 
-/* Priority badges */
-.ib-ps-priority-badge {
-	font-size: 10px; font-weight: 600;
-	padding: 2px 8px; border-radius: 10px; white-space: nowrap;
+/* Priority badges + Status chips: rendered via _ib_status_pill() as Frappe's
+   own .indicator-pill (theme-aware --bg-{color}/--text-on-{color} tokens) —
+   no custom color CSS needed here anymore. This is only a density override:
+   Frappe's default pill (20px tall, "sm" text style) is roomy for a table
+   packed with several per row, so .ib-ps-pill-sm shrinks padding/font while
+   keeping every color/theme rule native. */
+.ib-ps-pill-sm {
+	height: auto; padding: 1px 7px 1px 5px; font-size: 10px; font-weight: 600;
 }
-.ib-ps-badge--urgent  { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
-.ib-ps-badge--high    { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
-.ib-ps-badge--normal  { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
-.ib-ps-badge--low     { background: #f9fafb; color: #6b7280; border: 1px solid #d1d5db; }
-
-/* Status chip */
-.ib-ps-status-chip {
-	font-size: 10px; font-weight: 600;
-	padding: 2px 7px; border-radius: 10px;
-	background: var(--fg-color, #f3f4f6); color: var(--text-muted);
-	border: 1px solid var(--border-color);
-}
-.ib-ps-status--in_progress { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
-.ib-ps-status--completed   { background: #f0fdf4; color: #16a34a; border-color: #bbf7d0; }
-.ib-ps-status--on_hold     { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+.ib-ps-pill-sm::before { height: 5px; width: 5px; margin-right: 4px; }
 
 /* Machine chip */
 .ib-ps-machine-chip {
@@ -2395,17 +2577,11 @@ class IBProductionStages {
    swapped in for the old always-expanded <li> list of full WO name/status/qty/date. */
 .ib-ps-wo-chip-row { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
 .ib-ps-wo-chip {
-	font-size: 10px; font-weight: 700;
-	border-radius: 4px; padding: 2px 6px;
-	letter-spacing: .03em; cursor: pointer;
+	font-weight: 700; letter-spacing: .03em; cursor: pointer;
 	transition: transform 0.1s, box-shadow 0.15s;
 }
 .ib-ps-wo-chip:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,0.12); }
-.ib-ps-wo-chip--completed   { background: #d1fae5; color: #065f46; }
-.ib-ps-wo-chip--in_progress { background: #dbeafe; color: #1e3a8a; }
-.ib-ps-wo-chip--pending     { background: #f1f5f9; color: #64748b; }
-.ib-ps-wo-chip--on_hold     { background: #fef3c7; color: #92400e; }
-.ib-ps-wo-chip--cancelled   { background: #fee2e2; color: #991b1b; text-decoration: line-through; }
+.ib-ps-wo-chip--cancelled { text-decoration: line-through; }
 .ib-ps-wo-chip-progress { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
 .ib-ps-wo-chip-progress-wrap {
 	height: 5px; width: 60px; background: var(--border-color);
@@ -2530,11 +2706,16 @@ class IBProductionStages {
 	display: inline-flex; align-items: center; justify-content: center;
 	border-radius: 6px; cursor: default;
 }
-.ib-ps-stage-cell--done    { background: #dcfce7; color: #16a34a; }
-.ib-ps-stage-cell--active  { background: #dbeafe; color: #1d4ed8; }
-.ib-ps-stage-cell--pending { background: #fef9c3; color: #92400e; }
-.ib-ps-stage-cell--none    { background: #f3f4f6; color: #9ca3af; cursor: pointer; }
-.ib-ps-stage-cell--none:hover { background: #e5e7eb; }
+/* Colors reuse Frappe's own theme-aware --bg-{color}/--text-on-{color} tokens
+   (frappe/public/scss/common/css_variables.scss) — same source indicator-pill
+   itself draws from, so this stays correct in dark mode without a separate
+   hardcoded palette. Shape (40x40 icon cell) stays custom — Frappe has no
+   native grid-cell/matrix component this maps onto, only text pills. */
+.ib-ps-stage-cell--done    { background: var(--bg-green);  color: var(--text-on-green); }
+.ib-ps-stage-cell--active  { background: var(--bg-blue);   color: var(--text-on-blue); }
+.ib-ps-stage-cell--pending { background: var(--bg-yellow); color: var(--text-on-yellow); }
+.ib-ps-stage-cell--none    { background: var(--bg-gray);   color: var(--text-on-gray); cursor: pointer; }
+.ib-ps-stage-cell--none:hover { background: var(--border-color); }
 
 /* Pulse animation */
 @keyframes ib-ps-pulse {
@@ -2593,14 +2774,6 @@ tr.ib-ps-wo-sub-item--clickable:hover td { background: var(--subtle-fg, #f8fafc)
 	text-transform: capitalize;
 }
 
-/* Status dot */
-.ib-ps-status-dot {
-	display: inline-block; width: 8px; height: 8px;
-	border-radius: 50%; margin-left: 6px;
-}
-.ib-ps-status-dot--active      { background: #22c55e; }
-.ib-ps-status-dot--inactive    { background: #ef4444; }
-.ib-ps-status-dot--maintenance { background: #f59e0b; }
 
 /* Machine card (detail / machine-wise view) */
 .ib-ps-machine-grid {
@@ -2675,7 +2848,7 @@ tr.ib-ps-wo-sub-item--clickable:hover td { background: var(--subtle-fg, #f8fafc)
 .ib-ps-side-panel {
 	position: fixed;
 	top: 0; right: 0; bottom: 0;
-	width: 400px;
+	width: 440px;
 	max-width: 95vw;
 	background: var(--card-bg);
 	border-left: 1px solid var(--border-color);
@@ -2705,11 +2878,21 @@ tr.ib-ps-wo-sub-item--clickable:hover td { background: var(--subtle-fg, #f8fafc)
 .ib-ps-panel-machine { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
 .ib-ps-panel-actions {
 	padding: 12px 16px;
-	display: flex; gap: 8px; flex-wrap: wrap;
+	display: flex; gap: 8px; align-items: stretch;
 	border-bottom: 1px solid var(--border-color);
 	flex-shrink: 0;
 }
 .ib-ps-panel-btn { /* inherits from btn classes */ }
+/* One prominent primary action, full-width — replaces the old row of 5+
+   equal-weight buttons (Assign/Start/Hold/Complete/Advance/DN all competing
+   for attention at once). */
+.ib-ps-panel-primary { flex: 1; padding: 8px 14px; font-size: 13px; }
+.ib-ps-panel-more { flex-shrink: 0; }
+.ib-ps-panel-more .dropdown-toggle::after { display: none; }
+.ib-ps-panel-more .dropdown-toggle {
+	height: 100%; padding: 0 10px;
+	display: flex; align-items: center; justify-content: center;
+}
 .ib-ps-panel-move-row {
 	display: flex; gap: 6px; align-items: center;
 	padding: 10px 16px; border-bottom: 1px solid var(--border-color);

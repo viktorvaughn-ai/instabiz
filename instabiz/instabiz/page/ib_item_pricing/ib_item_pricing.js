@@ -1,26 +1,184 @@
-frappe.pages["ib-price-list"].on_page_load = function (wrapper) {
+frappe.pages["ib-item-pricing"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
-		title: "Price List",
+		title: "Item Pricing",
 		single_column: true,
 	});
-	wrapper.page_obj = new IBPriceListPage(page, wrapper);
+	wrapper.pricing_shell = new IBItemPricingShell(page, wrapper);
+	frappe.pages["ib-item-pricing"]._shell = wrapper.pricing_shell;
 };
 
-frappe.pages["ib-price-list"].on_page_show = function (wrapper) {
-	if (wrapper.page_obj) wrapper.page_obj._on_show();
+frappe.pages["ib-item-pricing"].on_page_show = function (wrapper) {
+	if (wrapper.pricing_shell) wrapper.pricing_shell._on_show();
 };
 
-frappe.pages["ib-price-list"].on_page_hide = function (wrapper) {
-	if (wrapper.page_obj) wrapper.page_obj._cleanup();
+frappe.pages["ib-item-pricing"].on_page_hide = function (wrapper) {
+	if (wrapper.pricing_shell) wrapper.pricing_shell._cleanup();
 };
 
-/* ─── Page controller ────────────────────────────────────────────────────── */
-class IBPriceListPage {
+/* ─── Outer shell — tabs between Price List and Item History ────────────── */
+class IBItemPricingShell {
 	constructor(page, wrapper) {
+		this.page      = page;
+		this.wrapper   = wrapper;
+		// page.main (== page.body) is Frappe's own ".layout-main-section" —
+		// created once by make_app_page, and page.page_form is prepended
+		// INSIDE it at construction time. Never wholesale-replace this
+		// node's HTML (killed Item History's filter fields the first time —
+		// add_field() kept appending into the now-detached page_form
+		// object, invisible because its DOM parent no longer existed).
+		// Mount the tab bar and per-tab body as siblings inside it instead.
+		this.$main     = $(page.main);
+		this._active   = null;
+		this._active_tab = null;
+		this._build_shell();
+		this._activate(this._route_tab(), false);
+	}
+
+	_route_tab() {
+		const route = frappe.get_route();
+		return route[1] === "item_history" ? "item_history" : "price_list";
+	}
+
+	_build_shell() {
+		if (!document.getElementById("ib-ipx-styles")) {
+			const s = document.createElement("style");
+			s.id = "ib-ipx-styles";
+			s.textContent = `
+				.ib-ipx-tabs { display:flex; gap:4px; padding:10px 0 0; border-bottom:2px solid var(--border-color); margin-bottom:14px; }
+				button.ib-ipx-tab {
+					-webkit-appearance:none; appearance:none;
+					padding:8px 28px; border:1.5px solid transparent !important; border-bottom:none !important;
+					border-radius:8px 8px 0 0; font-size:13px; font-weight:600; cursor:pointer;
+					color:var(--text-muted); background:transparent !important; box-shadow:none !important;
+					transition:all .15s; margin-bottom:-2px; line-height:1.4;
+				}
+				button.ib-ipx-tab:hover { background:var(--bg-color) !important; color:var(--text-color); }
+				button.ib-ipx-tab.ib-ipx-tab--active {
+					background:var(--card-bg) !important; color:var(--ib-primary,#d97757);
+					border-color:var(--border-color) !important; border-bottom-color:var(--card-bg) !important;
+				}
+				.ib-iph-current-rate {
+					display:flex; align-items:center; justify-content:space-between; gap:12px;
+					padding:12px 16px; margin-bottom:12px;
+					border-left:3px solid var(--ib-primary,#d97757);
+				}
+				.ib-iph-current-rate-label { font-size:12px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
+				.ib-iph-current-rate-code { font-weight:400; text-transform:none; margin-left:6px; color:var(--text-color); }
+				.ib-iph-current-rate-value { font-size:14px; font-weight:600; color:var(--ib-primary,#d97757); }
+				.ib-iph-current-rate-link { font-size:12px; margin-left:14px; cursor:pointer; color:var(--ib-primary,#d97757); text-decoration:none; white-space:nowrap; }
+				.ib-iph-current-rate-link:hover { text-decoration:underline; }
+			`;
+			document.head.appendChild(s);
+		}
+		// Prepend the tab bar (page_form, if it exists yet, was already
+		// prepended by Frappe before this runs — this ends up first,
+		// pushing page_form below it, body appended last). Built once;
+		// never rebuilt on tab switch, unlike the body.
+		this.$main.prepend(`<div class="ib-ipx-tabs" id="ib-ipx-tabs">
+			<button class="ib-ipx-tab" data-tab="price_list">Price List</button>
+			<button class="ib-ipx-tab" data-tab="item_history">Item History</button>
+		</div>`);
+		this.$main.append(`<div id="ib-ipx-body"></div>`);
+		this.$main.on("click", ".ib-ipx-tab", (e) => {
+			const tab = $(e.currentTarget).data("tab");
+			if (tab === this._active_tab) return;
+			frappe.set_route("ib-item-pricing", tab === "price_list" ? "" : tab);
+			this._activate(tab, false);
+		});
+	}
+
+	_on_show() {
+		const tab = this._route_tab();
+		if (tab !== this._active_tab) this._activate(tab, false);
+	}
+
+	/* Called both by the shell's own tab clicks and by cross-nav actions
+	   inside the child views (e.g. Price List's "View Sold History" row
+	   action) — kept as one entry point so both paths tear down/rebuild
+	   the shared Frappe page chrome (toolbar/page_form) identically. */
+	_activate(tab) {
+		this._teardown_active();
+		this.$main.find(".ib-ipx-tab").removeClass("ib-ipx-tab--active");
+		this.$main.find(`[data-tab="${tab}"]`).addClass("ib-ipx-tab--active");
+
+		this.page.clear_primary_action();
+		this.page.clear_secondary_action();
+		this.page.clear_inner_toolbar();
+		this.page.clear_menu();
+		// Official Page API — empties page_form's children (add_field()
+		// overwrites fields_dict[fieldname] on next use, so no separate
+		// reset needed) and hides it until the next add_field() call
+		// (show_form()) re-reveals it. Never touch page_form's own DOM
+		// node — it's a permanent child of page.main created once by
+		// make_app_page, not something either tab owns exclusively.
+		this.page.clear_fields();
+		this.page.hide_form();
+
+		const $body = this.$main.find("#ib-ipx-body").empty();
+		this._active_tab = tab;
+
+		if (tab === "price_list") {
+			this._active = new IBPriceListPage(this.page, $body);
+		} else {
+			this._active = new IbItemPriceHistory(this.page, $body);
+			const opts = frappe.route_options || {};
+			if (opts.item_code || opts.customer) {
+				if (opts.item_code) this._active.f_item.set_value(opts.item_code);
+				if (opts.customer) this._active.f_customer.set_value(opts.customer);
+				frappe.route_options = null;
+			}
+		}
+	}
+
+	/* Used by Price List's "View Sold History" action to jump tabs and
+	   prefill the Item filter in one step, without a route round-trip. */
+	_open_item_history(item_code) {
+		frappe.set_route("ib-item-pricing", "item_history");
+		this._activate("item_history");
+		if (this._active && item_code) this._active.f_item.set_value(item_code);
+	}
+
+	/* Used by Item History's "View in Price List" link — jumps tabs and
+	   pre-searches the rate card table for the matched base code. */
+	_open_price_list(product_type, search_term) {
+		frappe.set_route("ib-item-pricing", "");
+		this._activate("price_list");
+		if (!this._active) return;
+		const tab = product_type === "Cut Pack" ? "cutpack" : "jumbo";
+		if (tab !== this._active._tab) {
+			this._active.$main.find(".ib-pl-tab").removeClass("ib-pl-tab--active");
+			this._active.$main.find(`[data-tab="${tab}"]`).addClass("ib-pl-tab--active");
+			this._active.$main.find(".ib-rc-panel").hide();
+			this._active.$main.find(`#ib-rc-panel-${tab}`).show();
+			this._active._tab = tab;
+			if (!this._active._views[tab]) this._active._load_tab(tab);
+		}
+		setTimeout(() => {
+			const view = this._active._views[tab];
+			if (view && search_term) {
+				view.$el.find(".ib-rcv-search").val(search_term);
+				view._filter();
+			}
+		}, 300);
+	}
+
+	_teardown_active() {
+		if (this._active && this._active._cleanup) this._active._cleanup();
+		this._active = null;
+	}
+
+	_cleanup() {
+		this._teardown_active();
+	}
+}
+
+
+/* ─── Price List tab controller (ex ib_price_list.js) ────────────────────── */
+class IBPriceListPage {
+	constructor(page, $container) {
 		this.page    = page;
-		this.wrapper = wrapper;
-		this.$main   = $(wrapper).find(".page-content");
+		this.$main   = $container;
 		this._is_admin = frappe.user.has_role("System Manager");
 		this._is_mgr   = this._is_admin || frappe.user.has_role("Sales Manager");
 		this._tab      = "jumbo";
@@ -105,9 +263,9 @@ class IBPriceListPage {
 		this.$main.find(`#ib-rc-panel-${tab}`).prepend($banner);
 	}
 
-	/* ── SPA state: persist tab in URL hash ── */
+	/* ── SPA state: persist tab as ib-item-pricing/price_list/<tab> ── */
 	_restore_state() {
-		const hash = (frappe.get_route()[1] || "").replace(/^#/, "");
+		const hash = (frappe.get_route()[2] || "").replace(/^#/, "");
 		if (hash === "cutpack") {
 			this._tab = "cutpack";
 			this.$main.find(".ib-pl-tab").removeClass("ib-pl-tab--active");
@@ -119,21 +277,7 @@ class IBPriceListPage {
 
 	_set_state(tab) {
 		this._tab = tab;
-		frappe.set_route("ib-price-list", tab === "jumbo" ? "" : tab);
-	}
-
-	_on_show() {
-		/* If already loaded, just re-apply state from URL without re-fetching */
-		const hash = (frappe.get_route()[1] || "").replace(/^#/, "");
-		const tab  = (hash === "cutpack") ? "cutpack" : "jumbo";
-		if (tab !== this._tab) {
-			this._tab = tab;
-			this.$main.find(".ib-pl-tab").removeClass("ib-pl-tab--active");
-			this.$main.find(`[data-tab="${tab}"]`).addClass("ib-pl-tab--active");
-			this.$main.find(".ib-rc-panel").hide();
-			this.$main.find(`#ib-rc-panel-${tab}`).show();
-			if (!this._views[tab]) this._load_tab(tab);
-		}
+		frappe.set_route("ib-item-pricing", "price_list", tab === "jumbo" ? "" : tab);
 	}
 
 	_build_toolbar() {
@@ -202,6 +346,7 @@ class IBPriceListPage {
 				button.ib-pl-act:focus-visible { opacity:1; outline:2px solid var(--ib-primary); outline-offset:1px; }
 				button.ib-pl-act--edit:hover { background:var(--ib-tint-mid,#f7ede7) !important; color:var(--ib-primary,#d97757); }
 				button.ib-pl-act--hist:hover { background:var(--ib-tint-mid,#f7ede7) !important; color:var(--ib-primary-dark,#c0622f); }
+				button.ib-pl-act--sold:hover { background:#eff6ff !important; color:#2563eb; }
 				button.ib-pl-act--del:hover  { background:#fef2f2 !important; color:#b91c1c; }
 				/* ── Live indicator ── */
 				.ib-pl-live {
@@ -428,9 +573,7 @@ class IBRateCardView {
 	}
 
 	_build() {
-		const action_th = this._is_mgr
-			? `<th class="ib-pl-th ib-pl-th--actions" style="width:80px"></th>`
-			: "";
+		const action_th = `<th class="ib-pl-th ib-pl-th--actions" style="width:${this._is_mgr ? 110 : 40}px"></th>`;
 
 		const jumbo_heads = `
 			<th class="ib-pl-th ib-pl-th--code">Code</th>
@@ -573,6 +716,34 @@ class IBRateCardView {
 			this._show_history(name, row ? row.item_code : name);
 		});
 
+		// "View Sold History" — open the Item History tab pre-filled with a
+		// real Item variant this rate card row resolves to (reverse of the
+		// base-code -> variant prefix relationship — see
+		// get_matching_items_for_rate_card()'s docstring). Available to
+		// every role that can see this page (read-only cross-nav, not an
+		// edit action), unlike edit/delete below.
+		this.$el.on("click", ".ib-pl-act--sold", (e) => {
+			e.stopPropagation();
+			const name = $(e.currentTarget).data("name");
+			const row  = this._all.find(r => r.name === name);
+			frappe.call({
+				method: "instabiz.instabiz.page.ib_price_list.ib_price_list.get_matching_items_for_rate_card",
+				args: { name },
+				callback: (r) => {
+					const items = r.message || [];
+					if (!items.length) {
+						frappe.show_alert({
+							message: `No sold Item variants found for ${row ? row.item_code : name} yet`,
+							indicator: "orange",
+						}, 5);
+						return;
+					}
+					const shell = frappe.pages["ib-item-pricing"]._shell;
+					if (shell) shell._open_item_history(items[0].item_code);
+				},
+			});
+		});
+
 		this.$el.on("click", ".ib-pl-act--del", (e) => {
 			e.stopPropagation();
 			const name = $(e.currentTarget).data("name");
@@ -626,7 +797,7 @@ class IBRateCardView {
 
 	_show_skeleton(n = 9) {
 		const cols = this._is_jumbo ? 8 : 10;
-		const action_cols = this._is_mgr ? 1 : 0;
+		const action_cols = 1;
 		const total_cols  = cols + action_cols;
 		/* vary widths so rows look natural */
 		const widths = [55, 80, 65, 70, 60, 75, 50, 85, 68, 72];
@@ -748,7 +919,14 @@ class IBRateCardView {
 			: `<span style="color:var(--text-muted)">—</span>`;
 
 		const action_td = (name) => {
-			if (!this._is_mgr) return "";
+			const sold_btn = `<button class="ib-pl-act ib-pl-act--sold" data-name="${esc(name)}" title="View sold price history" aria-label="View sold price history">
+				<iconify-icon icon="lucide:trending-up" width="13" height="13"></iconify-icon>
+			</button>`;
+			if (!this._is_mgr) {
+				return `<td class="ib-pl-td" style="padding:4px 10px">
+					<div class="ib-pl-acts">${sold_btn}</div>
+				</td>`;
+			}
 			const del_btn = this._is_admin
 				? `<button class="ib-pl-act ib-pl-act--del" data-name="${esc(name)}" title="Delete entry" aria-label="Delete entry">
 					<iconify-icon icon="lucide:trash-2" width="13" height="13"></iconify-icon>
@@ -756,6 +934,7 @@ class IBRateCardView {
 				: "";
 			return `<td class="ib-pl-td" style="padding:4px 10px">
 				<div class="ib-pl-acts">
+					${sold_btn}
 					<button class="ib-pl-act ib-pl-act--edit" data-name="${esc(name)}" title="Edit prices" aria-label="Edit prices">
 						<iconify-icon icon="lucide:pencil" width="13" height="13"></iconify-icon>
 					</button>
@@ -990,4 +1169,719 @@ function _open_entry_dialog(row, product_type, on_save) {
 	}
 
 	d.show();
+}
+
+
+/* ─── Item History tab controller (ex ib_item_price_history.js) ─────────── */
+const SORT_DEFAULT_DIR = {
+	transaction_date: "desc",
+	sales_order: "asc",
+	customer: "asc",
+	location: "asc",
+	sales_person: "asc",
+	qty: "desc",
+	uom: "asc",
+	rate: "desc",
+	amount: "desc",
+};
+
+class IbItemPriceHistory {
+	constructor(page, $container) {
+		this.page = page;
+		this.$body = $container;
+		this._limit = 20;
+		this._offset = 0;
+		this._total = 0;
+		this._rows = [];
+		this._sort_by = "transaction_date";
+		this._sort_dir = "desc";
+		this._search_timer = null;
+		this._last_refresh = null;
+		this._chart = null;
+		this._current_uoms = [];
+		this._current_rate = null;
+		this._setup_filters();
+		this._setup_content();
+	}
+
+	_icon(name) {
+		const icons = {
+			download: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10m0 0-4-4m4 4 4-4"/><path d="M4 18v2h16v-2"/></svg>`,
+			clock: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`,
+		};
+		return `<span class="ib-svg-icon ib-iph-svg-icon--${name}">${icons[name] || ""}</span>`;
+	}
+
+	_setup_filters() {
+		$(this.page.page_form).addClass("ib-page-form ib-iph-filters");
+
+		this.f_item = this.page.add_field({
+			fieldname: "item_code",
+			label: __("Item"),
+			fieldtype: "Link",
+			options: "Item",
+			// Not hard-required — Item or Customer (or both) is enough, see refresh().
+			change: () => this._on_item_change(),
+		});
+		this.f_item.$wrapper.addClass("ib-iph-filter-primary");
+
+		this.f_customer = this.page.add_field({
+			fieldname: "customer",
+			label: __("Customer"),
+			fieldtype: "Link",
+			options: "Customer",
+			change: () => this.refresh(),
+		});
+
+		this.f_uom = this.page.add_field({
+			fieldname: "uom",
+			label: __("UOM"),
+			fieldtype: "Select",
+			options: "",
+			description: __("One item can sell in several UOMs at very different rate scales — pick one to compare like-for-like."),
+			change: () => this.refresh(),
+		});
+
+		this.f_sales_person_user = this.page.add_field({
+			fieldname: "sales_person_user",
+			label: __("Sales Person"),
+			fieldtype: "Link",
+			options: "User",
+			change: () => this.refresh(),
+		});
+
+		this.f_location = this.page.add_field({
+			fieldname: "location",
+			label: __("Location"),
+			fieldtype: "Select",
+			options: "\nMAHARASHTRA\nGUJARAT\nCHENNAI",
+			change: () => this.refresh(),
+		});
+
+		this.f_from_date = this.page.add_field({
+			fieldname: "from_date",
+			label: __("From Date"),
+			fieldtype: "Date",
+			change: () => this.refresh(),
+		});
+
+		this.f_to_date = this.page.add_field({
+			fieldname: "to_date",
+			label: __("To Date"),
+			fieldtype: "Date",
+			change: () => this.refresh(),
+		});
+
+		this._setup_date_presets();
+		this.page.set_secondary_action(__("Clear Filters"), () => this._clear_all_filters());
+	}
+
+	_on_item_change() {
+		const item_code = this.f_item.get_value();
+		this._current_uoms = [];
+		if (!item_code) {
+			this._set_uom_options([]);
+			this._render_current_rate(null);
+			this.refresh();
+			return;
+		}
+		this._render_current_rate(item_code);
+		frappe.call({
+			method: "instabiz.instabiz.page.ib_item_price_history.ib_item_price_history.get_item_uoms",
+			args: { item_code },
+			callback: (r) => {
+				const uoms = r.message || [];
+				this._current_uoms = uoms;
+				this._set_uom_options(uoms);
+				// Auto-pick the most-frequent UOM so the summary cards compare
+				// like-for-like by default instead of blending different unit scales.
+				this.f_uom.set_value(uoms.length ? uoms[0].uom : "");
+				this.refresh();
+			},
+		});
+	}
+
+	/* Live Rate Card price for the selected Item — resolved via reverse
+	   prefix match (get_current_rate_for_item, see its docstring for why
+	   this can't be a plain equi-join). Always fetched fresh, never
+	   cached — this card is meant to read the current, not a snapshot. */
+	_render_current_rate(item_code) {
+		if (!item_code) {
+			this._current_rate = null;
+			this.$current_rate.addClass("ib-iph-hide").empty();
+			return;
+		}
+		frappe.call({
+			method: "instabiz.instabiz.page.ib_price_list.ib_price_list.get_current_rate_for_item",
+			args: { item_code },
+			callback: (r) => {
+				this._current_rate = r.message || null;
+				if (!this._current_rate) {
+					this.$current_rate.addClass("ib-iph-hide").empty();
+					return;
+				}
+				const rc = this._current_rate;
+				const is_jumbo = rc.product_type === "Jumbo Roll";
+				const price_html = is_jumbo
+					? `${__("Face")} ${format_currency(rc.face_price)} &nbsp;·&nbsp; ${__("Last")} ${format_currency(rc.last_price)}`
+					: `S1 ${format_currency(rc.slab1)} · S2 ${format_currency(rc.slab2)} · S3 ${format_currency(rc.slab3)} · S4 ${format_currency(rc.slab4)} · S5 ${format_currency(rc.slab5)}`;
+				this.$current_rate.removeClass("ib-iph-hide").html(`
+					<div class="ib-card ib-iph-current-rate">
+						<div>
+							<div class="ib-iph-current-rate-label">${__("Current Rate Card Price")}<span class="ib-iph-current-rate-code">${frappe.utils.escape_html(rc.item_code)} (${frappe.utils.escape_html(rc.product_type)})</span></div>
+							<div class="ib-iph-current-rate-value">${price_html}</div>
+						</div>
+						<a class="ib-iph-current-rate-link" data-action="view-price-list">${__("View in Price List")} →</a>
+					</div>
+				`);
+				this.$current_rate.find('[data-action="view-price-list"]').on("click", () => {
+					const shell = frappe.pages["ib-item-pricing"]._shell;
+					if (shell) shell._open_price_list(rc.product_type, rc.item_code);
+				});
+			},
+		});
+	}
+
+	_set_uom_options(uoms) {
+		this.f_uom.df.options = [""].concat(uoms.map((u) => u.uom)).join("\n");
+		this.f_uom.refresh();
+	}
+
+	_setup_date_presets() {
+		const presets = [
+			{ label: __("Last 30 Days"), days: 30 },
+			{ label: __("Last 90 Days"), days: 90 },
+			{ label: __("This Year"), year: true },
+			{ label: __("All Time"), all: true },
+		];
+
+		const $row = $(`<div class="ib-iph-date-presets"></div>`);
+		presets.forEach((p) => {
+			const $btn = $(`<button type="button" class="ib-iph-preset-btn">${p.label}</button>`);
+			$btn.on("click", () => {
+				if (p.all) {
+					this.f_from_date.set_value("");
+					this.f_to_date.set_value("");
+				} else if (p.year) {
+					const y = new Date().getFullYear();
+					this.f_from_date.set_value(`${y}-01-01`);
+					this.f_to_date.set_value(frappe.datetime.get_today());
+				} else {
+					this.f_from_date.set_value(frappe.datetime.add_days(frappe.datetime.get_today(), -p.days));
+					this.f_to_date.set_value(frappe.datetime.get_today());
+				}
+			});
+			$row.append($btn);
+		});
+		this.f_to_date.$wrapper.after($row);
+	}
+
+	_setup_content() {
+		this.$content = $(`
+			<div class="ib-iph-wrap">
+				<div class="ib-iph-current-rate-slot ib-iph-hide"></div>
+				<div class="ib-iph-cards-row">
+					<div class="ib-iph-cards"></div>
+					<span class="ib-refresh-time ib-iph-hide"></span>
+				</div>
+				<div class="ib-iph-uom-note ib-iph-hide"></div>
+				<div class="ib-iph-trend-card ib-card ib-iph-hide">
+					<div class="ib-iph-trend-label">${__("Rate Trend")}</div>
+					<div class="ib-iph-trend-chart"></div>
+				</div>
+				<div class="ib-card ib-iph-table-wrap">
+					<div class="ib-iph-toolbar">
+						<div class="ib-iph-toolbar-row">
+							<input type="text" class="form-control input-sm ib-iph-search"
+								placeholder="${__("Search order, customer, location, sales person…")}">
+							<div class="ib-iph-toolbar-actions">
+								<select class="ib-iph-pg-size" title="${__("Rows per page")}">
+									<option value="20">${__("20 / page")}</option>
+									<option value="50">${__("50 / page")}</option>
+									<option value="100">${__("100 / page")}</option>
+								</select>
+								<button class="ib-action-btn ib-iph-export-btn" title="${__("Export current results as CSV")}">
+									${this._icon("download")}
+									${__("Export CSV")}
+								</button>
+							</div>
+						</div>
+						<div class="ib-iph-chips ib-iph-hide"></div>
+					</div>
+					<div class="ib-iph-table-scroll">
+						<table class="ib-iph-table">
+							<thead>
+								<tr>
+									<th data-col="transaction_date">${__("Date")}</th>
+									<th data-col="sales_order">${__("Sales Order")}</th>
+									<th>${__("Item")}</th>
+									<th data-col="customer">${__("Customer")}</th>
+									<th data-col="location">${__("Location")}</th>
+									<th data-col="sales_person">${__("Sales Person")}</th>
+									<th data-col="qty" class="text-right">${__("Qty")}</th>
+									<th>${__("UOM")}</th>
+									<th data-col="rate" class="text-right">${__("Rate")}</th>
+									<th data-col="amount" class="text-right">${__("Amount")}</th>
+								</tr>
+							</thead>
+							<tbody></tbody>
+						</table>
+					</div>
+					<div class="ib-iph-empty">
+						${__("No prior orders for this item yet.")}
+					</div>
+					<div class="ib-iph-pagination">
+						<select class="ib-iph-pg-size ib-iph-pg-size--bottom" title="${__("Rows per page")}">
+							<option value="20">${__("20 / page")}</option>
+							<option value="50">${__("50 / page")}</option>
+							<option value="100">${__("100 / page")}</option>
+						</select>
+						<span class="ib-iph-page-info"></span>
+						<div class="ib-iph-page-btns">
+							<button class="btn btn-default btn-xs ib-iph-prev">${__("Prev")}</button>
+							<button class="btn btn-default btn-xs ib-iph-next">${__("Next")}</button>
+						</div>
+					</div>
+				</div>
+				<div class="ib-iph-select-prompt">
+					${__("Select an Item, a Customer, or both above to view price history.")}
+				</div>
+			</div>
+		`).appendTo(this.$body);
+
+		this.$current_rate = this.$content.find(".ib-iph-current-rate-slot");
+		this.$cards = this.$content.find(".ib-iph-cards");
+		this.$refresh_time = this.$content.find(".ib-refresh-time");
+		this.$uom_note = this.$content.find(".ib-iph-uom-note");
+		this.$trend_card = this.$content.find(".ib-iph-trend-card");
+		this.$trend_chart = this.$content.find(".ib-iph-trend-chart");
+		this.$tbody = this.$content.find("tbody");
+		this.$thead_ths = this.$content.find("thead th[data-col]");
+		this.$empty = this.$content.find(".ib-iph-empty");
+		this.$prompt = this.$content.find(".ib-iph-select-prompt");
+		this.$table_wrap = this.$content.find(".ib-iph-table-wrap");
+		this.$search = this.$content.find(".ib-iph-search");
+		this.$chips = this.$content.find(".ib-iph-chips");
+		this.$export_btn = this.$content.find(".ib-iph-export-btn");
+		this.$page_size = this.$content.find(".ib-iph-pg-size");
+		this.$pagination = this.$content.find(".ib-iph-pagination");
+		this.$page_info = this.$content.find(".ib-iph-page-info");
+		this.$prev = this.$content.find(".ib-iph-prev");
+		this.$next = this.$content.find(".ib-iph-next");
+
+		this.$search.on("input", () => {
+			clearTimeout(this._search_timer);
+			this._search_timer = setTimeout(() => {
+				this._offset = 0;
+				this.refresh();
+			}, 300);
+		});
+
+		this.$thead_ths.on("click", (e) => {
+			const col = $(e.currentTarget).data("col");
+			if (!col) return;
+			if (this._sort_by === col) {
+				this._sort_dir = this._sort_dir === "asc" ? "desc" : "asc";
+			} else {
+				this._sort_by = col;
+				this._sort_dir = SORT_DEFAULT_DIR[col] || "asc";
+			}
+			this._offset = 0;
+			this.refresh();
+		});
+
+		this.$export_btn.on("click", () => this._export_csv());
+
+		this.$page_size.on("change", (e) => {
+			this._limit = parseInt($(e.currentTarget).val(), 10);
+			this._offset = 0;
+			this.$page_size.val(this._limit);
+			this.refresh();
+		});
+
+		this.$prev.on("click", () => {
+			if (this._offset <= 0) return;
+			this._offset = Math.max(0, this._offset - this._limit);
+			this.refresh({ keep_offset: true });
+		});
+		this.$next.on("click", () => {
+			if (this._offset + this._limit >= this._total) return;
+			this._offset += this._limit;
+			this.refresh({ keep_offset: true });
+		});
+
+		this._show_idle();
+	}
+
+	_show_idle() {
+		this.$cards.empty();
+		this.$refresh_time.addClass("ib-iph-hide");
+		this.$uom_note.addClass("ib-iph-hide").empty();
+		this.$trend_card.addClass("ib-iph-hide");
+		this.$tbody.empty();
+		this.$search.val("");
+		this.$chips.addClass("ib-iph-hide").empty();
+		this._update_sort_indicators();
+		this.$empty.addClass("ib-iph-hide");
+		this.$table_wrap.addClass("ib-iph-hide");
+		this.$prompt.removeClass("ib-iph-hide");
+	}
+
+	_get_active_filters() {
+		const filters = [];
+		const customer = this.f_customer.get_value();
+		if (customer) {
+			filters.push({
+				type: "customer",
+				label: this.f_customer.$input.val() || customer,
+				clear: () => this.f_customer.set_value(""),
+			});
+		}
+		const sp = this.f_sales_person_user.get_value();
+		if (sp) {
+			filters.push({
+				type: "sp",
+				label: this.f_sales_person_user.$input.val() || sp,
+				clear: () => this.f_sales_person_user.set_value(""),
+			});
+		}
+		const loc = this.f_location.get_value();
+		if (loc) {
+			filters.push({
+				type: "wh",
+				label: loc,
+				clear: () => this.f_location.set_value(""),
+			});
+		}
+		const uom = this.f_uom.get_value();
+		if (uom) {
+			filters.push({
+				// Reuses Stock Dashboard's existing uom-sqmt/pcs/kg color chips when
+				// the value matches; falls back to plain neutral styling otherwise.
+				type: `uom-${uom.toLowerCase()}`,
+				label: `${__("UOM")}: ${uom}`,
+				clear: () => this.f_uom.set_value(""),
+			});
+		}
+		const fd = this.f_from_date.get_value();
+		if (fd) {
+			filters.push({
+				type: "date",
+				label: `${__("From")} ${frappe.datetime.str_to_user(fd)}`,
+				clear: () => this.f_from_date.set_value(""),
+			});
+		}
+		const td = this.f_to_date.get_value();
+		if (td) {
+			filters.push({
+				type: "date",
+				label: `${__("To")} ${frappe.datetime.str_to_user(td)}`,
+				clear: () => this.f_to_date.set_value(""),
+			});
+		}
+		const search = (this.$search.val() || "").trim();
+		if (search) {
+			filters.push({
+				type: "search",
+				label: `"${search}"`,
+				clear: () => {
+					this.$search.val("");
+					this._offset = 0;
+					this.refresh();
+				},
+			});
+		}
+		return filters;
+	}
+
+	_clear_all_filters() {
+		this.f_customer.set_value("");
+		this.f_sales_person_user.set_value("");
+		this.f_location.set_value("");
+		this.f_uom.set_value("");
+		this.f_from_date.set_value("");
+		this.f_to_date.set_value("");
+		this.$search.val("");
+		this._offset = 0;
+		this.refresh();
+	}
+
+	_render_chips() {
+		const filters = this._get_active_filters();
+		if (!filters.length) {
+			this.$chips.addClass("ib-iph-hide").empty();
+			return;
+		}
+		const esc = (v) => frappe.utils.escape_html(v);
+		this.$chips.removeClass("ib-iph-hide").html(
+			filters
+				.map(
+					(f, i) => `
+				<span class="ib-chip ib-chip--${f.type}" data-idx="${i}">${esc(f.label)}<button class="ib-chip-x" aria-label="${__("Remove")}">×</button></span>`
+				)
+				.join("") + (filters.length > 1 ? `<button class="ib-chip-clear-all">${__("Clear all")}</button>` : "")
+		);
+		this.$chips.find(".ib-chip").each((i, el) => {
+			$(el)
+				.find(".ib-chip-x")
+				.on("click", (ev) => {
+					ev.stopPropagation();
+					filters[i].clear();
+				});
+		});
+		this.$chips.find(".ib-chip-clear-all").on("click", () => this._clear_all_filters());
+	}
+
+	refresh(opts = {}) {
+		const item_code = this.f_item.get_value();
+		const customer = this.f_customer.get_value();
+		if (!item_code && !customer) {
+			this._show_idle();
+			return;
+		}
+
+		if (!opts.keep_offset) this._offset = 0;
+
+		this._render_chips();
+		this.$prompt.addClass("ib-iph-hide");
+		this.$table_wrap.addClass("ib-iph-hide");
+		this.$cards.html(`
+			<div class="ib-iph-spinner">
+				<span></span><span></span><span></span>
+			</div>
+		`);
+
+		frappe.call({
+			method: "instabiz.instabiz.page.ib_item_price_history.ib_item_price_history.get_item_price_history",
+			args: {
+				item_code: item_code || null,
+				customer: customer || null,
+				sales_person_user: this.f_sales_person_user.get_value() || null,
+				location: this.f_location.get_value() || null,
+				uom: this.f_uom.get_value() || null,
+				from_date: this.f_from_date.get_value() || null,
+				to_date: this.f_to_date.get_value() || null,
+				search: (this.$search.val() || "").trim() || null,
+				sort_by: this._sort_by,
+				sort_dir: this._sort_dir,
+				limit: this._limit,
+				offset: this._offset,
+			},
+			callback: (r) => {
+				const res = r.message || { data: [], total: 0, summary: {}, trend: [] };
+				this._rows = res.data || [];
+				this._total = res.total || 0;
+				this._last_refresh = new Date();
+				this._render_cards(res.summary, res.total);
+				this._render_trend(res.trend || []);
+				this._render_rows(this._rows);
+				this._render_pagination();
+				this._update_sort_indicators();
+				this._render_refresh_time();
+			},
+		});
+	}
+
+	_render_refresh_time() {
+		if (!this._last_refresh) {
+			this.$refresh_time.addClass("ib-iph-hide");
+			return;
+		}
+		const ts = this._last_refresh.toLocaleTimeString([], {
+			hour: "2-digit",
+			minute: "2-digit",
+			second: "2-digit",
+		});
+		this.$refresh_time.removeClass("ib-iph-hide").html(`${this._icon("clock")} ${__("Updated")} ${ts}`);
+	}
+
+	_render_cards(summary, total) {
+		const card = (label, value, variant) => `
+			<div class="ib-card ib-iph-card ${variant ? "ib-iph-card--" + variant : ""}">
+				<div class="ib-iph-card-value">${value}</div>
+				<div class="ib-iph-card-label">${label}</div>
+			</div>`;
+
+		// One item can sell in several UOMs at very different rate scales — the
+		// rate cards suffix the active UOM so they never look like a like-for-like
+		// comparison when they aren't.
+		const uom = this.f_uom.get_value();
+		const rate_suffix = uom ? ` (${uom})` : "";
+
+		this.$cards.html(`
+			${card(__("Orders"), total || 0)}
+			${card(__("Last Rate") + rate_suffix, summary.last_rate != null ? format_currency(summary.last_rate) : "-", "accent")}
+			${card(__("Lowest") + rate_suffix, summary.min_rate != null ? format_currency(summary.min_rate) : "-")}
+			${card(__("Highest") + rate_suffix, summary.max_rate != null ? format_currency(summary.max_rate) : "-")}
+		`);
+
+		if (!uom && this._current_uoms.length > 1) {
+			const uom_list = this._current_uoms.map((u) => u.uom).join(", ");
+			this.$uom_note.removeClass("ib-iph-hide").text(
+				__("This item sells in multiple UOMs ({0}) — rates above are blended across all of them. Pick a UOM above to compare like-for-like.", [uom_list])
+			);
+		} else if (summary.blended_across_items) {
+			// Customer-only mode (no Item picked) — Last/Lowest/Highest now span
+			// every item sold to this customer, not one item's price history.
+			// Computed on request (2026-08-05); previously skipped entirely for
+			// exactly this reason, so disclose it the same way the UOM-blend
+			// note above already does rather than presenting it as one item's range.
+			this.$uom_note.removeClass("ib-iph-hide").text(
+				__("No Item selected — rates above are blended across every item sold to this customer, not one item's price history. Pick an Item above to compare like-for-like.")
+			);
+		} else {
+			this.$uom_note.addClass("ib-iph-hide").empty();
+		}
+	}
+
+	_render_trend(trend) {
+		if (this._chart) {
+			this._chart.destroy && this._chart.destroy();
+			this._chart = null;
+		}
+		if (!trend || trend.length < 2) {
+			this.$trend_card.addClass("ib-iph-hide");
+			this.$trend_chart.empty();
+			return;
+		}
+		this.$trend_card.removeClass("ib-iph-hide");
+		this._chart = new frappe.Chart(this.$trend_chart[0], {
+			type: "line",
+			data: {
+				labels: trend.map((r) => frappe.datetime.str_to_user(r.date)),
+				datasets: [{ name: __("Rate"), values: trend.map((r) => parseFloat(r.rate || 0)) }],
+			},
+			colors: ["#d97757"],
+			height: 140,
+			lineOptions: { regionFill: 1, hideDots: 0, spline: 1 },
+			tooltipOptions: {
+				formatTooltipY: (v) => format_currency(v),
+			},
+			axisOptions: { xIsSeries: 1 },
+		});
+	}
+
+	_render_rows(rows) {
+		this.$table_wrap.removeClass("ib-iph-hide");
+
+		if (!rows || !rows.length) {
+			this.$tbody.empty();
+			this.$empty.removeClass("ib-iph-hide");
+			return;
+		}
+		this.$empty.addClass("ib-iph-hide");
+
+		this.$tbody.html(
+			rows
+				.map(
+					(r, i) => `
+					<tr class="${i === 0 && this._offset === 0 && this._sort_by === "transaction_date" && this._sort_dir === "desc" ? "ib-iph-row-latest" : ""}">
+						<td>${frappe.datetime.str_to_user(r.transaction_date)}</td>
+						<td><a href="/app/sales-order/${r.sales_order}">${r.sales_order}</a></td>
+						<td>${frappe.utils.escape_html(r.item_name || r.item_code || "")}</td>
+						<td><a href="/app/customer/${encodeURIComponent(r.customer)}">${frappe.utils.escape_html(r.customer_name || r.customer || "")}</a></td>
+						<td>${frappe.utils.escape_html(r.location || "")}</td>
+						<td>${frappe.utils.escape_html(r.sales_person || "")}</td>
+						<td class="text-right">${r.qty}</td>
+						<td>${frappe.utils.escape_html(r.uom || "")}</td>
+						<td class="text-right">${format_currency(r.rate)}</td>
+						<td class="text-right">${format_currency(r.amount)}</td>
+					</tr>
+				`
+				)
+				.join("")
+		);
+	}
+
+	_update_sort_indicators() {
+		this.$thead_ths.removeClass("ib-iph-th-sort-asc ib-iph-th-sort-desc");
+		this.$thead_ths
+			.filter(`[data-col="${this._sort_by}"]`)
+			.addClass(this._sort_dir === "asc" ? "ib-iph-th-sort-asc" : "ib-iph-th-sort-desc");
+	}
+
+	_render_pagination() {
+		if (!this._total) {
+			this.$pagination.addClass("ib-iph-hide");
+			return;
+		}
+		this.$pagination.removeClass("ib-iph-hide");
+
+		const start = this._total ? this._offset + 1 : 0;
+		const end = Math.min(this._offset + this._limit, this._total);
+		this.$page_info.text(__("Showing {0}-{1} of {2}", [start, end, this._total]));
+
+		this.$prev.prop("disabled", this._offset <= 0);
+		this.$next.prop("disabled", this._offset + this._limit >= this._total);
+	}
+
+	_export_csv() {
+		const item_code = this.f_item.get_value();
+		const customer = this.f_customer.get_value();
+		if (!item_code && !customer) return;
+
+		this.$export_btn.prop("disabled", true);
+		frappe.call({
+			method: "instabiz.instabiz.page.ib_item_price_history.ib_item_price_history.export_item_price_history",
+			args: {
+				item_code: item_code || null,
+				customer: customer || null,
+				sales_person_user: this.f_sales_person_user.get_value() || null,
+				location: this.f_location.get_value() || null,
+				uom: this.f_uom.get_value() || null,
+				from_date: this.f_from_date.get_value() || null,
+				to_date: this.f_to_date.get_value() || null,
+				search: (this.$search.val() || "").trim() || null,
+				sort_by: this._sort_by,
+				sort_dir: this._sort_dir,
+			},
+			callback: (r) => {
+				const res = r.message || { data: [], truncated: false };
+				if (!res.data.length) {
+					frappe.msgprint(__("Nothing to export."));
+					return;
+				}
+				IBStock.csv_download(
+					`Item_Price_History_${item_code || customer}_${frappe.datetime.get_today()}.csv`,
+					[
+						__("Date"),
+						__("Sales Order"),
+						__("Item"),
+						__("Customer"),
+						__("Location"),
+						__("Sales Person"),
+						__("Qty"),
+						__("UOM"),
+						__("Rate"),
+						__("Amount"),
+					],
+					res.data,
+					(row) => [
+						frappe.datetime.str_to_user(row.transaction_date),
+						row.sales_order,
+						row.item_name || row.item_code || "",
+						row.customer_name || row.customer,
+						row.location || "",
+						row.sales_person || "",
+						row.qty,
+						row.uom,
+						row.rate,
+						row.amount,
+					]
+				);
+				if (res.truncated) {
+					frappe.show_alert({
+						message: __("Export capped at {0} rows — narrow your filters for a complete export.", [5000]),
+						indicator: "orange",
+					});
+				}
+			},
+			always: () => this.$export_btn.prop("disabled", false),
+		});
+	}
+
+	_cleanup() {
+		if (this._chart) { this._chart.destroy && this._chart.destroy(); this._chart = null; }
+		clearTimeout(this._search_timer);
+	}
 }

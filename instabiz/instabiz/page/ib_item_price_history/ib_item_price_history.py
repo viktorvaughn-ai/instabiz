@@ -175,56 +175,57 @@ def get_item_price_history(
 
 	total = agg.cnt
 
-	# Last/lowest/highest rate only mean something when comparing the same
-	# item's price over time — with no item filter (customer-only view) the
-	# rows can span completely different items at unrelated price scales, so
-	# skip these entirely rather than show a misleading blended number.
-	if item_code:
-		max_row = frappe.db.sql(
-			f"""
-			SELECT MAX(soi.rate) AS max_rate
-			FROM `tabSales Order Item` soi
-			INNER JOIN `tabSales Order` so ON so.name = soi.parent
-			WHERE {where}
-			""",
-			params,
-			as_dict=True,
-		)[0]
+	# Last/lowest/highest rate always computed now (2026-08-05, user request)
+	# even in customer-only mode (no item_code) — previously skipped entirely
+	# there on the reasoning that rows could span unrelated items at very
+	# different price scales. Kept that same "blended" flag (mirrors the
+	# existing UOM-blend note below) so the frontend can still disclose when
+	# these numbers span more than one item, rather than silently presenting
+	# a customer-only blended range as if it were one item's price history.
+	max_row = frappe.db.sql(
+		f"""
+		SELECT MAX(soi.rate) AS max_rate
+		FROM `tabSales Order Item` soi
+		INNER JOIN `tabSales Order` so ON so.name = soi.parent
+		WHERE {where}
+		""",
+		params,
+		as_dict=True,
+	)[0]
 
-		# min_rate excludes rate<=0 rows separately — a mis-entered 0-rate SO
-		# line should not make the "Lowest" KPI read ₹0 (the row itself still
-		# shows in the table/count above, only the lowest-price summary skips it).
-		min_row = frappe.db.sql(
-			f"""
-			SELECT MIN(soi.rate) AS min_rate
-			FROM `tabSales Order Item` soi
-			INNER JOIN `tabSales Order` so ON so.name = soi.parent
-			WHERE {where} AND soi.rate > 0
-			""",
-			params,
-			as_dict=True,
-		)[0]
+	# min_rate excludes rate<=0 rows separately — a mis-entered 0-rate SO
+	# line should not make the "Lowest" KPI read ₹0 (the row itself still
+	# shows in the table/count above, only the lowest-price summary skips it).
+	min_row = frappe.db.sql(
+		f"""
+		SELECT MIN(soi.rate) AS min_rate
+		FROM `tabSales Order Item` soi
+		INNER JOIN `tabSales Order` so ON so.name = soi.parent
+		WHERE {where} AND soi.rate > 0
+		""",
+		params,
+		as_dict=True,
+	)[0]
 
-		last = frappe.db.sql(
-			f"""
-			SELECT soi.rate
-			FROM `tabSales Order Item` soi
-			INNER JOIN `tabSales Order` so ON so.name = soi.parent
-			WHERE {where}
-			ORDER BY so.transaction_date DESC, so.creation DESC
-			LIMIT 1
-			""",
-			params,
-			as_dict=True,
-		)
-		summary = {
-			"count": total,
-			"last_rate": last[0].rate if last else None,
-			"min_rate": min_row.min_rate,
-			"max_rate": max_row.max_rate,
-		}
-	else:
-		summary = {"count": total, "last_rate": None, "min_rate": None, "max_rate": None}
+	last = frappe.db.sql(
+		f"""
+		SELECT soi.rate
+		FROM `tabSales Order Item` soi
+		INNER JOIN `tabSales Order` so ON so.name = soi.parent
+		WHERE {where}
+		ORDER BY so.transaction_date DESC, so.creation DESC
+		LIMIT 1
+		""",
+		params,
+		as_dict=True,
+	)
+	summary = {
+		"count": total,
+		"last_rate": last[0].rate if last else None,
+		"min_rate": min_row.min_rate,
+		"max_rate": max_row.max_rate,
+		"blended_across_items": not bool(item_code),
+	}
 
 	trend_rows = frappe.db.sql(
 		f"""

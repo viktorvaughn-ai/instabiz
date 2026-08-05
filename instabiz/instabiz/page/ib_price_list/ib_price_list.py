@@ -200,6 +200,60 @@ def delete_rate_card_entry(name):
 
 
 @frappe.whitelist()
+def get_current_rate_for_item(item_code):
+	"""Live Rate Card price for a real Item — merged Item Pricing page's
+	"Current Rate" card on the Item History tab.
+
+	IB Rate Card Entry.item_code is a base spec code (e.g. "IS-55113V");
+	real Item codes append a color/width/pack suffix (e.g.
+	"IS-55113V-300BKRBNL"). Confirmed live: 0 of 528 real Items match any
+	Rate Card entry's item_code *exactly* — there is no equi-join between
+	the two tables. 87 of 104 rate-card base codes DO have >=1 matching
+	Item via prefix (real_item_code LIKE 'base_code%'). This resolves the
+	reverse direction (real Item -> its rate card row) via that same
+	prefix relationship, picking the longest-matching base code if more
+	than one rate card entry's code happens to prefix-match (shouldn't
+	normally happen — base codes aren't themselves prefixes of each
+	other in practice, but LENGTH DESC + LIMIT 1 makes the choice
+	deterministic either way).
+	"""
+	if not item_code:
+		return None
+	rows = frappe.db.sql(
+		"""
+		SELECT name, product_type, item_code, product_name, unit,
+		       face_price, last_price, slab1, slab2, slab3, slab4, slab5,
+		       effective_date
+		FROM `tabIB Rate Card Entry`
+		WHERE %(item_code)s LIKE CONCAT(item_code, '%%')
+		ORDER BY CHAR_LENGTH(item_code) DESC
+		LIMIT 1
+		""",
+		{"item_code": item_code},
+		as_dict=True,
+	)
+	return rows[0] if rows else None
+
+
+@frappe.whitelist()
+def get_matching_items_for_rate_card(name):
+	"""Real Item variants for a Rate Card entry's base code — reverse of
+	get_current_rate_for_item(), powers the Price List tab's "View Sold
+	History" row action (jumps to a real Item the Item History tab can
+	actually query Sales Order Item rows for)."""
+	base = frappe.db.get_value("IB Rate Card Entry", name, "item_code")
+	if not base:
+		return []
+	return frappe.db.get_all(
+		"Item",
+		filters={"item_code": ["like", f"{base}%"]},
+		fields=["item_code", "item_name"],
+		order_by="item_code asc",
+		limit=50,
+	)
+
+
+@frappe.whitelist()
 def get_price_history(name):
 	"""Return chronological price-change log for an IB Rate Card Entry."""
 	versions = frappe.db.get_all(

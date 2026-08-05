@@ -687,12 +687,12 @@ mark.ib-hl { background: #ffe082; color: inherit; padding: 0 1px; border-radius:
   <!-- Quick links -->
   <div class="ib-kb-quick-links" id="ib-kb-quick-links">
     <a href="/app/ib-customer-board"     class="ib-kb-quick-link"><span class="icon" style="color:#1a7f37"><iconify-icon icon="lucide:target" width="20" height="20"></iconify-icon></span><span class="label">Customer Board</span></a>
-    <a href="/app/ib-stock-dashboard"    class="ib-kb-quick-link"><span class="icon" style="color:#6b21a8"><iconify-icon icon="lucide:package" width="20" height="20"></iconify-icon></span><span class="label">Stock Dashboard</span></a>
+    <a href="/app/ib-stock-dashboard"    class="ib-kb-quick-link"><span class="icon" style="color:#6b21a8"><iconify-icon icon="lucide:package" width="20" height="20"></iconify-icon></span><span class="label">Stock</span></a>
     <a href="/app/quotation/new-quotation-1" class="ib-kb-quick-link"><span class="icon" style="color:#b85c3a"><iconify-icon icon="lucide:file-text" width="20" height="20"></iconify-icon></span><span class="label">New Quotation</span></a>
     <a href="/app/sales-order"           class="ib-kb-quick-link"><span class="icon" style="color:#b85c3a"><iconify-icon icon="lucide:shopping-cart" width="20" height="20"></iconify-icon></span><span class="label">Sales Orders</span></a>
     <a href="/app/ib-ai-inbox"           class="ib-kb-quick-link"><span class="icon" style="color:#7c3aed"><iconify-icon icon="lucide:bot" width="20" height="20"></iconify-icon></span><span class="label">AI Inbox</span></a>
     <a href="/app/ib-main-dashboard"     class="ib-kb-quick-link"><span class="icon" style="color:#006064"><iconify-icon icon="lucide:layout-dashboard" width="20" height="20"></iconify-icon></span><span class="label">Dashboard</span></a>
-    <a href="/app/ib-price-list"         class="ib-kb-quick-link"><span class="icon" style="color:#b8860b"><iconify-icon icon="lucide:tag" width="20" height="20"></iconify-icon></span><span class="label">Rate Card</span></a>
+    <a href="/app/ib-item-pricing"       class="ib-kb-quick-link"><span class="icon" style="color:#b8860b"><iconify-icon icon="lucide:tag" width="20" height="20"></iconify-icon></span><span class="label">Item Pricing</span></a>
     <a href="/app/query-report/IB Daily Sales Report" class="ib-kb-quick-link"><span class="icon" style="color:#1a60b0"><iconify-icon icon="lucide:trending-up" width="20" height="20"></iconify-icon></span><span class="label">Daily Sales</span></a>
   </div>
 
@@ -918,7 +918,7 @@ const KB_SECTIONS = [
 			{
 				num: "ACC-1", title: "Who Sees What — Workspace Shortcuts by Role",
 				updated: "2026-08-03",
-				desc: "Each of the 6 Instabiz workspaces is itself role-gated (you only see a workspace if you hold one of its roles), and a handful of shortcuts inside a workspace are further restricted on top of that.<br><br><b>Instabiz</b> (Sales User, Sales Manager, System Manager) — almost everything here is open to Sales User too: both dashboards, Customer Board, IB Rate Card, Production Tracker, Live Stock Balance, Sales Incentives, Item Price History, Advance Approvals, My HR, Quotation/Sales Order/Customer/Lead/Sales Invoice/Delivery Note/Sample Request/Lead Sales Team, Knowledge Base, and most Reports (Daily Sales, Sales KPIs, Lost Deals, Territory, SKU Sales, Gross Margin, Collections Report, Activity Log, Dispatch Report). <b>Sales Manager only</b>: Business Pulse, Customer Health, Assignment Admin, AI Inbox, IB Branding, IB Transport, plus the Sales Person Summary and Credit Note Register reports.<br><br><b>Instabiz Finance</b> (Accounts User, Accounts Manager, System Manager) — Finance Dashboard, Collections Dashboard, Bank Import, Payment Entry, Sales Invoice, Journal Entry, Bank Reconciliation Tool, Advance Approvals, Stock Ledger, Analytics Hub, Knowledge Base, and Reports: AR Aging, Cash Flow, Bank Recon, Collections Report, Party Outstanding Summary, Credit Note Register, Customer Ledger Summary, General Ledger, Trial Balance. PDC Cheques is Accounts-User-only; Credit Note is Accounts-Manager-only. <b>Purchase-side shortcuts moved out entirely</b> in the 2026-07-24 workspace split — see Instabiz Procurement below.<br><br><b>Instabiz Procurement</b> (Purchase User, Purchase Manager, System Manager) — Procurement Dashboard, Purchase Order/Receipt/Invoice, Debit Note, native Purchase Register / Item-wise Purchase Register, Supplier Ledger Summary, Analytics Hub, Knowledge Base, and Reports: AP Aging, Purchase Pipeline, Debit Note Register. Accounts User/Manager are not in this workspace's role list.<br><br><b>Instabiz HR</b> (HR User, HR Manager, HR Attendance Terminal User, System Manager) — HR Dashboard, Employees, Attendance Terminal, Biometric Import, Checkins, Org Chart, Leave Applications, Salary Slips, F&amp;F Settlement, Hikvision Terminals, Analytics Hub, Knowledge Base, and the Payroll Summary report.<br><br><b>Instabiz Stock</b> (Stock User, Stock Manager, System Manager) — Live Stock Balance, Stock Ledger, Inward Stock Transfer, Stock Reconciliation, Analytics Hub, Knowledge Base, and the Stock Ageing report.<br><br><b>Instabiz Production</b> (Factory Production, Factory Management, System Manager) — see the Production Module section of this Knowledge Base.<br><br><b>Instabiz Misc</b> (System Manager only) — Chart of Accounts, Cost Center, System Health, Knowledge Base.",
+				desc: "Each of the 6 Instabiz workspaces is itself role-gated (you only see a workspace if you hold one of its roles), and a handful of shortcuts inside a workspace are further restricted on top of that.<br><br><b>Instabiz</b> (Sales User, Sales Manager, System Manager) — almost everything here is open to Sales User too: both dashboards, Customer Board, Item Pricing, Production Tracker, Live Stock Balance, Sales Incentives, Advance Approvals, My HR, Quotation/Sales Order/Customer/Lead/Sales Invoice/Delivery Note/Sample Request/Lead Sales Team, Knowledge Base, and most Reports (Daily Sales, Sales KPIs, Lost Deals, Territory, SKU Sales, Gross Margin, Collections Report, Activity Log, Dispatch Report). <b>Sales Manager only</b>: Business Pulse, Customer Health, Assignment Admin, AI Inbox, IB Branding, IB Transport, plus the Sales Person Summary and Credit Note Register reports.<br><br><b>Instabiz Finance</b> (Accounts User, Accounts Manager, System Manager) — Finance Dashboard, Collections Dashboard, Bank Import, Payment Entry, Sales Invoice, Journal Entry, Bank Reconciliation Tool, Advance Approvals, Stock, Analytics Hub, Knowledge Base, and Reports: AR Aging, Cash Flow, Bank Recon, Collections Report, Party Outstanding Summary, Credit Note Register, Customer Ledger Summary, General Ledger, Trial Balance. PDC Cheques is Accounts-User-only; Credit Note is Accounts-Manager-only. <b>Purchase-side shortcuts moved out entirely</b> in the 2026-07-24 workspace split — see Instabiz Procurement below.<br><br><b>Instabiz Procurement</b> (Purchase User, Purchase Manager, System Manager) — Procurement Dashboard, Purchase Order/Receipt/Invoice, Debit Note, native Purchase Register / Item-wise Purchase Register, Supplier Ledger Summary, Analytics Hub, Knowledge Base, and Reports: AP Aging, Purchase Pipeline, Debit Note Register. Accounts User/Manager are not in this workspace's role list.<br><br><b>Instabiz HR</b> (HR User, HR Manager, HR Attendance Terminal User, System Manager) — HR Dashboard, Employees, Attendance Terminal, Biometric Import, Checkins, Org Chart, Leave Applications, Salary Slips, F&amp;F Settlement, Hikvision Terminals, Analytics Hub, Knowledge Base, and the Payroll Summary report.<br><br><b>Instabiz Stock</b> (Stock User, Stock Manager, System Manager) — Stock, Inward Stock Transfer, Stock Reconciliation, Analytics Hub, Knowledge Base, and the Stock Ageing report.<br><br><b>Instabiz Production</b> (Factory Production, Factory Management, System Manager) — see the Production Module section of this Knowledge Base.<br><br><b>Instabiz Misc</b> (System Manager only) — Chart of Accounts, Cost Center, System Health, Knowledge Base.",
 				tags: "roles access workspace shortcuts who sees what sales manager user accounts procurement purchase hr stock misc factory production",
 			},
 			{
@@ -1620,10 +1620,10 @@ const KB_SECTIONS = [
 		roles: _STOCK,
 		items: [
 			{
-				num: "9", title: "Live Stock Dashboard",
-				desc: "Workspace, Live Stock Balance. Real-time stock across 3 warehouses with multi-token search, color dots, breakdown popover, CSV export, and WebSocket live updates.",
-				link: "/app/ib-stock-dashboard", linkLabel: "Open Dashboard",
-				tags: "stock live dashboard warehouse balance qty",
+				num: "9", title: "Stock — Balance + Ledger (merged 2026-08-05)",
+				desc: "Workspace, Live Stock Balance. One page, two tabs, replacing the previously separate Stock Dashboard and Stock Ledger pages/shortcuts.<br><b>Balance tab</b>: real-time stock across 3 warehouses with multi-token search, color dots, warehouse breakdown popover, CSV export, and WebSocket live updates. Clicking a row's breakdown popover has a \"View Stock Ledger →\" link that jumps straight to the Ledger tab pre-filtered to that item.<br><b>Ledger tab</b>: full Stock Ledger Entry browser — date range presets, item/warehouse/customer/voucher-type filters, running In/Out/Balance per movement, CSV export.",
+				link: "/app/ib-stock-dashboard", linkLabel: "Open Stock",
+				tags: "stock live dashboard warehouse balance qty ledger sle movements history merged combined centralize",
 			},
 			{
 				num: "53", title: "Stock Ageing Report",
@@ -1647,20 +1647,19 @@ const KB_SECTIONS = [
 				tags: "batch expiry alert expire warehouse",
 			},
 			{
-				num: "12", title: "IB Rate Card (Price List)",
-				desc: "Page: IB Rate Card (<b>Workspace → IB Rate Card</b>). Two tabs:<br><b>Jumbo Roll</b> — Face Price and Last Price per SQMT, colour dots, spec tags, UOM chips.<br><b>Cut Pack</b> — 5 price slabs: Slab 1 (highest / small qty, blue) → Slab 2 (purple) → Slab 3 (orange) → Slab 4 (green) → Slab 5 (bulk best, teal). Face price = Slab 1, Last price = Slab 5, auto-synced on save.<br>Multi-token search with highlight across both tabs.<br><b>Access:</b> Sales User, Sales Manager, System Manager can view. Sales Manager can Add Entry (toolbar), edit any row (✏), and view full price-change history (🕐). System Manager can also delete. All edits are logged automatically.",
-				link: "/app/ib-price-list", linkLabel: "Open Rate Card",
-				tags: "rate card price list item pricing jumbo cut pack slab edit history add entry face last price slab1 slab2 slab3 slab4 slab5",
+				num: "12", title: "Item Pricing (Price List + Item History, merged 2026-08-05)",
+				desc: "Page: Item Pricing (<b>Workspace → Item Pricing</b>) — one page, two tabs, replacing the previously separate IB Rate Card and Item Price History pages/shortcuts.<br><b>Price List tab</b>: <b>Jumbo Roll</b> — Face Price and Last Price per SQMT, colour dots, spec tags, UOM chips. <b>Cut Pack</b> — 5 price slabs: Slab 1 (highest / small qty, blue) → Slab 2 (purple) → Slab 3 (orange) → Slab 4 (green) → Slab 5 (bulk best, teal). Face price = Slab 1, Last price = Slab 5, auto-synced on save. Multi-token search with highlight across both tabs. Every row now also has a <b>trending-up icon</b> — jumps straight to that item's actual sold-price history on the Item History tab.<br><b>Item History tab</b>: pick an Item (+ optional Customer) → every past submitted Sales Order line for it, KPI cards (last/lowest/highest rate), rate trend chart, CSV export. Now also shows a <b>Current Rate Card Price</b> card at the top (live, not cached) whenever the selected Item has a matching rate card entry, with a link back to the Price List tab. Picking only a Customer (no Item) also computes the KPI cards — a yellow note discloses that those numbers are blended across every item sold to that customer, not one item's price history.<br><b>How the two are linked</b>: Rate Card entries key on a base spec code (e.g. <code>IS-55113V</code>); real Items append a colour/width/pack suffix (e.g. <code>IS-55113V-300BKRBNL</code>) — there is no exact match between the two tables, only a prefix relationship (confirmed: ~84% of rate card entries have at least one matching real Item this way). A rate card entry with no matching sold Item yet simply shows no sold-history link — not an error.<br><b>Access:</b> Sales User, Sales Manager, System Manager can view both tabs (widened from Sales-Manager-only on the old Price List page, 2026-08-05, at user's request). Sales Manager can Add Entry (toolbar), edit any row (✏), and view full price-change history (🕐) on the Price List tab. System Manager can also delete. All price edits are logged automatically.",
+				link: "/app/ib-item-pricing", linkLabel: "Open Item Pricing",
+				tags: "rate card price list item pricing item price history jumbo cut pack slab edit history add entry face last price slab1 slab2 slab3 slab4 slab5 sold history current rate merged combined centralize",
 				steps: [
-					"Go to <b>Workspace → IB Rate Card</b>.",
-					"Switch tabs: <b>Jumbo Rolls</b> (FP / LP) or <b>Cut Pack</b> (Slab 1–5).",
-					"Use search bar for multi-token filtering (e.g. '100 white self').",
-					"Click any row to open the rate popover with all columns.",
-					"<b>Sales Manager+:</b> Click <b>Add Entry</b> toolbar button to create a new entry.",
-					"Click ✏ to edit an existing row.",
-					"Click 🕐 to view full price-change history for that item.",
+					"Go to <b>Workspace → Item Pricing</b>.",
+					"<b>Price List tab</b>: switch <b>Jumbo Rolls</b> (FP / LP) or <b>Cut Pack</b> (Slab 1–5); search bar for multi-token filtering (e.g. '100 white self').",
+					"Click the <b>trending-up icon</b> on any row to jump to that item's actual sold price history.",
+					"<b>Sales Manager+:</b> Click <b>Add Entry</b> toolbar button to create a new entry; click ✏ to edit a row; click 🕐 for that row's price-change history.",
 					"<b>System Manager only:</b> Click 🗑 to delete an entry.",
+					"<b>Item History tab</b>: pick an Item (and optionally a Customer) to see its Current Rate Card Price card, KPI cards, rate trend, and full Sales Order line history; use date presets / filters / CSV export as needed.",
 				],
+				note: "Both tabs share one Frappe page/toolbar — switching tabs rebuilds the toolbar for whichever view is active, so bookmarked URLs look like <code>/app/ib-item-pricing</code> (Price List) or <code>/app/ib-item-pricing/item_history</code> (Item History).",
 			},
 			{
 				num: "96", title: "Inward Stock Transfer",
@@ -1966,36 +1965,20 @@ const KB_SECTIONS = [
 		roles: _SALES,
 		items: [
 			{
-				num: "CB-1", title: "Customer Board — 4-Column Kanban",
-				desc: "Workspace → Customer Board. Shows your assigned customers in 4 columns: <b>Dormant</b> (no SO in 60+ days), <b>Regular</b> (active customers with history), <b>Today</b> (to contact today), <b>Tomorrow</b> (scheduled for tomorrow). Use the date picker to view any day's plan.",
+				num: "CB-1", title: "Customer Board (My Board + Team, merged 2026-08-05)",
+				desc: "Page: Customer Board (<b>Workspace → Customer Board</b>) — one page, replacing the previously separate Customer Board and Assignment Admin pages/shortcuts.<br><b>My Board tab</b> (every Sales User, Sales Manager, System Manager, Team Leader — everyone with access to the page has their own accounts too): 3 columns — <b>My Accounts</b> (your assigned customer pool, paginated), <b>Today</b> (to contact today, with a progress bar and Completed/Skipped stat cards), <b>Tomorrow</b> (auto-assigned at midnight). Drag a card between columns, or use the Add to Today/Tomorrow pills. Submitting a Sales Order for a customer auto-marks their Today assignment done.<br><b>Team tab</b> (Sales Manager, System Manager, Team Leader only — the tab itself is absent from the tab bar for a plain Sales User, not just hidden): the former Assignment Admin — a roster of every rep grouped by team (avatar, Done/Pending/Tomorrow counts, sales-target progress bar), <b>View As</b> to load and operate any rep's own 4-column board (My Accounts / Territory pool / Today / Tomorrow) on their behalf, team management (add/remove members and territories), and incentive-slab configuration.",
 				link: "/app/ib-customer-board", linkLabel: "Open Customer Board",
-				tags: "customer board kanban dormant regular today tomorrow daily plan contact schedule assignment",
+				tags: "customer board kanban my accounts today tomorrow daily plan contact schedule assignment team roster assignment admin view as manager",
 				steps: [
 					"Go to <b>Workspace → Customer Board</b>.",
-					"Default view is today. Use the date picker to change the date.",
-					"<b>Dormant</b> column: customers not ordered in 60+ days — prioritize re-engagement.",
-					"<b>Regular</b> column: active customers available to schedule for contact.",
-					"<b>Today</b> column: customers you need to contact today.",
-					"<b>Tomorrow</b> column: tomorrow's scheduled contacts (auto-assigned at midnight).",
-					"Click <b>Add to Today</b> on a Dormant or Regular card to schedule it for today.",
-					"When a Sales Order is submitted for a customer, their Today assignment is auto-marked done.",
+					"<b>My Board tab</b> is what everyone sees by default — your own My Accounts / Today / Tomorrow columns.",
+					"Click <b>Add to Today</b> or <b>Tomorrow</b> on a My Accounts card to schedule it, or drag the card into the target column.",
+					"If you're a Sales Manager, System Manager, or Team Leader, a <b>Team</b> tab appears next to My Board.",
+					"On the Team tab, click a rep's <b>⋮ → View board</b> to load and operate their full kanban on their behalf.",
+					"Team tab's kebab menu also has Auto-fill, Transfer, and Set Target per rep, plus a team-level ⋮ for Manage Team (members/territories).",
 				],
-				tip: "Your monthly sales target card appears above the columns — shows target amount and MTD revenue so far. The midnight scheduler auto-assigns tomorrow's batch based on your territory.",
-			},
-			{
-				num: "CB-2", title: "Assignment Admin — Manager Roster View",
-				desc: "Workspace → Sales & CRM → Assignment Admin. Sales Managers see all reps in a roster with avatar, stats (assigned today, completed, pending), and a sales target progress bar per rep. View-as lets managers see and operate any rep's full kanban.",
-				link: "/app/ib-assignment-admin", linkLabel: "Assignment Admin",
-				tags: "assignment admin manager roster pool assign territory view as kanban all reps",
-				steps: [
-					"Go to <b>Workspace → Assignment Admin</b>.",
-					"Roster cards: each rep's avatar, assigned count, completed count, pending count, target progress bar.",
-					"Click <b>View As</b> on a rep's card to load their full 4-column Customer Board.",
-					"As manager you can add or remove customers from any rep's board on their behalf.",
-					"<b>Customer Pool panel</b>: always visible. Select a user, a date, then choose customers from the pool list.",
-					"Click <b>Assign</b> to batch-assign those customers to that rep for that date.",
-				],
-				note: "Pool pagination: 50 customers per page. Filter pool by territory. Manager actions are full CRUD — no restrictions on which rep's board is edited.",
+				tip: "Your monthly sales target card appears above the My Board columns — shows target amount and MTD revenue so far. The midnight scheduler auto-assigns tomorrow's batch based on your territory. Bookmarked URLs look like <code>/app/ib-customer-board</code> (My Board) or <code>/app/ib-customer-board/team</code> (Team) — the Team URL silently falls back to My Board for a non-manager, since the underlying admin RPCs are server-side role-gated independent of which tab you're looking at.",
+				note: "Team tab pool pagination: 50 customers per page. Manager actions there are full CRUD — no restrictions on which rep's board is edited.",
 			},
 			{
 				num: "CB-3", title: "IB Assignment Config — Batch Size and Dormant Rules",
@@ -2433,6 +2416,18 @@ const KB_SECTIONS = [
 				],
 				note: "Both formats are Jinja custom_format=1 print formats — their doctype-level margin_top/left/right/bottom fields are dead/no-op in that mode; page margins are actually controlled by a <code>.print-format{margin:0mm}</code> CSS rule instead (a genuinely obscure Frappe quirk, worth knowing if you ever need to adjust these formats).",
 			},
+			{
+				num: "PROD-27", title: "Manual Stage Move — Any Stage, Not Just the Item's Route (2026-08-05)",
+				desc: "The stage-picker in the WO side panel (icon toggle next to Start/Next Stage) lets a production user manually move an item to any of the 7 canonical stages at that order's location — it is no longer limited to the item's usual item-group route.",
+				tags: "move work order stage manual picker escape hatch route override coating slitting rewinding cutting packing",
+				steps: [
+					"Open the WO side panel (Order-wise or Item-wise tab) and click the move icon next to Start/Next Stage.",
+					"Pick any stage from the dropdown and confirm — this works even if that stage isn't normally part of this item's production route (e.g. sending a PVC item to Coating for a one-off need).",
+					"If the target stage has no existing Work Order for this item, one is created on the fly; if the target stage's WO was already Completed (e.g. moving Ready-to-Deliver back to Packing for rework), it's reopened to Pending.",
+					"Location is still enforced: Gujarat can reach all 7 stages, but Maharashtra/Chennai (warehouse-only, no factory machines physically there) are still limited to Packing → Ready to Deliver.",
+				],
+				note: "Between 2026-07-31 and 2026-08-05 this was restricted to only the stages in the item's own item-group route (to stop phantom Work Orders on warehouse-only orders) — loosened back at production users' request, since moving stage-to-stage is routine work for that role, not just an out-of-sequence correction. See CLAUDE.md item 120.",
+			},
 		],
 	},
 	{
@@ -2765,17 +2760,14 @@ const KB_SECTIONS = [
 				steps: [
 					"<b>Business Pulse</b> (ib-business-pulse) — real per-domain metrics + deep links, no synthetic score. <code>page/ib_business_pulse/</code>",
 					"<b>Sales Incentives</b> (ib-sales-incentives) — gated commission calc. <code>page/ib_sales_incentives/</code> + <code>overrides/sales_target.py</code>",
-					"<b>Customer Board</b> (ib-customer-board) — My Accounts / Today / Tomorrow kanban. <code>page/ib_customer_board/</code> + <code>overrides/customer_assignment.py</code>",
-					"<b>Assignment Admin</b> (ib-assignment-admin) — manager roster + view-as board. <code>page/ib_assignment_admin/</code> + <code>overrides/customer_assignment.py</code>",
-						"<b>Analytics Hub</b> (ib-analytics-hub) — Sales/Finance/HR/Production/Inventory/Me tabs. <code>page/ib_analytics_hub/</code>",
+					"<b>Customer Board</b> (ib-customer-board) — merged My Board (My Accounts/Today/Tomorrow kanban) + Team (manager roster + view-as board, ex Assignment Admin) tabs, 2026-08-05. <code>page/ib_customer_board/</code> + <code>overrides/customer_assignment.py</code> (original ib-assignment-admin route retired, its own .py held no RPCs so it was deleted outright, not kept in place).",
+					"<b>Analytics Hub</b> (ib-analytics-hub) — Sales/Finance/HR/Production/Inventory/Me tabs. <code>page/ib_analytics_hub/</code>",
 					"<b>Customer Health</b> (ib-customer-health) — weighted customer score. <code>page/ib_customer_health/</code> + <code>overrides/customer_score.py</code>",
-					"<b>IB Rate Card</b> (ib-price-list) — Jumbo Roll / Cut Pack pricing. <code>page/ib_price_list/</code>",
-					"<b>Item Price History</b> (ib-item-price-history) — per-item SO price trend. <code>page/ib_item_price_history/</code>",
+					"<b>Item Pricing</b> (ib-item-pricing) — merged Price List (Jumbo Roll / Cut Pack) + Item History (per-item SO price trend) tabs, 2026-08-05. <code>page/ib_item_pricing/</code> (JS shell + views), RPCs stay in <code>page/ib_price_list/ib_price_list.py</code> + <code>page/ib_item_price_history/ib_item_price_history.py</code> (original page routes retired, .py modules kept in place).",
 					"<b>Advance Approvals</b> (ib-advance-approvals) — pre-submit advance gate queue. <code>page/ib_advance_approvals/</code> + <code>overrides/advance_approval.py</code>",
 					"<b>Main Dashboard</b> (ib-main-dashboard) — top-level KPI overview. <code>page/ib_main_dashboard/</code>",
 					"<b>AI Inbox</b> (ib-ai-inbox) — AI agent action review queue. <code>page/ib_ai_inbox/</code> + <code>overrides/ai_agents.py</code>",
-					"<b>Live Stock Balance</b> (ib-stock-dashboard) — cross-warehouse stock. <code>page/ib_stock_dashboard/</code>",
-					"<b>Stock Ledger</b> (ib-stock-ledger) — full SLE browser with deep-links. <code>page/ib_stock_ledger/</code>",
+					"<b>Stock</b> (ib-stock-dashboard) — merged Balance + Ledger tabs, 2026-08-05. <code>page/ib_stock_dashboard/</code> (JS shell + both views), Ledger RPCs stay in <code>page/ib_stock_ledger/ib_stock_ledger.py</code> (original ib-stock-ledger route retired, .py module kept in place).",
 					"<b>Finance Dashboard</b> (ib-finance-dashboard) — AR/overdue/cash overview. <code>page/ib_finance_dashboard/</code>",
 					"<b>Collections Dashboard</b> (ib-collections-dashboard) — customer-level outstanding + payment logging. <code>page/ib_collections_dashboard/</code>",
 					"<b>Procurement Dashboard</b> (ib-procurement-dashboard) — open PO / vendor spend. <code>page/ib_procurement_dashboard/</code>",

@@ -165,74 +165,36 @@ class IBDPRPage {
 	}
 
 	// ── Daily render ─────────────────────────────────────────────────────────
+	// Sourced entirely from Work Order completions (see get_dpr()'s own
+	// docstring) — no wastage/efficiency figures shown here, since nothing in
+	// this system currently records real per-stage wastage (IB Production
+	// Entry, the only path that ever wrote it, has zero rows system-wide).
 	_render_daily(data) {
 		const s = data.summary || {};
-		const wastePct = s.avg_wastage_pct != null ? parseFloat(s.avg_wastage_pct).toFixed(2) : "0.00";
-		const wasteColor = parseFloat(wastePct) > 5 ? "#dc2626" : parseFloat(wastePct) > 2 ? "#ea580c" : "#10b981";
 		const woCompleted = s.wo_completed || 0;
-		const woByStage = s.wo_by_stage || {};
-
-		// WO completion badge (always visible)
-		const wo_notice = woCompleted > 0 ? `
-			<div class="ib-dpr-wo-notice">
-				<iconify-icon icon="lucide:check-circle" width="14" height="14"></iconify-icon>
-				<strong>${woCompleted}</strong> Work Order${woCompleted !== 1 ? "s" : ""} completed today
-				<span class="ib-dpr-wo-by-stage">
-					${Object.entries(woByStage).map(([stage, v]) => {
-						const color = DPR_STAGE_COLORS[(stage || "").toLowerCase().replace(/ /g, "_")] || "#888";
-						return `<span class="ib-dpr-wo-stage-chip" style="background:${color}18;color:${color};border:1px solid ${color}30">
-							${stage}: ${v.count}
-						</span>`;
-					}).join("")}
-				</span>
-			</div>` : "";
 
 		const kpi_html = [
 			this._kpi_card("WOs Completed", woCompleted, "#7c3aed", "check-circle"),
-			this._kpi_card("Total Entries",  s.total_entries  ?? 0,   "#2563eb", "list"),
-			this._kpi_card("Total Output",   s.total_output   ?? 0,   "#059669", "trending-up"),
-			this._kpi_card("Avg Wastage %",  wastePct + "%",         wasteColor, "alert-triangle"),
-			this._kpi_card("Total Hours",    s.total_hours    ?? 0,   "#d97706", "clock"),
+			this._kpi_card("Total Output",  s.total_output ?? 0,   "#059669", "trending-up"),
+			this._kpi_card("Total Hours",   s.total_hours  ?? 0,   "#d97706", "clock"),
 		].join("");
 
 		const stage_rows = (data.stages || []).map(st => {
-			const color    = DPR_STAGE_COLORS[st.stage] || "#888";
-			const label    = (st.stage || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-			const wPct     = st.wastage_pct != null ? parseFloat(st.wastage_pct).toFixed(2) : "0.00";
-			const w_class  = parseFloat(wPct) > 5 ? "ib-dpr-w-red" : parseFloat(wPct) > 2 ? "ib-dpr-w-orange" : "";
-			const norm_badge = (st.above_norm_count > 0)
-				? `<span class="ib-dpr-above-norm">⚠ ABOVE NORM</span>` : "";
-			// Efficiency bar: output / input ratio
-			const eff_pct  = st.input_qty > 0 ? Math.min(100, Math.round((st.output_qty / st.input_qty) * 100)) : 0;
-			const eff_color = eff_pct >= 95 ? "#10b981" : eff_pct >= 80 ? "#d97706" : "#dc2626";
-			const eff_bar  = `<div class="ib-dpr-eff-wrap">
-				<div class="ib-dpr-eff-bar" style="width:${eff_pct}%;background:${eff_color}"></div>
-			</div>`;
-			const machine_rows = (st.machines || []).map(m => {
-				const mWPct   = m.wastage_pct != null ? parseFloat(m.wastage_pct).toFixed(2) : "0.00";
-				const norm_m  = m.above_norm ? `<span class="ib-dpr-above-norm">ABOVE NORM</span>` : "";
-				const m_class = parseFloat(mWPct) > 5 ? "ib-dpr-w-red" : parseFloat(mWPct) > 2 ? "ib-dpr-w-orange" : "";
-				return `
-					<tr class="ib-dpr-machine-row">
-						<td><span class="ib-dpr-machine-pill">${m.machine || "—"}</span></td>
-						<td>${m.entries ?? "—"}</td>
-						<td>${m.output_qty ?? "—"}</td>
-						<td class="${m_class}">${mWPct}% ${norm_m}</td>
-						<td>${m.status || "—"}</td>
-					</tr>
-				`;
-			}).join("");
+			const color = DPR_STAGE_COLORS[st.stage] || "#888";
+			const label = (st.stage || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+			const machine_rows = (st.machines || []).map(m => `
+				<tr class="ib-dpr-machine-row">
+					<td><span class="ib-dpr-machine-pill">${m.machine || "—"}</span></td>
+					<td>${m.wo_completed ?? "—"}</td>
+					<td>${m.output_qty ?? "—"}</td>
+				</tr>
+			`).join("");
 			const sub_table = st.machines && st.machines.length ? `
 				<tr class="ib-dpr-machine-subtable-row">
-					<td colspan="8">
+					<td colspan="5">
 						<div class="ib-dpr-machine-subtable">
 							<table class="ib-dpr-sub-table">
-								<thead>
-									<tr>
-										<th>Machine</th><th>Entries</th>
-										<th>Output</th><th>Wastage %</th><th>Status</th>
-									</tr>
-								</thead>
+								<thead><tr><th>Machine</th><th>WOs Completed</th><th>Output</th></tr></thead>
 								<tbody>${machine_rows}</tbody>
 							</table>
 						</div>
@@ -248,14 +210,8 @@ class IBDPRPage {
 							${st.machines && st.machines.length ? `<span class="ib-dpr-chevron">▾</span>` : ""}
 						</div>
 					</td>
-					<td>${st.entries ?? 0}</td>
-					<td>${st.input_qty ?? 0}</td>
-					<td>
-						${st.output_qty ?? 0}
-						${eff_bar}
-					</td>
-					<td>${st.wastage_qty ?? 0}</td>
-					<td class="${w_class}">${wPct}% ${norm_badge}</td>
+					<td>${st.wo_completed ?? 0}</td>
+					<td>${st.output_qty ?? 0}</td>
 					<td>${st.hours ?? "—"}</td>
 					<td>${st.hourly_avg ?? "—"}</td>
 				</tr>
@@ -263,25 +219,20 @@ class IBDPRPage {
 			`;
 		}).join("");
 
-		const empty_row = `<tr><td colspan="8" class="ib-dpr-empty">
-			<iconify-icon icon="lucide:file-x" width="14" height="14"></iconify-icon> No production entries logged for this date.
-			${woCompleted > 0 ? `<br><span style="color:#7c3aed;font-weight:600">${woCompleted} Work Orders were completed — log entries via Production Entry to see detailed stats.</span>` : ""}
+		const empty_row = `<tr><td colspan="5" class="ib-dpr-empty">
+			<iconify-icon icon="lucide:file-x" width="14" height="14"></iconify-icon> No Work Orders completed on this date.
 		</td></tr>`;
 
 		this.$container.html(`
 			<div class="ib-dpr-kpi-row">${kpi_html}</div>
-			${wo_notice}
 			<div class="ib-dpr-section-title">Stage Breakdown</div>
 			<div class="ib-dpr-table-wrap">
 				<table class="ib-dpr-table">
 					<thead>
 						<tr>
 							<th>Stage</th>
-							<th>Entries</th>
-							<th>Input Qty</th>
+							<th>WOs Completed</th>
 							<th>Output Qty</th>
-							<th>Wastage Qty</th>
-							<th>Wastage %</th>
 							<th>Hours</th>
 							<th>Hourly Avg</th>
 						</tr>
@@ -300,20 +251,15 @@ class IBDPRPage {
 	// ── Weekly render ─────────────────────────────────────────────────────────
 	_render_weekly(data) {
 		const s = data.summary || {};
-		const wPctAvg = s.avg_wastage_pct != null ? parseFloat(s.avg_wastage_pct).toFixed(2) : "0.00";
-		const wColor  = parseFloat(wPctAvg) > 5 ? "#dc2626" : parseFloat(wPctAvg) > 2 ? "#ea580c" : "#10b981";
 		const kpi_html = [
 			this._kpi_card("Total Output (Week)", s.total_output ?? 0, "#059669", "box"),
 			this._kpi_card("Avg Daily Output",    s.avg_daily   ?? 0, "#2563eb", "bar-chart-2"),
-			this._kpi_card("Avg Wastage %", wPctAvg + "%",           wColor,    "alert-triangle"),
 		].join("");
 
 		// Max output for bar scaling
 		const maxOut = Math.max(1, ...(data.days || []).map(d => d.output_qty || 0));
 
 		const day_rows = (data.days || []).map(d => {
-			const wPct   = d.wastage_pct != null ? parseFloat(d.wastage_pct).toFixed(2) : null;
-			const wClass = wPct > 5 ? "ib-dpr-w-red" : wPct > 2 ? "ib-dpr-w-orange" : "";
 			const barPct = Math.round(((d.output_qty || 0) / maxOut) * 100);
 			const output_bar = `<div class="ib-dpr-week-cell">
 				<span>${d.output_qty ?? 0}</span>
@@ -324,10 +270,8 @@ class IBDPRPage {
 			return `
 				<tr>
 					<td><strong>${frappe.datetime.str_to_user(d.date) || d.date || "—"}</strong></td>
-					<td>${d.entries ?? 0}</td>
-					<td>${d.input_qty ?? 0}</td>
+					<td>${d.wo_completed ?? 0}</td>
 					<td>${output_bar}</td>
-					<td class="${wClass}">${wPct != null ? wPct + "%" : "—"}</td>
 					<td>${d.hours ?? "—"}</td>
 				</tr>
 			`;
@@ -341,14 +285,12 @@ class IBDPRPage {
 					<thead>
 						<tr>
 							<th>Date</th>
-							<th>Entries</th>
-							<th>Input</th>
+							<th>WOs Completed</th>
 							<th>Output</th>
-							<th>Wastage %</th>
 							<th>Hours</th>
 						</tr>
 					</thead>
-					<tbody>${day_rows || '<tr><td colspan="6" class="ib-dpr-empty">No data for this week.</td></tr>'}</tbody>
+					<tbody>${day_rows || '<tr><td colspan="4" class="ib-dpr-empty">No data for this week.</td></tr>'}</tbody>
 				</table>
 			</div>
 		`);
@@ -391,18 +333,6 @@ class IBDPRPage {
 				font-size: 10px; color: var(--text-muted, #6b7280);
 				margin-top: 2px;
 			}
-			.ib-dpr-wo-notice {
-				display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-				background: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 8px;
-				padding: 10px 14px; margin-bottom: 16px;
-				font-size: 13px; color: #5b21b6;
-			}
-			.ib-dpr-wo-by-stage { display: flex; gap: 5px; flex-wrap: wrap; margin-left: 4px; }
-			.ib-dpr-wo-stage-chip {
-				font-size: 11px; font-weight: 600; border-radius: 10px;
-				padding: 2px 8px; white-space: nowrap;
-			}
-
 			/* ── Section title ── */
 			.ib-dpr-section-title {
 				font-size: 11px; font-weight: 700; text-transform: uppercase;
@@ -453,13 +383,6 @@ class IBDPRPage {
 			.ib-dpr-eff-bar { height: 100%; border-radius: 2px; transition: width .5s cubic-bezier(.4,0,.2,1); }
 			.ib-dpr-week-cell { display: flex; flex-direction: column; }
 
-			/* ── Badges ── */
-			.ib-dpr-w-orange { color: #ea580c; font-weight: 600; }
-			.ib-dpr-w-red    { color: #dc2626; font-weight: 700; }
-			.ib-dpr-above-norm {
-				background: #dc2626; color: #fff; font-size: 10px; font-weight: 700;
-				border-radius: 4px; padding: 1px 5px; margin-left: 4px; vertical-align: middle;
-			}
 			.ib-dpr-empty { text-align: center; padding: 32px; color: var(--text-muted, #6b7280); font-size: 13px; }
 			.ib-dpr-refresh-time { font-size: 11px; color: var(--text-muted, #6b7280); margin-right: 8px; }
 			.ib-dpr-refresh-time--hist { color: #b45309; font-weight: 600; }

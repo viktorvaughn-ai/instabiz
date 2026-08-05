@@ -4,6 +4,18 @@ from frappe.utils import flt
 
 
 def execute(filters=None):
+	"""Per-completion production report.
+
+	Sourced from IB Work Order completions, not IB Production Entry — that
+	doctype has zero rows system-wide (confirmed repeatedly elsewhere: see
+	get_dpr()'s docstring in instabiz/overrides/production.py), so this
+	report always returned an empty table regardless of real floor activity.
+	Wastage is left out for the same reason get_dpr() leaves it out:
+	IB Work Order.wastage_qty/wastage_pct are hardcoded 0.0 at WO creation
+	and never written by any real completion path (Production Entry
+	submission was the only place that ever set them, and it never fires) —
+	showing a wastage number here would misrepresent it as measured.
+	"""
 	columns = _columns()
 	data = _data(filters)
 	chart = _chart(data, filters)
@@ -13,51 +25,48 @@ def execute(filters=None):
 
 def _columns():
 	return [
-		{"fieldname": "entry_date", "label": "Date", "fieldtype": "Date", "width": 100},
-		{"fieldname": "name", "label": "Entry", "fieldtype": "Link", "options": "IB Production Entry", "width": 135},
+		{"fieldname": "completed_date", "label": "Date", "fieldtype": "Date", "width": 100},
+		{"fieldname": "work_order", "label": "Work Order", "fieldtype": "Link", "options": "IB Work Order", "width": 135},
+		{"fieldname": "item_code", "label": "Item", "fieldtype": "Link", "options": "Item", "width": 130},
 		{"fieldname": "stage", "label": "Stage", "fieldtype": "Data", "width": 115},
 		{"fieldname": "machine", "label": "Machine", "fieldtype": "Link", "options": "IB Machine", "width": 110},
 		{"fieldname": "operator", "label": "Operator", "fieldtype": "Link", "options": "User", "width": 130},
-		{"fieldname": "work_order", "label": "Work Order", "fieldtype": "Link", "options": "IB Work Order", "width": 135},
 		{"fieldname": "order_sheet", "label": "Order Sheet", "fieldtype": "Link", "options": "IB Order Sheet", "width": 135},
-		{"fieldname": "input_qty", "label": "Input Qty", "fieldtype": "Float", "width": 90},
+		{"fieldname": "sales_order", "label": "Sales Order", "fieldtype": "Link", "options": "Sales Order", "width": 135},
 		{"fieldname": "output_qty", "label": "Output Qty", "fieldtype": "Float", "width": 90},
-		{"fieldname": "wastage_qty", "label": "Wastage Qty", "fieldtype": "Float", "width": 95},
-		{"fieldname": "wastage_pct", "label": "Wastage %", "fieldtype": "Percent", "width": 90},
-		{"fieldname": "hours_worked", "label": "Hours", "fieldtype": "Float", "width": 75},
+		{"fieldname": "hours", "label": "Hours", "fieldtype": "Float", "width": 75},
 	]
 
 
 def _data(filters):
-	conditions = "pe.docstatus = 1"
+	conditions = "wo.status = 'Completed'"
 	params = {}
 	if filters:
 		if filters.get("from_date"):
-			conditions += " AND pe.entry_date >= %(from_date)s"
+			conditions += " AND DATE(COALESCE(wo.completed_at, wo.modified)) >= %(from_date)s"
 			params["from_date"] = filters["from_date"]
 		if filters.get("to_date"):
-			conditions += " AND pe.entry_date <= %(to_date)s"
+			conditions += " AND DATE(COALESCE(wo.completed_at, wo.modified)) <= %(to_date)s"
 			params["to_date"] = filters["to_date"]
 		if filters.get("stage"):
-			conditions += " AND pe.stage = %(stage)s"
+			conditions += " AND wo.stage = %(stage)s"
 			params["stage"] = filters["stage"]
 		if filters.get("machine"):
-			conditions += " AND pe.machine = %(machine)s"
+			conditions += " AND wo.machine = %(machine)s"
 			params["machine"] = filters["machine"]
 		if filters.get("operator"):
-			conditions += " AND pe.operator = %(operator)s"
+			conditions += " AND wo.operator = %(operator)s"
 			params["operator"] = filters["operator"]
 
 	return frappe.db.sql(
 		f"""
-		SELECT pe.name, pe.entry_date, pe.stage, pe.machine, pe.operator,
-		       pe.work_order, pe.input_qty, pe.output_qty, pe.wastage_qty,
-		       pe.wastage_pct, pe.hours_worked,
-		       wo.order_sheet
-		FROM `tabIB Production Entry` pe
-		LEFT JOIN `tabIB Work Order` wo ON wo.name = pe.work_order
+		SELECT wo.name AS work_order, DATE(COALESCE(wo.completed_at, wo.modified)) AS completed_date,
+		       wo.item_code, wo.stage, wo.machine, wo.operator, wo.order_sheet,
+		       wo.sales_order, wo.completed_qty AS output_qty,
+		       TIMESTAMPDIFF(MINUTE, wo.started_at, wo.completed_at) / 60.0 AS hours
+		FROM `tabIB Work Order` wo
 		WHERE {conditions}
-		ORDER BY pe.entry_date DESC, pe.creation DESC
+		ORDER BY COALESCE(wo.completed_at, wo.modified) DESC, wo.creation DESC
 		""",
 		params,
 		as_dict=True,
@@ -89,13 +98,9 @@ def _summary(data):
 		return []
 	total_entries = len(data)
 	total_output = sum(flt(r.output_qty) for r in data)
-	avg_wastage = round(sum(flt(r.wastage_pct) for r in data) / total_entries, 1) if total_entries else 0
-	total_hours = round(sum(flt(r.hours_worked) for r in data), 2)
+	total_hours = round(sum(flt(r.hours) for r in data if r.hours), 2)
 	return [
-		{"value": total_entries, "label": "Total Entries", "indicator": "blue", "datatype": "Int"},
+		{"value": total_entries, "label": "Work Orders Completed", "indicator": "blue", "datatype": "Int"},
 		{"value": round(total_output, 2), "label": "Total Output Qty", "indicator": "green", "datatype": "Float"},
-		{"value": avg_wastage, "label": "Avg Wastage %",
-		 "indicator": "red" if avg_wastage > 5 else "orange" if avg_wastage > 2 else "green",
-		 "datatype": "Percent"},
 		{"value": total_hours, "label": "Total Hours", "indicator": "blue", "datatype": "Float"},
 	]

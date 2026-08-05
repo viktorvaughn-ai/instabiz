@@ -5,6 +5,7 @@ on_submit     → _notify_accounts, _update_so_advance
 on_cancel     → _update_so_advance
 """
 import frappe
+from frappe import _
 from frappe.utils import flt, fmt_money
 
 _ACCOUNTS_ROLES = frozenset({"Accounts User", "Accounts Manager", "System Manager"})
@@ -164,6 +165,27 @@ def _compute_so_advance_total(so_name):
 	drop whatever the other path had already collected — the same
 	inline-duplicate-math class of bug already fixed once in
 	ib_analytics_hub.py's advance_collected KPI.
+
+	FOR UPDATE on both queries: without it, two Payment Entries submitted
+	against the same SO close together (two reps recording deposits, a
+	double-click, etc.) race under MariaDB's default REPEATABLE READ — each
+	runs this SUM on its own connection/transaction, and a plain (non-locking)
+	SELECT can't see the other PE's row until that other transaction commits,
+	which for a doc-event hook doesn't happen until the whole request ends
+	(long after on_submit returns). Both would then independently compute a
+	total that only includes their own amount, and whichever set_value() in
+	_recompute_so_advance_locked() lands last "wins" — silently dropping the
+	other PE's contribution, with nothing else ever re-summing it afterward to
+	self-correct. FOR UPDATE forces a genuine locking read: InnoDB's gap/
+	insert-intention locking on the WHERE-clause index means a concurrent
+	transaction's still-uncommitted matching INSERT/UPDATE blocks this read
+	until that transaction actually commits or rolls back — not just until its
+	hook function returns — which is what actually closes the gap (same
+	mechanism, same reasoning, as create_order_sheet()'s own FOR UPDATE fix in
+	production.py). Deliberately not "fixed" by an early frappe.db.commit()
+	inside the hook instead — that would break the atomicity of the rest of
+	this Payment Entry's own submit/cancel request (any later step failing
+	would no longer roll back the already-committed advance-total write).
 	"""
 	from_references = frappe.db.sql(
 		"""
@@ -174,6 +196,7 @@ def _compute_so_advance_total(so_name):
 		  AND per.reference_name    = %s
 		  AND pe.payment_type       = 'Receive'
 		  AND pe.docstatus          = 1
+		FOR UPDATE
 		""",
 		so_name,
 	)[0][0]
@@ -184,10 +207,46 @@ def _compute_so_advance_total(so_name):
 		WHERE pe.custom_advance_for_so = %s
 		  AND pe.payment_type       = 'Receive'
 		  AND pe.docstatus          = 1
+		FOR UPDATE
 		""",
 		so_name,
 	)[0][0]
 	return flt(from_references) + flt(from_on_account)
+
+
+def _recompute_so_advance_locked(so_name):
+	"""Recompute + persist custom_advance_paid for one Sales Order.
+
+	Wrapped in an advisory lock (GET_LOCK, same IB-* pattern already used for
+	Work Order status mutations in production.py) as a defensive, fast-failing
+	layer on top of _compute_so_advance_total()'s own FOR UPDATE locking reads
+	— bounds contention to a friendly 5s "please retry" instead of two
+	concurrent calls both proceeding into (and one of them waiting out) InnoDB's
+	own lock-wait timeout with a raw DB error.
+	"""
+	lock_name = f"IB-SO-ADVANCE-{so_name}"
+	locked = frappe.db.sql("SELECT GET_LOCK(%s, 5)", lock_name)[0][0]
+	if not locked:
+		frappe.throw(_("Could not acquire lock for Sales Order {0}. Please try again.").format(so_name))
+	try:
+		# A Rejected advance is a deliberate decision that the current advance
+		# no longer counts for this order — don't let an unrelated PE event
+		# (submit/cancel of some other PE still referencing this SO) silently
+		# recompute it back to a nonzero value. See set_advance_approval().
+		if frappe.db.get_value("Sales Order", so_name, "custom_advance_approval_status") == "Rejected":
+			return
+		total = flt(_compute_so_advance_total(so_name))
+		frappe.db.set_value("Sales Order", so_name, "custom_advance_paid", total)
+		_maybe_flag_advance_pending(so_name, total)
+		# Dev-mode customer outstanding (Customer.custom_outstanding_amount) is
+		# grand_total - custom_advance_paid — an advance landing changes it
+		# just as much as the SO submit/cancel events that already refresh it.
+		customer = frappe.db.get_value("Sales Order", so_name, "customer")
+		if customer:
+			from instabiz.overrides.customer import refresh_customer_outstanding
+			refresh_customer_outstanding(customer)
+	finally:
+		frappe.db.sql("SELECT RELEASE_LOCK(%s)", lock_name)
 
 
 def _update_so_advance(doc):
@@ -198,22 +257,7 @@ def _update_so_advance(doc):
 		if ref.reference_doctype == "Sales Order"
 	}
 	for so_name in so_names:
-		# A Rejected advance is a deliberate decision that the current advance
-		# no longer counts for this order — don't let an unrelated PE event
-		# (submit/cancel of some other PE still referencing this SO) silently
-		# recompute it back to a nonzero value. See set_advance_approval().
-		if frappe.db.get_value("Sales Order", so_name, "custom_advance_approval_status") == "Rejected":
-			continue
-		total = _compute_so_advance_total(so_name)
-		frappe.db.set_value("Sales Order", so_name, "custom_advance_paid", flt(total))
-		_maybe_flag_advance_pending(so_name, flt(total))
-		# Dev-mode customer outstanding (Customer.custom_outstanding_amount) is
-		# grand_total - custom_advance_paid — an advance landing changes it
-		# just as much as the SO submit/cancel events that already refresh it.
-		customer = frappe.db.get_value("Sales Order", so_name, "customer")
-		if customer:
-			from instabiz.overrides.customer import refresh_customer_outstanding
-			refresh_customer_outstanding(customer)
+		_recompute_so_advance_locked(so_name)
 
 
 def _maybe_flag_advance_pending(so_name, total_advance):
@@ -246,40 +290,17 @@ def _update_advance_for_so(doc):
 	structurally impossible for the old path to ever fire pre-submit. Mirrors
 	the old path's Rejected-guard so a rejected advance can't be silently
 	revived by an unrelated PE event on the same SO.
+
+	Delegates the actual recompute to the shared, lock-protected
+	_recompute_so_advance_locked() (same helper _update_so_advance() uses) —
+	this used to duplicate that logic inline with no locking at all, which is
+	exactly the "two Payment Entries against the same Draft SO" race this
+	on-account path is most exposed to (it's the only way to record an advance
+	pre-submit at all, per this function's own docstring above).
 	"""
 	if doc.payment_type != "Receive" or not doc.custom_advance_for_so:
 		return
-	so_name = doc.custom_advance_for_so
-
-	if frappe.db.get_value("Sales Order", so_name, "custom_advance_approval_status") == "Rejected":
-		return
-
-	# Use the same combined-total helper _update_so_advance() uses — summing
-	# only this PE's own custom_advance_for_so contribution here would drop
-	# whatever the reference-table path had already collected for this SO
-	# (and vice versa) the next time either handler fires. See
-	# _compute_so_advance_total()'s docstring.
-	total = _compute_so_advance_total(so_name)
-
-	row = frappe.db.get_value(
-		"Sales Order", so_name,
-		["docstatus", "custom_advance_approval_status", "customer_name", "customer", "currency"],
-		as_dict=True,
-	)
-	if not row:
-		return
-
-	frappe.db.set_value("Sales Order", so_name, "custom_advance_paid", total)
-
-	if row.docstatus == 0 and not row.custom_advance_approval_status and total > 0:
-		frappe.db.set_value(
-			"Sales Order", so_name, "custom_advance_approval_status", "Pending", update_modified=False
-		)
-		_notify_advance_approver(so_name, row.customer_name, total, row.currency)
-
-	if row.customer:
-		from instabiz.overrides.customer import refresh_customer_outstanding
-		refresh_customer_outstanding(row.customer)
+	_recompute_so_advance_locked(doc.custom_advance_for_so)
 
 
 def _notify_advance_approver(so_name, customer_name, total_advance, currency):
