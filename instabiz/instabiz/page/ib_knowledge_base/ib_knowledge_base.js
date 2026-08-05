@@ -928,7 +928,7 @@ const KB_SECTIONS = [
 			},
 			{
 				num: "ACC-3", title: "Role Reference — Who Can Do What",
-				desc: "<b>Sales User:</b> Create and manage own Quotations, Sales Orders, Leads, Delivery Notes, Sales Invoices, Sample Requests. View Rate Card and Stock.<br><b>Sales Manager:</b> All of Sales User + view all reps' documents + Reports + Assignment Admin + set Sales Targets.<br><b>Accounts User:</b> Finance shortcuts + Finance Reports. Create Payment Entries, Purchase Invoices, PDC records. Bank Import and Reconciliation.<br><b>Accounts Manager:</b> All of Accounts User + full Finance access.<br><b>HR Manager:</b> Employees, Attendance, Leave, Payroll, Overtime, F&amp;F Settlement. Approve/reject leave applications inline from HR Dashboard.<br><b>Factory Management:</b> Work Orders, Machines, Order Sheets, Production Dashboard, DPR, Production Stages.<br><b>System Manager:</b> Full access including AI Inbox/Actions, workspace management, user administration.",
+				desc: "<b>Sales User:</b> Create and manage own Quotations, Sales Orders, Leads, Delivery Notes, Sales Invoices, Sample Requests. View Rate Card and Stock.<br><b>Sales Manager:</b> All of Sales User + view all reps' documents + Reports + Assignment Admin + set Sales Targets.<br><b>Accounts User:</b> Finance shortcuts + Finance Reports. Create Payment Entries, Purchase Invoices, PDC records. Bank Import and Reconciliation.<br><b>Accounts Manager:</b> All of Accounts User + full Finance access.<br><b>HR Manager:</b> Employees, Attendance, Leave, Payroll, Overtime, F&amp;F Settlement. Approve/reject leave applications inline from HR Dashboard.<br><b>Factory Management:</b> Work Orders, Machines, Order Sheets, Production Dashboard (Dashboard + Stages tabs), DPR.<br><b>System Manager:</b> Full access including AI Inbox/Actions, workspace management, user administration.",
 				tags: "role reference what can do sales accounts hr factory system manager permissions",
 			},
 		],
@@ -2012,14 +2012,14 @@ const KB_SECTIONS = [
 			{
 				num: "PROD-0", title: "Production Module — Overview",
 				desc: "Tracks raw materials (Jumbo Rolls) through 7 manufacturing stages to finished goods. Links Sales Orders → Order Sheets → Work Orders → Machines → Production Entries. All data flows to the Production Dashboard and DPR report. Roles: System Manager, Factory Management, Sales Manager. Doctypes: IB Work Order, IB Order Sheet, IB Machine, IB Production Entry, IB Jumbo Roll.",
-				link: "/app/ib-production-stages", linkLabel: "Open Production Stages",
+				link: "/app/ib-production-dashboard/stages", linkLabel: "Open Production — Stages tab",
 				tags: "production overview manufacturing module doctypes roles work order order sheet machine jumbo roll entry",
 			},
 			{
 				num: "PROD-1", title: "Stage Routing by Location and Item Group — Which Stages Each Product Goes Through",
 				updated: "2026-07-31",
 				desc: "Not all products go through all 7 stages. Location is checked first: Gujarat is the only factory site, so only Gujarat orders use the item-group routing below. Maharashtra and Chennai are warehouse-only and always get a fixed 2-stage route regardless of item group. Enforced server-side in _get_stage_route().",
-				link: "/app/ib-production-stages", linkLabel: "Open Production Stages",
+				link: "/app/ib-production-dashboard/stages", linkLabel: "Open Production — Stages tab",
 				tags: "stages item group location routing gujarat maharashtra chennai factory warehouse plastic pvc cloth foam aerosol sealant bopp paper reflective skips coating rewinding cutting packing",
 				steps: [
 					"<b>Location comes first (added 2026-07-31):</b> orders routed to <b>Maharashtra</b> or <b>Chennai</b> always get just <b>Packing → Ready to Deliver</b> — the item-group rules below never apply there, no matter what the item group is. Only <b>Gujarat</b> orders use the full item-group route.",
@@ -2055,7 +2055,7 @@ const KB_SECTIONS = [
 				tags: "order sheet os create sales order priority delivery date auto scheduler new button start production",
 				steps: [
 					"<b>Method 1 — Automatic (the normal path):</b> Submitting a Sales Order fires <code>on_so_submit_create_order_sheet</code>, which enqueues a background job that creates the Order Sheet within moments — no button click needed. See PROD-16 for the exact mechanism and priority logic.",
-					"<b>Method 2 — Manual, from Production Stages:</b> Order-wise tab → <b>+ Start Production</b> button (top of the page — the Sales Order form's own production panel is read-only display, it has no create button, see PROD-5a) → select Sales Order, set Priority and Notes, click Create.",
+					"<b>Method 2 — Manual, from the Stages tab:</b> Order-wise sub-tab → <b>+ Start Production</b> button (top of the page — the Sales Order form's own production panel is read-only display, it has no create button, see PROD-5a) → select Sales Order, set Priority and Notes, click Create.",
 					"After creation: Work Orders are auto-created per stage per item based on item group routing — and, as of 2026-07-31, the order's location: Gujarat gets the full item-group route, Maharashtra/Chennai always get just Packing → Ready to Deliver. See PROD-1.",
 					"Set <b>Priority</b> (Urgent/High/Normal/Low) and optional <b>Notes</b>. Delivery Date is pulled from the Sales Order, not set here — new Sales Orders now default Delivery Date to 8 days out (see 2.9 in Sales and Quotations).",
 				],
@@ -2080,43 +2080,43 @@ const KB_SECTIONS = [
 				updated: "2026-08-03",
 			},
 			{
-				num: "PROD-5", title: "Production Dashboard — All Sections",
-				updated: "2026-08-03",
-				desc: "Workspace → Production Dashboard. Real-time factory floor overview. 4 KPI cards, a Location filter, location-scoped pipeline summary, an AI actions panel, and a searchable/filterable/paginated Active Production Plan table with inline commenting. (The old static Priority Strip and Avg Wastage Today cards were removed 2026-07-31 — always showed 0.00%/static counts with no drill-through, judged not useful.)",
+				num: "PROD-5", title: "Production Dashboard (Dashboard + Stages, merged 2026-08-05) — All Sections",
+				updated: "2026-08-05",
+				desc: "Page: Production (<b>Workspace → Production Dashboard</b>) — one page, replacing the previously separate Production Dashboard and Production Stages pages/shortcuts. <b>Dashboard tab</b> (default): real-time factory floor overview — 4 KPI cards, a Location filter, location-scoped pipeline summary, an AI actions panel, and a searchable/filterable/paginated Active Production Plan table with inline commenting. <b>Stages tab</b>: the former Production Stages — Order-wise (default)/Item-wise/Stage-wise/Machine-wise/Job Bundles sub-tabs, the Work Order side panel, and machine management. (The old static Priority Strip and Avg Wastage Today cards were removed 2026-07-31 — always showed 0.00%/static counts with no drill-through, judged not useful.)",
 				link: "/app/ib-production-dashboard", linkLabel: "Open Production Dashboard",
-				tags: "production dashboard kpi active pending completed today machines ai actions plan entries pipeline location filter etd search pagination infinite scroll comment hide completed",
+				tags: "production dashboard kpi active pending completed today machines ai actions plan entries pipeline location filter etd search pagination infinite scroll comment hide completed stages tab merged",
 				steps: [
-					"<b>KPI Card 1 — Active Work Orders</b> (Pending + In Progress). Click → Production Stages, Item-wise tab, pre-filtered to Pending/In Progress/On Hold — <i>not</i> a raw IB Work Order list (fixed 2026-07-31: it used to route into Order-wise's status filter, which is Order-Sheet-grain and stays \"In Progress\" for an order's whole multi-week run — a grain mismatch against a WO-grain KPI).",
-					"<b>KPI Card 2 — Pending.</b> Click → same Item-wise tab, filtered to Pending only.",
+					"<b>KPI Card 1 — Active Work Orders</b> (Pending + In Progress). Click → the Stages tab, Item-wise sub-tab, pre-filtered to Pending/In Progress/On Hold — <i>not</i> a raw IB Work Order list (fixed 2026-07-31: it used to route into Order-wise's status filter, which is Order-Sheet-grain and stays \"In Progress\" for an order's whole multi-week run — a grain mismatch against a WO-grain KPI).",
+					"<b>KPI Card 2 — Pending.</b> Click → same Item-wise sub-tab, filtered to Pending only.",
 					"<b>KPI Card 3 — Completed Today.</b> Click → the DPR report page (its own \"WOs Completed\" KPI is the exact same date-scoped count, computed the same way — a genuine grain+time match, unlike trying to force a live-state tab to show a historical count).",
-					"<b>KPI Card 4 — Machines Active</b> (machines with an In Progress WO right now). Click → Production Stages, Machine-wise tab — <i>not</i> the raw IB Machine list.",
-					"<b>Location filter:</b> dropdown — All Locations / Gujarat (Factory) / Maharashtra (Warehouse) / Chennai (Warehouse). Your choice is remembered in your browser (localStorage key <code>ib_prod_location</code>) and automatically carries over to the Production Stages page, and vice versa. See PROD-6.",
-					"<b>Stage Pipeline:</b> 7 stage cards each showing Pending / In Progress / Completed counts + color progress bar. Click any card → Production Stages, Item-wise tab, filtered to that stage. Only renders once you've picked a specific location (not \"All Locations\") — showing 7 stage cards for a 2-stage warehouse site didn't make sense.",
+					"<b>KPI Card 4 — Machines Active</b> (machines with an In Progress WO right now). Click → the Stages tab, Machine-wise sub-tab — <i>not</i> the raw IB Machine list.",
+					"<b>Location filter:</b> dropdown — All Locations / Gujarat (Factory) / Maharashtra (Warehouse) / Chennai (Warehouse). Your choice is remembered in your browser (localStorage key <code>ib_prod_location</code>) and shared with the Stages tab automatically. See PROD-6.",
+					"<b>Stage Pipeline:</b> 7 stage cards each showing Pending / In Progress / Completed counts + color progress bar. Click any card → the Stages tab, Item-wise sub-tab, filtered to that stage. Only renders once you've picked a specific location (not \"All Locations\") — showing 7 stage cards for a 2-stage warehouse site didn't make sense.",
 					"<b>AI Production Actions Panel:</b> pending actions from production agents (prod_advance, prod_machine_assign, prod_notify_ready, prod_auto_os, prod_job_bundle) with Approve/Reject buttons.",
 					"<b>Active Production Plan Table:</b> one card per active order, identified by <b>Sales Order only</b> — the underlying Order Sheet record still exists and drives the click-through, but its raw ID is never shown. Each card shows customer, item count and names, current stage, stage-chip progress row, priority, overall progress bar, creation date, and a color-coded <b>ETD</b> badge (green on-track / orange due within 2 days / red overdue) from the SO's Delivery Date.",
 					"<b>Search box</b> above the table — filters by Sales Order name or customer name. <b>Priority filter</b> and the page-level <b>Location filter</b> narrow it further.",
 					"<b>Hide completed items toggle</b> (default ON) — collapses fully-completed order cards out of the list so the table stays focused on what's actually in flight; switch it off to see everything.",
 					"<b>Per-order comment button</b> — posts a real Frappe Comment against the Sales Order (reusing the existing notify_owner_on_comment hook) with a live comment-count badge on the card. Commenting on an order that has active production also fans out a notification to Factory Management/Factory Production/System Manager — a way for sales or management to flag something to the floor without leaving the dashboard.",
 					"<b>Pagination:</b> loads 25 order sheets at a time; scrolling down loads more automatically (infinite scroll).",
-					"<b>Quick Buttons:</b> Production Stages →, Order Sheets →, DPR Report →. Production Stages and Production Dashboard also have mutual toolbar cross-navigation buttons to jump between the two.",
-					"<b>Toolbar:</b> Location filter + Refresh button top-right.",
+					"<b>Quick Buttons:</b> Stages tab →, Work Orders →, DPR Report →.",
+					"<b>Toolbar:</b> Location filter + Refresh button top-right (Dashboard tab); the Stages tab owns its own toolbar (5 sub-tabs + shared Location filter + Refresh) while active — only one tab's toolbar chrome is shown at a time.",
 				],
 				note: "<b>PROD-5a — Sales Order form production panel:</b> every submitted Sales Order also shows a small read-only production panel directly on its own form (progress bar, current stage, item-level stage chips, dispatch status) — this is display-only, there's no button on it to create an Order Sheet (see PROD-3). It links out to the full Production Tracker (PROD-25) for sales users.",
 			},
 			{
 				num: "PROD-6", title: "Location Filter — Scoping Production Views by Site (Gujarat / Maharashtra / Chennai)",
-				updated: "2026-07-31",
-				desc: "Production Stages and Production Dashboard both have a Location dropdown (All Locations / Gujarat (Factory) / Maharashtra (Warehouse) / Chennai (Warehouse)) that scopes what you see to one site. Your choice is shared between the two pages automatically. Replaces the old Kanban/Pipeline tab, which was removed the same day — see the FAQ for why.",
-				link: "/app/ib-production-stages", linkLabel: "Open Production Stages",
+				updated: "2026-08-05",
+				desc: "Both tabs of the Production page (Dashboard and Stages) share one Location dropdown (All Locations / Gujarat (Factory) / Maharashtra (Warehouse) / Chennai (Warehouse)) that scopes what you see to one site. Replaces the old Kanban/Pipeline tab, which was removed the same day — see the FAQ for why.",
+				link: "/app/ib-production-dashboard/stages", linkLabel: "Open Production — Stages tab",
 				tags: "location filter gujarat maharashtra chennai factory warehouse site shared localstorage production stages dashboard ib_prod_location",
 				steps: [
-					"Open either <b>Production Stages</b> or <b>Production Dashboard</b> and use the <b>Location</b> dropdown in the toolbar.",
+					"Open the <b>Production</b> page (either tab) and use the <b>Location</b> dropdown in the toolbar.",
 					"Options: <b>All Locations</b> (default, no scoping), <b>Gujarat (Factory)</b>, <b>Maharashtra (Warehouse)</b>, <b>Chennai (Warehouse)</b>.",
-					"Your selection is saved in your browser (localStorage key <code>ib_prod_location</code>) and automatically applied on the other page too — pick Gujarat on one, it's already selected the next time you open the other.",
+					"Your selection is saved in your browser (localStorage key <code>ib_prod_location</code>) and automatically applied on the other tab too — pick Gujarat on one, it's already selected on the other.",
 					"Gujarat is the only site with a full factory (Coating→Slitting→Rewinding→Cutting→Packing→Ready to Deliver, varies by item group). Maharashtra and Chennai are warehouse-only — any order routed there only ever has Packing → Ready to Deliver, so their production views are intentionally simpler. See PROD-1 for the full routing rules.",
-					"On the Production Dashboard, the Stage Pipeline card section only renders once you pick a specific location (see PROD-5) — showing 7 stage cards for a 2-stage warehouse site didn't make sense.",
+					"On the Dashboard tab, the Stage Pipeline card section only renders once you pick a specific location (see PROD-5) — showing 7 stage cards for a 2-stage warehouse site didn't make sense.",
 				],
-				note: "The old Pipeline/Kanban tab (drag-and-drop columns) is gone. Production Stages tabs are now: Order-wise (default), Item-wise, Job Bundles, Machine-wise. Order-wise and Job Bundles are the primary ways to see what's happening.",
+				note: "The old Pipeline/Kanban tab (drag-and-drop columns) is gone. The Stages tab's own sub-tabs are: Order-wise (default), Item-wise, Stage-wise, Machine-wise, Job Bundles. Order-wise and Job Bundles are the primary ways to see what's happening. Production Dashboard and Production Stages were two separate pages until 2026-08-05, when they merged into the Dashboard/Stages tabs of this one page — see PROD-5.",
 			},
 			{
 				num: "PROD-7", title: "Work Order Side Panel — All Buttons",
@@ -2160,7 +2160,7 @@ const KB_SECTIONS = [
 			{
 				num: "PROD-9", title: "Item-wise Tab — Per-Item Stage Progress and Batch Lineage",
 				updated: "2026-08-03",
-				desc: "Production Stages → Item-wise tab. Each item card shows all active stages, completion %, linked Jumbo Rolls. Click for stage table and batch lineage traceability. Also the target of the Dashboard's Active/Pending/Stage-Pipeline KPI cards (see PROD-5) since this tab is genuinely Work-Order-grain and spans every order.",
+				desc: "The Stages tab's Item-wise sub-tab. Each item card shows all active stages, completion %, linked Jumbo Rolls. Click for stage table and batch lineage traceability. Also the target of the Dashboard tab's Active/Pending/Stage-Pipeline KPI cards (see PROD-5) since this sub-tab is genuinely Work-Order-grain and spans every order.",
 				tags: "item wise tab item code stages active completion jumbo roll batch lineage link search status filter route options",
 				steps: [
 					"Click the <b>Item-wise</b> tab.",
@@ -2176,7 +2176,7 @@ const KB_SECTIONS = [
 			{
 				num: "PROD-10", title: "Order-wise Tab — Order Sheet List and Stage Matrix",
 				updated: "2026-08-03",
-				desc: "Production Stages → Order-wise tab — the default tab on the page. Lists all Order Sheets with filters and search. Click into one for three detail subtabs.",
+				desc: "The Stages tab's Order-wise sub-tab — the default sub-tab. Lists all Order Sheets with filters and search. Click into one for three detail subtabs.",
 				tags: "order wise tab sheet list filter status priority subtab matrix product stage machine create wo start production default search location filter print job order summary",
 				steps: [
 					"Click the <b>Order-wise</b> tab (or just land here — it's the default).",
@@ -2195,7 +2195,7 @@ const KB_SECTIONS = [
 			{
 				num: "PROD-11", title: "Machine-wise Tab — Machine Load and Stats",
 				updated: "2026-08-03",
-				desc: "Production Stages → Machine-wise tab. All active machines with live load, today's real output/wastage/yield, and WO list. Create and edit machines from here.",
+				desc: "The Stages tab's Machine-wise sub-tab. All active machines with live load, today's real output/wastage/yield, and WO list. Create and edit machines from here.",
 				tags: "machine wise tab load output wastage yield capacity edit create new machine card entries today stats quality control despatch",
 				steps: [
 					"Click the <b>Machine-wise</b> tab.",
@@ -2211,7 +2211,7 @@ const KB_SECTIONS = [
 			{
 				num: "PROD-12", title: "Job Bundles Tab — Batch Machine Assignment",
 				updated: "2026-07-31",
-				desc: "Production Stages → Job Bundles tab. Groups Pending Work Orders that share the same item_code and stage. Batch-assign all WOs in a bundle to one machine in a single click.",
+				desc: "The Stages tab's Job Bundles sub-tab. Groups Pending Work Orders that share the same item_code and stage. Batch-assign all WOs in a bundle to one machine in a single click.",
 				tags: "job bundles tab batch assign machine pending work orders same item stage group efficiency search reappear bug fix",
 				steps: [
 					"Click the <b>Job Bundles</b> tab.",
@@ -2343,7 +2343,7 @@ const KB_SECTIONS = [
 					"Go to <b>Workflow List</b> (search-bar → \"Workflow\") → <b>IB Work Order Workflow</b> to see the full state/transition map, or open any IB Work Order doc directly — native workflow action buttons appear top-right.",
 					"States: Pending → In Progress → Completed, with On Hold reachable from Pending or In Progress, and Cancel reachable from Pending/In Progress/On Hold.",
 					"Each transition is role-gated to Factory Management, Factory Production, or System Manager — same roles as before, just enforced by the Workflow engine instead of a hand-rolled permission check.",
-					"The existing Production Stages Order-wise / Machine-wise / Job Bundles buttons still work exactly as before — they call the same whitelisted methods (start_work_order, complete_work_order, put_on_hold, advance_to_next_stage), which now apply the workflow transition internally instead of writing the status field directly.",
+					"The existing Stages-tab Order-wise / Machine-wise / Job Bundles buttons still work exactly as before — they call the same whitelisted methods (start_work_order, complete_work_order, put_on_hold, advance_to_next_stage), which now apply the workflow transition internally instead of writing the status field directly.",
 					"Bell notifications (25/50/75/100% progress to the sales person, On Hold alerts) are unchanged — they fire from the same IB Work Order.on_update hook, which now fires reliably on every transition since it's a real doc.save() under the hood.",
 				],
 				note: "If you need cross-system automation again in future (e.g. calling out to a courier API on dispatch), prefer Frappe's own Server Script / Webhook doctypes over reviving n8n — no separate process to keep alive.",
@@ -2613,7 +2613,7 @@ const KB_SECTIONS = [
 				steps: [
 					"Go to <b>Workspace → Production → Production Dashboard</b>.",
 					"4 KPI cards: <b>Active WOs</b> (→ IB Work Order list In Progress), <b>Pending</b> (→ Pending WOs), <b>Completed Today</b> (→ WOs completed today), <b>Machines Active</b> (→ IB Machine list Active).",
-					"Pick a <b>Location</b> from the new filter to see the stage pipeline (Coating→Slitting→Rewinding→Cutting→Packing→RTD→Delivered) — it stays hidden on \"All Locations\" now, since a mixed view across a 6-stage factory and 2-stage warehouses didn't make sense. Click any stage card → Production Stages page. See PROD-5/PROD-6 for full detail.",
+					"Pick a <b>Location</b> from the new filter to see the stage pipeline (Coating→Slitting→Rewinding→Cutting→Packing→RTD→Delivered) — it stays hidden on \"All Locations\" now, since a mixed view across a 6-stage factory and 2-stage warehouses didn't make sense. Click any stage card → the Stages tab. See PROD-5/PROD-6 for full detail.",
 					"Priority strip shows Urgent/High/Normal/Low WO counts.",
 					"Wastage card shows today's average wastage %.",
 					"Active Plan table lists all active orders by Sales Order (no raw Order Sheet ID shown), with a search box and infinite-scroll pagination (25 at a time), plus a color-coded ETD badge per card.",
@@ -2656,7 +2656,7 @@ const KB_SECTIONS = [
 				note: "If you're still seeing wrong Absent records from before 2026-07-15, those historical records were not automatically corrected — ask HR to review, since fixing them touches payroll-adjacent submitted documents.",
 			},
 			{
-				num: "FAQ-2", title: "Where did the Seat Map / Live Floor tabs in Production Stages go?",
+				num: "FAQ-2", title: "Where did the Seat Map / Live Floor tabs in Production Stages (now the Stages tab) go?",
 				desc: "Both were built and then removed the same day at the requester's own follow-up request.",
 				tags: "faq seat map live floor removed missing tab gone production stages",
 				steps: [
@@ -2691,7 +2691,7 @@ const KB_SECTIONS = [
 				steps: [
 					"You don't have to do anything — submitting the SO fires a background job that creates the Order Sheet (+ full Work Order chain) within moments.",
 					"This changed 2026-07-21 from an old nightly-midnight scan to an on-submit trigger — if you're thinking of the old \"runs at midnight\" behavior, that's no longer how it works.",
-					"If it doesn't appear within a minute or two, check the Error Log for \"Production Auto-Create (on-submit)\", or create it manually from Production Stages → Order-wise → <b>+ Start Production</b> (see PROD-3).",
+					"If it doesn't appear within a minute or two, check the Error Log for \"Production Auto-Create (on-submit)\", or create it manually from the Stages tab → Order-wise → <b>+ Start Production</b> (see PROD-3).",
 				],
 			},
 			{
@@ -2726,9 +2726,9 @@ const KB_SECTIONS = [
 				tags: "faq sales incentives blank empty not loading dropdown select",
 			},
 			{
-				num: "FAQ-10", title: "Why don't I see a Pipeline/Kanban tab in Production Stages anymore?",
+				num: "FAQ-10", title: "Why don't I see a Pipeline/Kanban tab in the Stages tab anymore?",
 				updated: "2026-07-31",
-				desc: "Removed 2026-07-31 — the drag-and-drop kanban view was confusing. Production Stages tabs are now Order-wise (default), Item-wise, Job Bundles, Machine-wise.",
+				desc: "Removed 2026-07-31 — the drag-and-drop kanban view was confusing. The Stages tab's sub-tabs are now Order-wise (default), Item-wise, Stage-wise, Machine-wise, Job Bundles.",
 				tags: "faq pipeline kanban removed missing tab production stages drag drop gone",
 				steps: [
 					"Order-wise and Job Bundles are the primary ways to see what's happening now.",
@@ -2777,8 +2777,7 @@ const KB_SECTIONS = [
 					"<b>Attendance Terminal</b> (attendance-terminal) — bulk daily check-in/out console. <code>page/attendance_terminal/</code>",
 					"<b>Biometric Import</b> (ib-biometric-import) — device CSV → Employee Checkin mapper. <code>page/ib_biometric_import/</code>",
 					"<b>Org Chart</b> (ib-org-chart) — D3 employee tree. <code>page/ib_org_chart/</code>",
-					"<b>Production Dashboard</b> (ib-production-dashboard) — plan + recent completions. <code>page/ib_production_dashboard/</code> + <code>overrides/production.py</code>",
-					"<b>Production Stages</b> (ib-production-stages) — order-wise (default)/item-wise/job-bundles/machine-wise tabs + shared Location filter (Kanban/Pipeline tab removed 2026-07-31). <code>page/ib_production_stages/</code> + <code>overrides/production.py</code>",
+					"<b>Production</b> (ib-production-dashboard) — merged Dashboard (KPIs/pipeline/Active Production Plan) + Stages (order-wise default/item-wise/stage-wise/machine-wise/job-bundles sub-tabs + shared Location filter) tabs, 2026-08-05. <code>page/ib_production_dashboard/</code> + <code>overrides/production.py</code> (original ib-production-stages route retired, its own .py held no RPCs so it was deleted outright, not kept in place).",
 					"<b>Production Tracker</b> (ib-production-tracker) — sales-facing production visibility. <code>page/ib_production_tracker/</code>",
 					"<b>DPR Report</b> (ib-dpr) — daily/weekly production report. <code>page/ib_dpr/</code> + <code>overrides/production.py</code>",
 					"<b>System Health</b> (ib-system-health) — infra health-check grid. <code>page/ib_system_health/</code>",

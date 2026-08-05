@@ -1999,20 +1999,25 @@ def get_machine_wise_dashboard(location=None):
 		)
 		# WOs on one machine can belong to different orders (no single shared
 		# parent ETD like the order-scoped views have), so fetch each WO's own
-		# Order Sheet delivery_date here.
+		# Order Sheet delivery_date + customer here. Also carries customer_name
+		# for the Machine-wise tab's WO table (added 2026-08-05 — that table
+		# previously showed item_code only, with no customer column, unlike
+		# every other WO table on this page).
 		os_names = list({wo.order_sheet for wo in current_wos if wo.order_sheet})
-		etd_map = {}
+		os_map = {}
 		if os_names:
-			etd_map = {
-				d.name: d.delivery_date
+			os_map = {
+				d.name: d
 				for d in frappe.get_all(
 					"IB Order Sheet",
 					filters={"name": ["in", os_names]},
-					fields=["name", "delivery_date"],
+					fields=["name", "delivery_date", "customer", "customer_name"],
 				)
 			}
 		for wo in current_wos:
-			wo["delivery_date"] = etd_map.get(wo.order_sheet)
+			os_row = os_map.get(wo.order_sheet)
+			wo["delivery_date"] = os_row.delivery_date if os_row else None
+			wo["customer_name"] = (os_row.customer_name or os_row.customer) if os_row else None
 
 		# Today's stats from IB Work Order directly — NOT tabIB Production Entry,
 		# which has zero rows ever (same fallback pattern already used by
@@ -2751,10 +2756,12 @@ def batch_assign_machine(work_orders, machine, batch_group=None):
 
 def _notify_floor_update():
 	"""Fire on every WO status/machine-assignment change so any open Production
-	Stages tab live-refreshes across terminals (ib_production_stages.js
-	_start_live_updates). Originally added for the since-removed Seat Map/Live
-	Floor UI, but the event itself is a separate, still-active cross-terminal
-	refresh mechanism — do not remove without also removing that listener."""
+	page Stages tab live-refreshes across terminals (ib_production_dashboard.js's
+	IBProductionStages._start_live_updates — merged into that file 2026-08-05,
+	formerly its own ib_production_stages.js). Originally added for the
+	since-removed Seat Map/Live Floor UI, but the event itself is a separate,
+	still-active cross-terminal refresh mechanism — do not remove without also
+	removing that listener."""
 	frappe.publish_realtime("ib_floor_update", {}, after_commit=True)
 
 
