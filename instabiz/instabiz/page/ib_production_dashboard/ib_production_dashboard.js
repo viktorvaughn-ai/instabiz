@@ -3574,6 +3574,8 @@ class IBProductionStages {
 					this._load_job_bundles();
 				} else if (this.active_tab === "item_wise") {
 					this._load_item_wise();
+				} else if (this.active_tab === "stage_wise") {
+					this._load_stage_wise();
 				}
 			},
 		});
@@ -3599,6 +3601,8 @@ class IBProductionStages {
 					this._load_job_bundles();
 				} else if (this.active_tab === "item_wise") {
 					this._load_item_wise();
+				} else if (this.active_tab === "stage_wise") {
+					this._load_stage_wise();
 				}
 			},
 		});
@@ -3627,6 +3631,8 @@ class IBProductionStages {
 					this._load_job_bundles();
 				} else if (this.active_tab === "item_wise") {
 					this._load_item_wise();
+				} else if (this.active_tab === "stage_wise") {
+					this._load_stage_wise();
 				}
 			},
 		});
