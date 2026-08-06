@@ -209,12 +209,23 @@ def get_production_dashboard(location=None):
 	)
 
 	# Stage pipeline
-	stage_rows = frappe.db.sql(
+	# "In Progress" and "Completed" counts are always real (those states only
+	# ever occur on an item's genuine current/already-passed stage). "Pending"
+	# is not — auto_create_all_stage_wos() pre-creates one WO per stage in an
+	# item's whole route up front, so a plain GROUP BY stage/status counted
+	# every future stage's placeholder WO as if it were real backlog sitting
+	# at that station (same root cause as the Stage-wise/Job Bundles fix
+	# above). Confirmed live 2026-08-06: Packing and Ready to Deliver both
+	# showed pending=42 (identical) here, while Stage-wise's corrected
+	# current-position count for the same data was Packing=13, RTD=0. Fixed
+	# by computing each item's true current stage (first non-Completed in
+	# route order) the same way get_stage_pipeline() does, and only counting
+	# a WO into "pending" when it IS that item's current stage.
+	all_wo_rows = frappe.db.sql(
 		f"""
-		SELECT wo.stage, wo.status, COUNT(*) AS cnt
+		SELECT wo.stage, wo.status, wo.order_sheet, wo.order_sheet_item, wo.item_code
 		FROM `tabIB Work Order` wo
-		WHERE 1=1 {loc_filter}
-		GROUP BY wo.stage, wo.status
+		WHERE wo.status != 'Cancelled' {loc_filter}
 		""",
 		params,
 		as_dict=True,
@@ -231,17 +242,36 @@ def get_production_dashboard(location=None):
 		else STAGES
 	)
 	stage_map = {s: {"stage": _stage_key(s), "pending": 0, "in_progress": 0, "completed": 0} for s in visible_stages}
-	for row in stage_rows:
-		if row.stage not in stage_map:
-			if location and row.stage not in visible_stages:
-				continue
-			stage_map[row.stage] = {"stage": _stage_key(row.stage), "pending": 0, "in_progress": 0, "completed": 0}
-		if row.status == "Pending":
-			stage_map[row.stage]["pending"] = row.cnt
-		elif row.status == "In Progress":
-			stage_map[row.stage]["in_progress"] = row.cnt
+
+	def _ensure_stage(stage):
+		if stage not in stage_map:
+			if location and stage not in visible_stages:
+				return None
+			stage_map[stage] = {"stage": _stage_key(stage), "pending": 0, "in_progress": 0, "completed": 0}
+		return stage_map[stage]
+
+	stage_rank = {s: i for i, s in enumerate(STAGES)}
+	item_groups = {}
+	for row in all_wo_rows:
+		if row.status == "In Progress":
+			sm = _ensure_stage(row.stage)
+			if sm:
+				sm["in_progress"] += 1
 		elif row.status == "Completed":
-			stage_map[row.stage]["completed"] = row.cnt
+			sm = _ensure_stage(row.stage)
+			if sm:
+				sm["completed"] += 1
+		key = row.order_sheet_item or f"{row.order_sheet}::{row.item_code}"
+		item_groups.setdefault(key, []).append(row)
+
+	for wos in item_groups.values():
+		wos.sort(key=lambda r: stage_rank.get(r.stage, 999))
+		current = next((r for r in wos if r.status != "Completed"), None)
+		if current and current.status == "Pending":
+			sm = _ensure_stage(current.stage)
+			if sm:
+				sm["pending"] += 1
+
 	stage_pipeline = [stage_map[s] for s in STAGES if s in stage_map]
 
 	# Priority overview — lowercase keys match JS badge lookup

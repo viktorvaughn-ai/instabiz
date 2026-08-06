@@ -291,12 +291,37 @@ def _production_data(today, since, date_fmt, group_fmt, pw):
 			GROUP BY status ORDER BY amount DESC
 		""", as_dict=True)
 
-		by_stage = frappe.db.sql("""
-			SELECT stage as label, COUNT(*) as amount
+		# Counts each item's true CURRENT stage only, not every stage it has a
+		# WO for. auto_create_all_stage_wos() pre-creates one WO per stage in
+		# an item's whole route up front, all Pending — a plain GROUP BY stage
+		# on "not Completed/Cancelled" WOs (the original shape of this query)
+		# counted every future stage's placeholder as if real work were
+		# sitting there, same root cause as the Production page's Stage-wise/
+		# Job Bundles/pipeline-card bugs fixed 2026-08-06 in production.py.
+		# Fixed the same way: resolve each item's current stage (first
+		# non-Completed in route order), then only count it if that stage is
+		# genuinely Pending/In Progress right now.
+		stage_wo_rows = frappe.db.sql("""
+			SELECT stage, status, order_sheet, order_sheet_item, item_code
 			FROM `tabIB Work Order`
-			WHERE status NOT IN ('Completed','Cancelled') AND stage IS NOT NULL AND stage != ''
-			GROUP BY stage ORDER BY amount DESC LIMIT 10
+			WHERE status != 'Cancelled' AND stage IS NOT NULL AND stage != ''
 		""", as_dict=True)
+		_stage_order = ["Coating", "Slitting", "Rewinding", "Cutting", "Packing", "Ready to Deliver", "Delivered"]
+		_stage_rank = {s: i for i, s in enumerate(_stage_order)}
+		_item_groups = {}
+		for row in stage_wo_rows:
+			key = row.order_sheet_item or f"{row.order_sheet}::{row.item_code}"
+			_item_groups.setdefault(key, []).append(row)
+		_stage_counts = {}
+		for wos in _item_groups.values():
+			wos.sort(key=lambda r: _stage_rank.get(r.stage, 999))
+			current = next((r for r in wos if r.status != "Completed"), None)
+			if current:
+				_stage_counts[current.stage] = _stage_counts.get(current.stage, 0) + 1
+		by_stage = sorted(
+			[{"label": s, "amount": c} for s, c in _stage_counts.items()],
+			key=lambda r: -r["amount"],
+		)[:10]
 	except Exception:
 		wo_active = wo_completed = wo_total = machines_active = 0
 		by_status = []
@@ -792,20 +817,54 @@ def _my_work_production(user, today, since, date_fmt, group_fmt, month_start, pw
 		GROUP BY grp, label ORDER BY grp
 	""", (since,), as_dict=True)
 
-	by_stage = frappe.db.sql("""
-		SELECT COALESCE(stage, 'No Stage') as label, COUNT(*) as amount
-		FROM `tabIB Work Order`
-		WHERE status NOT IN ('Completed','Cancelled')
-		GROUP BY stage ORDER BY amount DESC LIMIT 10
-	""", as_dict=True)
-
-	active_wos = frappe.db.sql("""
+	# Both queries below count/list each item's true CURRENT stage only, not
+	# every stage it happens to have a non-Completed WO for.
+	# auto_create_all_stage_wos() pre-creates one WO per stage in an item's
+	# whole route up front, all Pending — the original "status NOT IN
+	# (Completed, Cancelled)" filter counted/listed every future stage's
+	# placeholder as if it were real, current work, same root cause as the
+	# Production page's Stage-wise/Job Bundles/pipeline-card bugs fixed
+	# 2026-08-06 in production.py (and the privileged _production_data()
+	# view's by_stage above). Fixed by resolving each item's current stage
+	# (first non-Completed in route order) and only counting/listing that one.
+	_stage_wo_rows = frappe.db.sql("""
 		SELECT name, item_code, stage, priority, status, machine, operator,
-			   target_qty, completed_qty, started_at
+			   target_qty, completed_qty, started_at, order_sheet, order_sheet_item
 		FROM `tabIB Work Order`
-		WHERE status NOT IN ('Completed','Cancelled')
-		ORDER BY FIELD(priority,'High','Medium','Low'), started_at ASC LIMIT 15
+		WHERE status != 'Cancelled'
 	""", as_dict=True)
+	_stage_order = ["Coating", "Slitting", "Rewinding", "Cutting", "Packing", "Ready to Deliver", "Delivered"]
+	_stage_rank = {s: i for i, s in enumerate(_stage_order)}
+	_item_groups = {}
+	for row in _stage_wo_rows:
+		key = row.order_sheet_item or f"{row.order_sheet}::{row.item_code}"
+		_item_groups.setdefault(key, []).append(row)
+	_current_rows = []
+	for wos in _item_groups.values():
+		wos.sort(key=lambda r: _stage_rank.get(r.stage, 999))
+		current = next((r for r in wos if r.status != "Completed"), None)
+		if current:
+			_current_rows.append(current)
+
+	_stage_counts = {}
+	for r in _current_rows:
+		label = r.stage or "No Stage"
+		_stage_counts[label] = _stage_counts.get(label, 0) + 1
+	by_stage = sorted(
+		[{"label": s, "amount": c} for s, c in _stage_counts.items()],
+		key=lambda r: -r["amount"],
+	)[:10]
+
+	# Priority order fixed alongside this rewrite — the original SQL sorted by
+	# FIELD(priority,'High','Medium','Low'), but IB Work Order's real Select
+	# options are Urgent/High/Normal/Low (no "Medium"); every real WO's
+	# priority fell through to FIELD's unmatched-value rank (0, sorts first),
+	# so the ORDER BY was effectively a no-op. Now matches the real options.
+	_priority_rank = {"Urgent": 0, "High": 1, "Normal": 2, "Low": 3}
+	active_wos = sorted(
+		[r for r in _current_rows if r.status in ("Pending", "In Progress")],
+		key=lambda r: (_priority_rank.get(r.priority, 4), r.started_at or ""),
+	)[:15]
 
 	on_hold = frappe.db.sql("""
 		SELECT name, item_code, stage, priority, machine
