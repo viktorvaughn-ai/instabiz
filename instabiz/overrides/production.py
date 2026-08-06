@@ -1584,14 +1584,27 @@ def advance_to_next_stage(work_order):
 			as_dict=True,
 		)
 		if existing:
-			# Pre-created WO found — assign machine now if not already assigned
-			if not existing.machine:
-				machine = _assign_machine_load_balanced(next_stage, location) or ""
-				if machine:
-					frappe.db.set_value("IB Work Order", existing.name, "machine", machine)
-			# Update target_qty to actual output of completed stage
-			output_qty = flt(doc.completed_qty) or flt(doc.target_qty)
-			frappe.db.set_value("IB Work Order", existing.name, "target_qty", output_qty)
+			# Pre-created WO found — assign machine now if not already assigned.
+			# Locked separately from the source WO's lock above: this mutates a
+			# *different* Work Order (the next-stage one), and every sibling
+			# status-transition function (start/complete/hold) locks whatever WO
+			# it writes to. Without this, a concurrent start_work_order/
+			# move_work_order_stage call on the same next-stage WO could race
+			# with this unlocked write (lost machine assignment or target_qty).
+			next_lock_name = f"IB-WO-{existing.name}"
+			next_locked = frappe.db.sql("SELECT GET_LOCK(%s, 5)", next_lock_name)[0][0]
+			if not next_locked:
+				frappe.throw(_("Could not acquire lock for Work Order {0}. Please try again.").format(existing.name))
+			try:
+				if not existing.machine:
+					machine = _assign_machine_load_balanced(next_stage, location) or ""
+					if machine:
+						frappe.db.set_value("IB Work Order", existing.name, "machine", machine)
+				# Update target_qty to actual output of completed stage
+				output_qty = flt(doc.completed_qty) or flt(doc.target_qty)
+				frappe.db.set_value("IB Work Order", existing.name, "target_qty", output_qty)
+			finally:
+				frappe.db.sql("SELECT RELEASE_LOCK(%s)", next_lock_name)
 			_update_order_sheet_progress(doc.order_sheet)
 			frappe.db.commit()
 			_notify_floor_update()
@@ -2652,27 +2665,51 @@ def get_job_bundles(location=None, search=None):
 	Excludes WOs that already have a machine — without this, a bundle you just
 	ran "Batch Assign" on reappeared identically on refresh (same Pending status,
 	same item+stage grouping key), since only the machine field had changed.
+
+	Also excludes any WO that isn't yet its item's CURRENT stage. Same root
+	cause as the Stage-wise view bug fixed 2026-08-05 (see get_stage_pipeline()):
+	auto_create_all_stage_wos() only assigns a machine to an item's first
+	stage — every later stage in its route sits Pending with no machine until
+	advance_to_next_stage() reaches it — so a plain "Pending + no machine"
+	filter matched every future stage of an item still sitting at stage 1,
+	offering them up for batch assignment before the item had even finished
+	its current stage. Fixed the same way: fetch every non-Cancelled WO per
+	item (order_sheet_item, falling back to order_sheet+item_code) to find
+	its true current stage (first non-Completed stage in route order), then
+	only bundle a WO if it IS that current stage.
 	"""
 	_require_production_role()
 	loc_where = "AND so.custom_location = %(location)s" if location else ""
 	search_where = "AND (wo.item_code LIKE %(search)s OR os.sales_order LIKE %(search)s OR os.customer_name LIKE %(search)s)" if search else ""
 	rows = frappe.db.sql(f"""
-		SELECT wo.name, wo.item_code, wo.item_name, wo.stage, wo.target_qty,
-		       wo.target_uom, wo.machine, wo.batch_group, wo.order_sheet, wo.creation,
-		       os.priority, os.sales_order, os.customer_name, os.delivery_date
+		SELECT wo.name, wo.item_code, wo.item_name, wo.stage, wo.status, wo.target_qty,
+		       wo.target_uom, wo.machine, wo.batch_group, wo.order_sheet, wo.order_sheet_item,
+		       wo.creation, os.priority, os.sales_order, os.customer_name, os.delivery_date
 		FROM `tabIB Work Order` wo
 		JOIN `tabIB Order Sheet` os ON os.name = wo.order_sheet
 		JOIN `tabSales Order` so ON so.name = os.sales_order
-		WHERE wo.status = 'Pending'
-		AND (wo.machine IS NULL OR wo.machine = '')
+		WHERE wo.status != 'Cancelled'
 		{loc_where}
 		{search_where}
 		ORDER BY wo.item_code, wo.stage,
 		         FIELD(os.priority, 'Urgent', 'High', 'Normal', 'Low')
 	""", {"location": location, "search": f"%{search}%" if search else None}, as_dict=True)
 
+	stage_rank = {s: i for i, s in enumerate(STAGES)}
+	groups = {}
+	for row in rows:
+		key = row.order_sheet_item or f"{row.order_sheet}::{row.item_code}"
+		groups.setdefault(key, []).append(row)
+
+	current_rows = []
+	for wos in groups.values():
+		wos.sort(key=lambda r: stage_rank.get(r.stage, 999))
+		current = next((r for r in wos if r.status != "Completed"), None)
+		if current and current.status == "Pending" and not current.machine:
+			current_rows.append(current)
+
 	bundle_map = {}
-	for wo in rows:
+	for wo in current_rows:
 		key = f"{wo.item_code}|||{wo.stage}"
 		if key not in bundle_map:
 			bundle_map[key] = {
@@ -2796,7 +2833,18 @@ def _so_progress_pct(so_name):
 	"""Return (pct, current_stage, order_sheet_name) for a Sales Order's active
 	Order Sheet, or (None, None, None) if it has none. Internal — no permission
 	check, callers must already be in a trusted/system context (this is what
-	the sales-facing whitelisted APIs call, after their own access check)."""
+	the sales-facing whitelisted APIs call, after their own access check).
+
+	Keyed by order_sheet_item (child row name), not bare item_code — same fix
+	already applied to get_so_production_status/get_order_sheet_detail (see
+	their comments). This function was missed during that pass: an Order Sheet
+	with two lines sharing one item_code (a real, valid scenario) had both
+	lines' Work Orders merged into a single stage set here, so the Production
+	Tracker's pct/current_stage and the 25/50/75/100% milestone notifications
+	(on_work_order_update_notify, which calls this) could both be wrong for
+	such an order even though the drill-down timeline (get_so_production_status)
+	already showed the correct per-item split.
+	"""
 	os_name = frappe.db.get_value(
 		"IB Order Sheet", {"sales_order": so_name, "status": ["!=", "Cancelled"]}, "name"
 	)
@@ -2804,20 +2852,25 @@ def _so_progress_pct(so_name):
 		return None, None, None
 
 	location = frappe.db.get_value("Sales Order", so_name, "custom_location")
-	items = frappe.db.get_all("IB Order Sheet Item", filters={"parent": os_name}, fields=["item_code"])
+	items = frappe.db.get_all("IB Order Sheet Item", filters={"parent": os_name}, fields=["name", "item_code"])
 	wos = frappe.db.get_all(
 		"IB Work Order",
 		filters={"order_sheet": os_name, "status": ["!=", "Cancelled"]},
-		fields=["item_code", "stage", "status"],
+		fields=["item_code", "order_sheet_item", "stage", "status"],
 	)
-	wo_by_item = {}
+	wo_by_osi = {}
+	wo_by_item_legacy = {}
 	for wo in wos:
-		wo_by_item.setdefault(wo.item_code, []).append(wo)
+		if wo.order_sheet_item:
+			wo_by_osi.setdefault(wo.order_sheet_item, []).append(wo)
+		else:
+			wo_by_item_legacy.setdefault(wo.item_code, []).append(wo)
 
 	items_summary = []
 	for item in items:
 		route = _get_stage_route(item.item_code, location)
-		item_wos = {w.stage: w for w in wo_by_item.get(item.item_code, [])}
+		item_wos_list = wo_by_osi.get(item.name) or wo_by_item_legacy.get(item.item_code, [])
+		item_wos = {w.stage: w for w in item_wos_list}
 		stages = [{"stage": s, "status": item_wos[s].status if s in item_wos else "Not Created"} for s in route]
 		current = next((s["stage"] for s in stages if s["status"] in ("Pending", "In Progress")), None)
 		items_summary.append({"stages": stages, "current_stage": current})
