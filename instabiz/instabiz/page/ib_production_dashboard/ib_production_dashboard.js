@@ -559,7 +559,7 @@ class IBProductionDashboard {
 			const icon_name = STAGE_ICONS[s.stage] || "circle";
 			return `
 				<div class="ib-pd-pipeline-card" style="border-top:3px solid ${color}"
-					data-stage="${s.stage}" title="Go to ${label} in the Stages tab"
+					data-stage="${s.stage}" title="Go to ${label} in the Stages tab">
 					<div class="ib-pd-pipe-head">
 						<span class="ib-pd-pipe-icon" style="background:${color}15;color:${color}">
 						<iconify-icon icon="lucide:${icon_name}" width="14" height="14"></iconify-icon>
@@ -685,9 +685,17 @@ class IBProductionDashboard {
 				const woName = curInfo.wo_name || "";
 				const isFullyDone = totalStages > 0 && completedStages === totalStages;
 
+				// Ready to Deliver is always the last stage in every item route (see
+				// _get_stage_route in production.py — no route ever goes past it) — the
+				// same "In Progress" click there calls advance_to_next_stage(), which the
+				// backend already special-cases to just complete the WO with no next
+				// stage. Label it accordingly instead of the misleading "Next Stage →".
+				const isLastStage = currentStage === "Ready to Deliver";
 				let primaryBtn = "";
 				if (woName && curInfo.status === "Pending") {
 					primaryBtn = `<button class="ib-pd-row-btn ib-pd-row-btn--primary ib-pd-row-start" data-wo="${frappe.utils.escape_html(woName)}" title="Begin work on this stage">Start</button>`;
+				} else if (woName && curInfo.status === "In Progress" && isLastStage) {
+					primaryBtn = `<button class="ib-pd-row-btn ib-pd-row-btn--primary ib-pd-row-advance" data-wo="${frappe.utils.escape_html(woName)}" title="Mark this item as fully produced">Finish</button>`;
 				} else if (woName && curInfo.status === "In Progress") {
 					primaryBtn = `<button class="ib-pd-row-btn ib-pd-row-btn--primary ib-pd-row-advance" data-wo="${frappe.utils.escape_html(woName)}" title="Complete this stage and move to the next">Next Stage →</button>`;
 				}
@@ -3058,45 +3066,42 @@ class IBProductionStages {
 					</div>
 				</div>`;
 
-			// WO table — one row per Work Order, item-wise: Item Code, Item Name,
-			// and the Customer it belongs to (added 2026-08-05; the row used to
-			// be a compact flex card showing only a truncated item_code with no
-			// item name or customer at all, the one WO listing on this page that
-			// didn't show either). Customer comes from the WO's own Order Sheet
-			// (see get_machine_wise_dashboard's os_map — a WO has no direct
-			// customer field of its own). Rows are clickable to open the same WO
-			// side panel every other WO list/table on this page already opens on
-			// click (this table was previously the only one that didn't).
+			// WO list — one compact 2-line row per Work Order: item code + stage +
+			// status on top, item name/customer + progress below. Replaces a 6-column
+			// <table> (Item/Item Name/Customer/Stage/Status/Progress) that couldn't
+			// actually fit a ~300px machine card — table-layout:auto let it overflow
+			// into a horizontal scrollbar with a clipped "Status" header; switching to
+			// table-layout:fixed then just made every column too narrow to read
+			// (headers truncated to "STA"/"PR", Progress unreadable). A row-based
+			// layout has no column-width arithmetic to get wrong. Customer comes from
+			// the WO's own Order Sheet (see get_machine_wise_dashboard's os_map — a WO
+			// has no direct customer field). Rows stay clickable to open the same WO
+			// side panel every other WO list/table on this page opens on click.
 			const all_wos = m.current_wos || [];
 			const visible_wos = all_wos.slice(0, 4);
 			visible_wos.forEach((wo) => this._wo_data.set(wo.name, wo));
-			const wo_table_rows = visible_wos.map((wo) => {
+			const wo_rows = visible_wos.map((wo) => {
 				const stg = IB_STAGES.find((x) => x.label === wo.stage);
 				const color = stg ? stg.color : "#888";
+				const stage_abbr = STAGE_ABBR[wo.stage] || (wo.stage || "").substring(0, 2).toUpperCase();
 				const pct = wo.target_qty > 0 ? Math.min(100, Math.round((wo.completed_qty / wo.target_qty) * 100)) : 0;
-				return `<tr class="ib-mw-wo-tr" data-woid="${frappe.utils.escape_html(wo.name)}">
-					<td class="ib-mw-wo-item-cell" title="${frappe.utils.escape_html(wo.item_code || "")}">${frappe.utils.escape_html(wo.item_code || "")}</td>
-					<td class="ib-mw-wo-item-name" title="${frappe.utils.escape_html(wo.item_name || "")}">${frappe.utils.escape_html(wo.item_name || "—")}</td>
-					<td class="ib-mw-wo-customer" title="${frappe.utils.escape_html(wo.customer_name || "")}">${frappe.utils.escape_html(wo.customer_name || "—")}</td>
-					<td>
-						<span class="ib-mw-stage-dot" style="background:${color}" title="${frappe.utils.escape_html(wo.stage || "")}"></span>
-						${frappe.utils.escape_html(wo.stage || "")}
-					</td>
-					<td>${_ib_status_pill(wo.status, "sm")}</td>
-					<td>
-						<div class="ib-mw-wo-bar-wrap">
-							<div class="ib-mw-wo-bar" style="width:${pct}%;background:${color}"></div>
-						</div>
-						<small>${pct}%</small>
-					</td>
-				</tr>`;
+				const meta = `${wo.item_name || "—"} · ${wo.customer_name || "—"}`;
+				return `<div class="ib-mw-wo-row" data-woid="${frappe.utils.escape_html(wo.name)}">
+					<div class="ib-mw-wo-row-top">
+						<span class="ib-mw-stage-chip" style="background:${color}18;color:${color}" title="${frappe.utils.escape_html(wo.stage || "")}">${stage_abbr}</span>
+						<span class="ib-mw-wo-item-cell" title="${frappe.utils.escape_html(wo.item_code || "")}">${frappe.utils.escape_html(wo.item_code || "")}</span>
+						${_ib_status_pill(wo.status, "sm")}
+					</div>
+					<div class="ib-mw-wo-row-bottom">
+						<span class="ib-mw-wo-meta" title="${frappe.utils.escape_html(meta)}">${frappe.utils.escape_html(meta)}</span>
+						<div class="ib-mw-wo-bar-wrap"><div class="ib-mw-wo-bar" style="width:${pct}%;background:${color}"></div></div>
+						<small class="ib-mw-wo-pct">${pct}%</small>
+					</div>
+				</div>`;
 			}).join("");
 
 			const wo_table = all_wos.length
-				? `<table class="ib-mw-wo-table">
-						<thead><tr><th>Item</th><th>Item Name</th><th>Customer</th><th>Stage</th><th>Status</th><th>Progress</th></tr></thead>
-						<tbody>${wo_table_rows}</tbody>
-					</table>`
+				? `<div class="ib-mw-wo-rows">${wo_rows}</div>`
 				: `<div class="ib-mw-no-wos"><iconify-icon icon="lucide:inbox" width="11" height="11"></iconify-icon> No active WOs</div>`;
 
 			const overflow = all_wos.length > 4
@@ -3138,7 +3143,7 @@ class IBProductionStages {
 			const machine = this._machine_data.get(mid);
 			this._show_machine_dialog(machine || null);
 		});
-		$c.on("click", ".ib-mw-wo-tr", (e) => {
+		$c.on("click", ".ib-mw-wo-row", (e) => {
 			const woid = $(e.currentTarget).data("woid");
 			const wo = this._wo_data.get(woid);
 			if (wo) this._open_wo_panel(wo, IB_STAGES.find((s) => s.label === wo.stage)?.key || "");
@@ -4796,24 +4801,35 @@ tr.ib-ps-wo-sub-item--clickable:hover td { background: var(--subtle-fg, #f8fafc)
 .ib-mw-stat-val { font-size: 15px; font-weight: 700; color: var(--text-color); line-height: 1.2; }
 .ib-mw-stat-label { font-size: 9px; color: var(--text-muted); margin-top: 2px; text-transform: uppercase; letter-spacing: .04em; }
 
-/* WO table — item-wise rows with item name + customer (2026-08-05), replacing
-   the old compact flex-row list that showed a truncated item_code only. */
-.ib-mw-wo-list { display: flex; flex-direction: column; gap: 4px; overflow-x: auto; }
-.ib-mw-wo-table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
-.ib-mw-wo-table th {
-	text-align: left; font-size: 9px; font-weight: 700; text-transform: uppercase;
-	letter-spacing: .03em; color: var(--text-muted); padding: 3px 6px;
-	border-bottom: 1px solid var(--border-color); white-space: nowrap;
+/* WO list — 2-line row per Work Order (2026-08-09), replacing a 6-column
+   <table> that could not fit a ~300px machine card at any layout setting:
+   table-layout:auto let it overflow into a scrollbar with a clipped "Status"
+   header; table-layout:fixed then made every column too narrow to read
+   ("STA"/"PR" headers, unreadable Progress). A row has no column-width
+   arithmetic to get wrong — item identity/status stay full-size on their own
+   line, item name/customer/progress stay full-size on theirs. */
+.ib-mw-wo-list { display: flex; flex-direction: column; }
+.ib-mw-wo-rows { display: flex; flex-direction: column; }
+.ib-mw-wo-row { padding: 5px 2px; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background .12s; }
+.ib-mw-wo-row:last-child { border-bottom: none; }
+.ib-mw-wo-row:hover { background: var(--fg-color,#f9fafb); }
+.ib-mw-wo-row-top { display: flex; align-items: center; gap: 5px; }
+.ib-mw-stage-chip {
+	flex-shrink: 0; font-size: 8.5px; font-weight: 700; text-transform: uppercase;
+	letter-spacing: .02em; padding: 1px 5px; border-radius: 4px;
 }
-.ib-mw-wo-table td { padding: 4px 6px; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
-.ib-mw-wo-table tr:last-child td { border-bottom: none; }
-.ib-mw-wo-tr { cursor: pointer; transition: background .12s; }
-.ib-mw-wo-tr:hover { background: var(--fg-color,#f9fafb); }
-.ib-mw-wo-item-cell { font-family: monospace; color: var(--text-color); max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ib-mw-wo-item-name, .ib-mw-wo-customer { color: var(--text-color); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ib-mw-stage-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-right: 4px; vertical-align: middle; }
-.ib-mw-wo-bar-wrap { width: 44px; height: 3px; background: var(--border-color); border-radius: 2px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 4px; }
+.ib-mw-wo-item-cell {
+	flex: 1 1 auto; min-width: 0; font-family: monospace; font-size: 11px; font-weight: 600;
+	color: var(--text-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ib-mw-wo-row-bottom { display: flex; align-items: center; gap: 6px; margin-top: 2px; padding-left: 2px; }
+.ib-mw-wo-meta {
+	flex: 1 1 auto; min-width: 0; font-size: 10px; color: var(--text-muted);
+	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ib-mw-wo-bar-wrap { flex-shrink: 0; width: 32px; height: 3px; background: var(--border-color); border-radius: 2px; overflow: hidden; }
 .ib-mw-wo-bar { height: 100%; border-radius: 2px; }
+.ib-mw-wo-pct { flex-shrink: 0; font-size: 9.5px; color: var(--text-muted); min-width: 26px; text-align: right; }
 .ib-mw-no-wos { font-size: 11px; color: var(--text-muted); padding: 6px 0; display: flex; align-items: center; gap: 5px; }
 
 /* Footer */
