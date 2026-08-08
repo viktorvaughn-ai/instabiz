@@ -1776,20 +1776,48 @@ def get_production_plan(limit=None, start=0, location=None, search=None, priorit
 		as_dict=True,
 	)
 
-	for os in order_sheets:
-		items = frappe.db.get_all(
+	# Items + Work Orders for every order sheet on this page, fetched as two
+	# batch queries instead of one query per order sheet plus one more per item
+	# (was a real N+1 — 25 order sheets x ~2-3 items each meant ~90 queries per
+	# dashboard load for this section alone).
+	#
+	# The old per-item WO lookup also matched by item_code alone — the exact
+	# cross-contamination bug already fixed in get_order_sheet_detail's
+	# order-wise view (2026-07-31, see that fix's own comment): a Sales Order
+	# with the same item_code on multiple lines (confirmed live on real current
+	# data, e.g. IB-OS-2026-02331 has 6 Order Sheet Item rows sharing one
+	# item_code) made every one of those item rows on this Dashboard table show
+	# the same merged Work Orders instead of its own. Fixed the same way — key
+	# by the Work Order's own order_sheet_item link (falls back to order_sheet
+	# + item_code only for legacy WOs predating that field, none exist live).
+	os_names = [os.name for os in order_sheets]
+	items_by_os = {}
+	wos_by_key = {}
+	if os_names:
+		all_items = frappe.db.get_all(
 			"IB Order Sheet Item",
-			filters={"parent": os.name},
-			fields=["item_code", "item_name", "qty", "uom", "completed_qty", "status"],
+			filters={"parent": ["in", os_names]},
+			fields=["name", "parent", "item_code", "item_name", "qty", "uom", "completed_qty", "status"],
 		)
+		for it in all_items:
+			items_by_os.setdefault(it.parent, []).append(it)
+
+		all_wos = frappe.db.get_all(
+			"IB Work Order",
+			filters={"order_sheet": ["in", os_names], "status": ["not in", ["Cancelled"]]},
+			fields=["name", "order_sheet", "order_sheet_item", "item_code", "stage", "status",
+			        "completed_qty", "target_qty", "machine"],
+		)
+		for wo in all_wos:
+			key = (wo.order_sheet, wo.order_sheet_item) if wo.order_sheet_item \
+				else (wo.order_sheet, f"ic:{wo.item_code}")
+			wos_by_key.setdefault(key, []).append(wo)
+
+	for os in order_sheets:
+		items = items_by_os.get(os.name, [])
 		# Per item: dict of stage → WO info
 		for item in items:
-			wos = frappe.db.get_all(
-				"IB Work Order",
-				filters={"order_sheet": os.name, "item_code": item.item_code,
-				         "status": ["not in", ["Cancelled"]]},
-				fields=["name", "stage", "status", "completed_qty", "target_qty", "machine"],
-			)
+			wos = wos_by_key.get((os.name, item.name)) or wos_by_key.get((os.name, f"ic:{item.item_code}"), [])
 			stage_map = {wo.stage: wo for wo in wos}
 			item["stage_map"] = {s: {
 				"status": stage_map[s].status if s in stage_map else None,

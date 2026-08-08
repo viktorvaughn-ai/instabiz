@@ -2719,13 +2719,23 @@ class IBProductionStages {
 		const stageOrder = IB_STAGES.map((s) => s.label);
 
 		const rows = items.map((item) => {
-			const pct = item.qty > 0 ? Math.min(100, Math.round((item.completed_qty / item.qty) * 100)) : 0;
-
 			const wos = [...(item.work_orders || [])].sort(
 				(a, b) => stageOrder.indexOf(a.stage) - stageOrder.indexOf(b.stage)
 			);
 			const doneCount = wos.filter((wo) => wo.status === "Completed").length;
 			const stagePct = wos.length ? Math.round((doneCount / wos.length) * 100) : 0;
+			// Progress column uses the same stage-completion fraction as the Work
+			// Orders column below it, not item.completed_qty/item.qty. Order Sheet
+			// Item.completed_qty is set to the item's full target_qty the moment
+			// ANY single stage completes (IB Production Entry — the only thing that
+			// could track real partial per-stage output — is unused by design, see
+			// _update_order_sheet_item()) — so a qty-based ratio reads 100% after
+			// just the first of N stages finishes. Confirmed live: a 2-stage
+			// Packing->RTD item showed "Progress: 100%" right next to its own
+			// "Work Orders: 1/2 stages (50%)" on the same row, immediately after
+			// Packing alone completed. Using stagePct for both keeps the row
+			// internally consistent and not misleading.
+			const pct = stagePct;
 
 			// Compact stage-pill row — same visual language as the Production
 			// Dashboard's per-item stagePills (_render_plan in
