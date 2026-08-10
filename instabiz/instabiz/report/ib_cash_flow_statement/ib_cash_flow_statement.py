@@ -3,10 +3,15 @@ import frappe
 from frappe import _
 from frappe.utils import flt, get_first_day, getdate, today
 
-# GL accounts to treat as cash/bank
+# GL accounts to treat as cash/bank. Kept in sync with `tabBank Account`
+# (is_company_account=1) — added Kotak (opened 2026-06-30, was missing here)
+# after it was found excluded from the "all accounts" default view (blank
+# bank_account filter); explicitly selecting it in the filter already worked
+# since that path resolves any Bank Account dynamically.
 _BANK_ACCOUNTS = [
     "50200023672503 - HDFC - MH & GJ - IB",
     "50200044619421 - HDFC - Chennai - IB",
+    "0912306832 - Kotak Mahindra Bank (India) - IB",
     "Cash - IB",
 ]
 

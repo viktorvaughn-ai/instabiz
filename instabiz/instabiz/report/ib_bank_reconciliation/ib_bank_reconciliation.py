@@ -41,9 +41,16 @@ def _columns():
 
 # Payment Entries store bank account in paid_to (Receive) or paid_from (Pay).
 # clearance_date is set by ERPNext bank recon tool when a Bank Transaction matches the PE.
+# Kept in sync with `tabBank Account` (is_company_account=1) — added Kotak
+# (opened 2026-06-30) after it was found missing here: the "all accounts"
+# default view (blank bank_account filter) would have silently excluded any
+# Payment Entry against it once a Mode of Payment or manual PE started using
+# that account, even though selecting it explicitly in the filter already
+# worked (resolved live via Bank Account -> account lookup).
 _BA_GL = {
 	"GUJARAT & MAHARASHTRA - HDFC": "50200023672503 - HDFC - MH & GJ - IB",
 	"CHENNAI - HDFC":               "50200044619421 - HDFC - Chennai - IB",
+	"Kotak Mahindra Bank (India) - Kotak Mahindra Bank": "0912306832 - Kotak Mahindra Bank (India) - IB",
 }
 
 def _gl_accounts_for_filter(bank_account):

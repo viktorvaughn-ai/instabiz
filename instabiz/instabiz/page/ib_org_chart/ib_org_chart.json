@@ -1,7 +1,7 @@
 {
  "creation": "2026-05-20 00:00:00.000000",
  "doctype": "Page",
- "modified": "2026-05-20 00:00:00.000000",
+ "modified": "2026-08-10 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "instabiz",
  "name": "ib-org-chart",
@@ -10,6 +10,7 @@
  "restrict_to_domain": null,
  "roles": [
   {"role": "HR Manager"},
+  {"role": "HR User"},
   {"role": "System Manager"}
  ],
  "standard": "Yes",

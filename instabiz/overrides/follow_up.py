@@ -3,12 +3,26 @@ from frappe.utils import today
 
 
 def run_follow_up_reminders():
+	# NOTE: this app tracks lead workflow state on custom_status ("Cold Lead",
+	# "Hot Lead", "Contacted", "Qualified", "Proposal", "Negotiation",
+	# "Converted", "Customer", "Lost" -- see lead.py set_lead_status VALID set),
+	# not on the native ERPNext "status" field. Native status is basically
+	# unused in this app: almost every real Lead sits at status="Lead" for its
+	# entire life ("Do Not Contact" and "Converted" are the only native values
+	# actually reachable). The exclusion list below used to filter on "status"
+	# alone with a "Lost" value that field can never hold, so leads marked
+	# custom_status="Lost" kept getting "follow-up overdue" reminders forever
+	# (confirmed live: 22 real Lost leads with an overdue follow-up date were
+	# still matching). Filter on custom_status for the workflow-terminal
+	# states and native status only for "Do Not Contact" (a real native value
+	# with no custom_status equivalent).
 	overdue = frappe.get_all(
 		"Lead",
 		filters=[
 			["custom_next_follow_up_date", "is", "set"],
 			["custom_next_follow_up_date", "<", today()],
-			["status", "not in", ["Converted", "Do Not Contact", "Lost"]],
+			["custom_status", "not in", ["Converted", "Customer", "Lost"]],
+			["status", "!=", "Do Not Contact"],
 		],
 		fields=["name", "lead_name", "lead_owner", "custom_next_follow_up_date", "custom_follow_up_note"],
 		order_by="custom_next_follow_up_date asc",

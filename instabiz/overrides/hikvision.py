@@ -55,6 +55,7 @@ that model, Digest vs Basic auth on that firmware, and whether the device's
 own clock/timezone lines up with `startTime`/`endTime` windowing here.
 """
 import json
+import secrets
 import uuid
 
 import frappe
@@ -415,32 +416,37 @@ def _extract_webhook_payload():
 
 
 @frappe.whitelist(allow_guest=True)
-def hikvision_webhook(terminal_name=None):
+def hikvision_webhook(terminal_name=None, secret=None):
 	"""Push-model endpoint. Reachable at (default Frappe whitelist URL
 	pattern, no additional routing needed):
 
 	    /api/method/instabiz.overrides.hikvision.hikvision_webhook
 
 	Must be allow_guest=True since the device has no Frappe login. Hikvision
-	push payloads carry no HMAC/signature, so the only lightweight
-	authenticity check available without a real device to test against is
-	requiring `terminal_name` to match a real, Active `IB Hikvision Terminal`
-	-- configure the device to include this (e.g. as part of the target URL:
-	`.../hikvision_webhook?terminal_name=<name>`, or as a query/body field,
-	whichever the terminal's push config UI allows) and set the terminal's
-	own status to Inactive to immediately cut off a device you don't trust.
+	push payloads carry no HMAC/signature of their own, so authenticity here
+	rests on two checks: `terminal_name` must match a real, Active
+	`IB Hikvision Terminal`, AND `secret` must match that terminal's own
+	auto-generated `webhook_secret` -- configure the device's push target URL
+	as `.../hikvision_webhook?terminal_name=<name>&secret=<webhook_secret>`
+	(or as body fields, whichever the terminal's push config UI allows).
+	Before this secret existed, `terminal_name` alone (a guessable, visible
+	Frappe docname) was the only gate -- anyone who knew or guessed a
+	terminal's name could POST fabricated attendance events for any employee.
+	Set a terminal's status to Inactive to immediately cut off a device you
+	don't trust, independent of the secret.
 	"""
 	terminal_name = (
 		terminal_name
 		or frappe.form_dict.get("terminal_name")
 		or frappe.form_dict.get("terminalName")
 	)
+	secret = secret or frappe.form_dict.get("secret")
 	if not terminal_name:
 		frappe.local.response.http_status_code = 400
 		return {"error": "terminal_name is required"}
 
 	terminal_row = frappe.db.get_value(
-		"IB Hikvision Terminal", terminal_name, ["name", "status"], as_dict=True
+		"IB Hikvision Terminal", terminal_name, ["name", "status", "webhook_secret"], as_dict=True
 	)
 	if not terminal_row:
 		frappe.local.response.http_status_code = 404
@@ -448,6 +454,9 @@ def hikvision_webhook(terminal_name=None):
 	if terminal_row.status != "Active":
 		frappe.local.response.http_status_code = 403
 		return {"error": "terminal is not Active"}
+	if not secret or not secrets.compare_digest(secret, terminal_row.webhook_secret or ""):
+		frappe.local.response.http_status_code = 403
+		return {"error": "invalid or missing secret"}
 
 	payload = _extract_webhook_payload()
 	if payload is None:

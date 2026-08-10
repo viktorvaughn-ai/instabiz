@@ -16,7 +16,8 @@
   "capacity_uom",
   "wastage_norm_pct",
   "status",
-  "notes"
+  "notes",
+  "linked_asset"
  ],
  "fields": [
   {
@@ -82,6 +83,13 @@
    "fieldname": "notes",
    "fieldtype": "Small Text",
    "label": "Notes"
+  },
+  {
+   "fieldname": "linked_asset",
+   "fieldtype": "Link",
+   "label": "Linked Asset",
+   "options": "Asset",
+   "description": "Optional link to the ERPNext Asset record for this machine, for OEE/maintenance-downtime tracking. Not required — most real machines here have no corresponding Asset record yet."
   }
  ],
  "links": [],
@@ -125,18 +133,6 @@
    "read": 1,
    "report": 0,
    "role": "Factory Production",
-   "share": 0,
-   "write": 0
-  },
-  {
-   "create": 0,
-   "delete": 0,
-   "email": 0,
-   "export": 0,
-   "print": 0,
-   "read": 1,
-   "report": 0,
-   "role": "All",
    "share": 0,
    "write": 0
   }

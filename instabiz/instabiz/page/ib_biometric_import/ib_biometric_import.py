@@ -334,6 +334,27 @@ def get_unmatched_employees():
 def save_biometric_id(employee, biometric_id):
     """Set custom_biometric_id on an Employee record."""
     frappe.only_for(["HR Manager", "System Manager"])
+    biometric_id = (biometric_id or "").strip()
+    if biometric_id:
+        # custom_biometric_id has no DB-level unique constraint (Custom Field,
+        # unique=0). _build_employee_map() keys Employee Checkin resolution
+        # off this value with "last one wins" on a plain dict build — two
+        # employees sharing an ID would silently misattribute one's real
+        # punches to the other (and the loser would look permanently absent
+        # to auto_absent.py). Guard here since nothing else in the biometric
+        # import/Hikvision pull/push paths checks this.
+        clash = frappe.db.get_value(
+            "Employee",
+            {"custom_biometric_id": biometric_id, "name": ["!=", employee]},
+            ["name", "employee_name"],
+            as_dict=True,
+        )
+        if clash:
+            frappe.throw(
+                frappe._("Biometric ID {0} is already assigned to {1} ({2}).").format(
+                    biometric_id, clash.employee_name, clash.name
+                )
+            )
     frappe.db.set_value("Employee", employee, "custom_biometric_id", biometric_id)
     frappe.db.commit()
     return {"status": "ok"}

@@ -74,6 +74,7 @@ def get_csv_headers(csv_text):
 @frappe.whitelist()
 def get_saved_profile(bank_account):
 	"""Return this bank account's saved column-mapping profile, if any."""
+	frappe.has_permission("IB Bank Import Profile", "read", throw=True)
 	if not frappe.db.exists("IB Bank Import Profile", bank_account):
 		return None
 	return frappe.get_doc("IB Bank Import Profile", bank_account).as_dict()

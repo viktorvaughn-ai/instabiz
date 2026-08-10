@@ -82,20 +82,24 @@ def get_stock_data(item_group=None, uom=None, warehouse=None, hide_zero_stock=1,
 		mh_reorder    = flt(row.mh_reorder_level)
 		cn_reorder    = flt(row.cn_reorder_level)
 		gj_reorder    = flt(row.gj_reorder_level)
-		reorder_level = mh_reorder + cn_reorder + gj_reorder
 
 		if warehouse:
 			wh_map = {
-				"MAHARASHTRA - IB": (mh, flt(row.mh_reserved)),
-				"CHENNAI - IB":     (cn, flt(row.cn_reserved)),
-				"GUJARAT - IB":     (gj, flt(row.gj_reserved)),
+				"MAHARASHTRA - IB": (mh, flt(row.mh_reserved), mh_reorder),
+				"CHENNAI - IB":     (cn, flt(row.cn_reserved), cn_reorder),
+				"GUJARAT - IB":     (gj, flt(row.gj_reserved), gj_reorder),
 			}
-			wh_stock, wh_res = wh_map.get(warehouse, (0, 0))
+			wh_stock, wh_res, reorder_level = wh_map.get(warehouse, (0, 0, 0))
 			total_stock     = wh_stock
 			total_available = wh_stock - wh_res
 		else:
 			total_stock     = mh + cn + gj
 			total_available = total_stock - res
+			# Only meaningful as a combined figure when no single warehouse is
+			# selected — matches total_stock/total_available also being combined
+			# in this branch (see the warehouse-filtered branch above for the
+			# per-warehouse case).
+			reorder_level = mh_reorder + cn_reorder + gj_reorder
 
 		if total_stock > 0:
 			total_in_stock += 1

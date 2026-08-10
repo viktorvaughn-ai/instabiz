@@ -1,0 +1,81 @@
+{
+ "actions": [],
+ "creation": "2026-08-10 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "qty_from",
+  "qty_to",
+  "col1",
+  "customer_group",
+  "territory",
+  "col2",
+  "rate",
+  "discount_pct"
+ ],
+ "fields": [
+  {
+   "fieldname": "qty_from",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Qty From",
+   "default": "0"
+  },
+  {
+   "fieldname": "qty_to",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Qty To",
+   "description": "Leave 0 for no upper bound",
+   "default": "0"
+  },
+  {
+   "fieldname": "col1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "customer_group",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Customer Group",
+   "options": "Customer Group",
+   "description": "Blank = applies to all customer groups"
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Territory",
+   "options": "Territory",
+   "description": "Blank = applies to all territories"
+  },
+  {
+   "fieldname": "col2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "rate",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Rate"
+  },
+  {
+   "fieldname": "discount_pct",
+   "fieldtype": "Percent",
+   "in_list_view": 1,
+   "label": "Discount %",
+   "description": "Used only if Rate is blank — applied against Item Standard Selling Rate"
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "IB CPQ Setting Slab",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 0
+}

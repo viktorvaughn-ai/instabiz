@@ -1,0 +1,193 @@
+{
+ "actions": [],
+ "autoname": "IB-PS-.YYYY.-.#####",
+ "creation": "2026-08-10 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "item",
+  "item_name",
+  "customer",
+  "computed_on",
+  "col1",
+  "status",
+  "needs_review",
+  "sec_pricing",
+  "current_price",
+  "suggested_price",
+  "deviation_pct",
+  "col2",
+  "margin_target_pct",
+  "current_margin_pct",
+  "valuation_rate",
+  "sec_signal",
+  "demand_velocity_signal",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Item",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Item Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Customer",
+   "options": "Customer",
+   "description": "Blank = company-wide suggestion (not customer-specific)"
+  },
+  {
+   "fieldname": "computed_on",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Computed On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "New\nReviewed\nApplied\nDismissed",
+   "default": "New"
+  },
+  {
+   "fieldname": "needs_review",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Needs Review",
+   "description": "Set automatically when |Deviation %| > 5",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_pricing",
+   "fieldtype": "Section Break",
+   "label": "Pricing"
+  },
+  {
+   "fieldname": "current_price",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Current Price",
+   "read_only": 1,
+   "description": "Most recent sold rate (last 6 months)"
+  },
+  {
+   "fieldname": "suggested_price",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Suggested Price",
+   "read_only": 1
+  },
+  {
+   "fieldname": "deviation_pct",
+   "fieldtype": "Percent",
+   "in_list_view": 1,
+   "label": "Deviation %",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "margin_target_pct",
+   "fieldtype": "Percent",
+   "label": "Margin Target %",
+   "read_only": 1
+  },
+  {
+   "fieldname": "current_margin_pct",
+   "fieldtype": "Percent",
+   "label": "Current Margin %",
+   "read_only": 1
+  },
+  {
+   "fieldname": "valuation_rate",
+   "fieldtype": "Currency",
+   "label": "Valuation Rate (Cost)",
+   "read_only": 1,
+   "description": "Item.valuation_rate at time of computation — costing basis"
+  },
+  {
+   "fieldname": "sec_signal",
+   "fieldtype": "Section Break",
+   "label": "Demand & Notes"
+  },
+  {
+   "fieldname": "demand_velocity_signal",
+   "fieldtype": "Data",
+   "label": "Demand Velocity Signal",
+   "read_only": 1,
+   "description": "Recent 4-week vs prior 4-week sold-qty ratio, within the 6-month window"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-08-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "IB Price Suggestion",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Sales User"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

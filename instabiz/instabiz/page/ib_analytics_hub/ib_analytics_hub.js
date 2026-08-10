@@ -22,6 +22,8 @@ const IB_HUB_TABS = [
 	{ key: "production", label: "Production", icon: "lucide:factory",      color: "#10b981" },
 	{ key: "hr",         label: "HR",         icon: "lucide:users",        color: "#06b6d4" },
 	{ key: "finance",    label: "Finance",    icon: "lucide:landmark",     color: "#f59e0b" },
+	{ key: "procurement",label: "Procurement",icon: "lucide:truck",        color: "#f97316" },
+	{ key: "docs",       label: "Docs",       icon: "lucide:git-branch",   color: "#0ea5e9" },
 ];
 
 const IB_HUB_PERIODS = [
@@ -44,6 +46,10 @@ class IBAnalyticsHub {
 		this._cache = {};
 		this._load_key = null;
 		this._me_stab = "outstanding";
+		this._docs_search = "";
+		this._docs_filter = "all";
+		this._docs_page = 0;
+		this._docs_page_size = 10;
 		this._inject_styles();
 		this._build_layout();
 		this._bind_toolbar();
@@ -227,6 +233,52 @@ class IBAnalyticsHub {
 .ib-hub-table tr:last-child td { border-bottom: none; }
 .ib-hub-table tbody tr:hover td { background: var(--bg-color); }
 
+/* Docs tab — chain pipeline */
+.ib-hub-chain-row { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; }
+.ib-hub-chain-badge {
+  font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 20px;
+  white-space: nowrap; border: 1px solid transparent;
+}
+.ib-hub-chain-arrow { color: var(--text-muted); font-size: 11px; flex-shrink: 0; }
+.ib-hub-chain-badge.done   { background: rgba(22,163,74,.12); color: #16a34a; }
+.ib-hub-chain-badge.pending{ background: rgba(217,119,87,.12); color: #d97757; }
+.ib-hub-chain-badge.none   { background: var(--bg-color); color: var(--text-muted); border-color: var(--border-color); }
+.ib-hub-chain-badge.risk   { background: rgba(220,38,38,.12); color: #dc2626; }
+.ib-hub-chain-link { cursor: pointer; }
+.ib-hub-chain-link:hover { text-decoration: underline; }
+
+/* Docs tab — toolbar (search / filter / pager), reuses period-pill look */
+.ib-hub-docs-toolbar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);
+}
+.ib-hub-docs-search {
+  flex: 1 1 200px; min-width: 160px; padding: 6px 10px; border-radius: 7px;
+  border: 1px solid var(--border-color); background: var(--card-bg);
+  color: var(--text-color); font-size: 12px;
+}
+.ib-hub-docs-filter {
+  padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;
+  cursor: pointer; border: 1px solid var(--border-color);
+  background: var(--card-bg); color: var(--text-muted); transition: all .15s; white-space: nowrap;
+}
+.ib-hub-docs-filter:hover { border-color: var(--ib-hub-color, var(--ib-primary)); color: var(--heading-color); }
+.ib-hub-docs-filter.active {
+  background: var(--ib-hub-color, var(--ib-primary));
+  border-color: var(--ib-hub-color, var(--ib-primary)); color: #fff;
+}
+.ib-hub-docs-count { font-size: 11px; color: var(--text-muted); margin-left: auto; white-space: nowrap; }
+.ib-hub-docs-pager {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  padding-top: 12px; margin-top: 4px; border-top: 1px solid var(--border-color); font-size: 12px;
+}
+.ib-hub-docs-pager button {
+  padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border-color);
+  background: var(--card-bg); color: var(--text-color); cursor: pointer; font-size: 12px;
+}
+.ib-hub-docs-pager button:disabled { opacity: .4; cursor: not-allowed; }
+.ib-hub-docs-pager span { color: var(--text-muted); }
+
 /* Skeleton loading */
 .ib-skel {
   background: linear-gradient(90deg,
@@ -365,6 +417,9 @@ class IBAnalyticsHub {
 			$btn.addClass("active").css("--ib-hub-color", color);
 			this.$wrap.css("--ib-hub-color", color);
 			this._active_tab = tab;
+			this._docs_search = "";
+			this._docs_filter = "all";
+			this._docs_page = 0;
 			this._load();
 		});
 
@@ -498,6 +553,12 @@ class IBAnalyticsHub {
 				() => frappe.set_route("List", "Purchase Invoice", {docstatus: 1, outstanding_amount: [">", 0]}),
 				() => frappe.set_route("gstr-1-beta"),
 			],
+			procurement: [
+				() => frappe.set_route("ib-procurement-dashboard"),
+				() => frappe.set_route("List", "Purchase Order", {docstatus: 1, status: ["not in", ["Completed", "Cancelled", "Closed"]]}),
+				() => frappe.set_route("List", "Purchase Order", {docstatus: 1, status: ["in", ["To Receive and Bill", "To Receive"]]}),
+				() => frappe.set_route("List", "Purchase Invoice", {docstatus: 1, outstanding_amount: [">", 0]}),
+			],
 		};
 		return (links[tab] || [])[idx] || null;
 	}
@@ -516,6 +577,8 @@ class IBAnalyticsHub {
 			production: ["lucide:factory","lucide:check-circle","lucide:loader","lucide:clock"],
 			hr:         ["lucide:users","lucide:check-circle","lucide:mail","lucide:wallet"],
 			finance:    ["lucide:landmark","lucide:trending-up","lucide:trending-down","lucide:pie-chart"],
+			procurement:["lucide:indian-rupee","lucide:shopping-bag","lucide:truck","lucide:landmark"],
+			docs:       ["lucide:list-ordered","lucide:truck","lucide:credit-card","lucide:check-circle"],
 		};
 		const icon_set = icons[this._active_tab] || Array(4).fill("lucide:circle");
 
@@ -569,6 +632,8 @@ class IBAnalyticsHub {
 			production: "WOs Completed Over Time",
 			hr: "Attendance Trend",
 			finance: "Revenue Trend",
+			procurement: "Spend Over Time",
+			docs: "Chain Activity",
 		};
 		this.$wrap.find("#ib-hub-trend-title").text(titles[this._active_tab] || "Trend");
 
@@ -586,8 +651,9 @@ class IBAnalyticsHub {
 		const colors = {
 			me: "#d97757", sales: "#d97757", inventory: "#8b5cf6",
 			production: "#10b981", hr: "#06b6d4", finance: "#f59e0b",
+			procurement: "#f97316", docs: "#0ea5e9",
 		};
-		const isCurrency = ["me", "sales", "finance"].includes(this._active_tab);
+		const isCurrency = ["me", "sales", "finance", "procurement"].includes(this._active_tab);
 		const chartColor = colors[this._active_tab] || "#d97757";
 
 		// Use bar for inventory/production, line for others
@@ -634,6 +700,8 @@ class IBAnalyticsHub {
 			production: "My Orders — Production Progress",
 			hr: "My Leave Balance",
 			finance: "My Overdue AR by Customer",
+			procurement: "Open POs by Status",
+			docs: "Requests by Type",
 		} : {
 			me: me_break_titles[this._me_usertype || "sales"] || "My Top Customers (MTD)",
 			sales: "Top Customers (MTD)",
@@ -641,6 +709,8 @@ class IBAnalyticsHub {
 			production: "Active WOs by Stage",
 			hr: "Headcount by Department",
 			finance: "Overdue AR by Customer",
+			procurement: "Spend by Vendor",
+			docs: "Requests by Type",
 		};
 		this.$wrap.find("#ib-hub-break-title").text(titles[this._active_tab] || "Breakdown");
 
@@ -667,8 +737,12 @@ class IBAnalyticsHub {
 			return;
 		}
 
-		const isCurrency = ["me", "sales", "inventory", "finance"].includes(this._active_tab)
-			&& !["hr", "production"].includes(this._active_tab);
+		// Procurement's breakdown is currency (spend by vendor) when privileged,
+		// but plain PO counts by status for the scoped fallback (no spend figures
+		// for non-procurement roles) — can't key off tab name alone like the others.
+		const isCurrency = (["me", "sales", "inventory", "finance"].includes(this._active_tab)
+			&& !["hr", "production"].includes(this._active_tab))
+			|| (this._active_tab === "procurement" && !this._scoped);
 		const fmt = isCurrency
 			? (v) => "₹" + Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 })
 			: (v) => Number(v).toLocaleString("en-IN");
@@ -743,9 +817,233 @@ class IBAnalyticsHub {
 					`).join("")}</tbody>
 				</table>
 			`);
+		} else if (this._active_tab === "docs") {
+			const meta = d.meta || {};
+			const chain = ((d.pending || {}).chain) || [];
+			this.$wrap.find("#ib-hub-table-card").show();
+			if (meta.chain_type === "hr") {
+				this._render_docs_hr_table(chain);
+			} else {
+				this._render_docs_order_table(chain);
+			}
 		} else {
 			this.$wrap.find("#ib-hub-table-card").hide();
 		}
+	}
+
+	// ── Docs tab shared toolbar (search / status filter / pager) ─────────────
+	_docs_badge(label, cls) { return `<span class="ib-hub-chain-badge ${cls}">${frappe.utils.escape_html(label)}</span>`; }
+
+	_docs_toolbar_html(filters) {
+		const chips = filters.map(f => `
+			<div class="ib-hub-docs-filter${this._docs_filter === f.key ? " active" : ""}" data-filter="${f.key}">${f.label}</div>
+		`).join("");
+		return `
+			<div class="ib-hub-docs-toolbar">
+				<input type="text" class="ib-hub-docs-search" id="ib-hub-docs-search"
+					placeholder="Search…" value="${frappe.utils.escape_html(this._docs_search || "")}">
+				${chips}
+				<span class="ib-hub-docs-count" id="ib-hub-docs-count"></span>
+			</div>
+			<div id="ib-hub-docs-body"></div>
+			<div class="ib-hub-docs-pager" id="ib-hub-docs-pager"></div>
+		`;
+	}
+
+	_docs_bind_toolbar(on_change) {
+		this.$wrap.find("#ib-hub-docs-search").off("input").on("input", (e) => {
+			this._docs_search = e.currentTarget.value;
+			this._docs_page = 0;
+			on_change();
+		});
+		this.$wrap.find(".ib-hub-docs-filter").off("click").on("click", (e) => {
+			this._docs_filter = $(e.currentTarget).data("filter");
+			this._docs_page = 0;
+			this.$wrap.find(".ib-hub-docs-filter").removeClass("active");
+			$(e.currentTarget).addClass("active");
+			on_change();
+		});
+	}
+
+	_docs_render_pager(total) {
+		const pages = Math.max(1, Math.ceil(total / this._docs_page_size));
+		if (this._docs_page >= pages) this._docs_page = pages - 1;
+		const $pager = this.$wrap.find("#ib-hub-docs-pager");
+		if (pages <= 1) { $pager.empty(); return; }
+		$pager.html(`
+			<button id="ib-hub-docs-prev" ${this._docs_page === 0 ? "disabled" : ""}>← Prev</button>
+			<span>Page ${this._docs_page + 1} of ${pages}</span>
+			<button id="ib-hub-docs-next" ${this._docs_page >= pages - 1 ? "disabled" : ""}>Next →</button>
+		`);
+	}
+
+	// ── Docs tab: order-chain (Q→SO→DN→SI→Payment→Production→AR) ────────────
+	_render_docs_order_table(chain) {
+		this.$wrap.find("#ib-hub-table-title").text("Order Chain");
+		this._docs_order_chain = chain;
+
+		if (!chain.length) {
+			this.$wrap.find("#ib-hub-table").html(
+				`<div style="padding:30px;text-align:center;color:var(--text-muted);font-size:12px">No orders</div>`
+			);
+			return;
+		}
+
+		const filters = [
+			{ key: "all", label: "All" },
+			{ key: "dispatch", label: "Awaiting Dispatch" },
+			{ key: "payment", label: "Awaiting Payment" },
+			{ key: "paid", label: "Fully Paid" },
+			{ key: "risk", label: "At Risk" },
+		];
+		this.$wrap.find("#ib-hub-table").html(this._docs_toolbar_html(filters));
+		this._docs_bind_toolbar(() => this._docs_draw_order_table());
+		this.$wrap.find("#ib-hub-docs-pager").off("click", "button").on("click", "button", (e) => {
+			this._docs_page += e.currentTarget.id === "ib-hub-docs-next" ? 1 : -1;
+			this._docs_draw_order_table();
+		});
+		this._docs_draw_order_table();
+	}
+
+	_docs_stage_of(r) {
+		if (r.dn_status !== "Dispatched") return "dispatch";
+		if (r.si_status !== "Invoiced") return "payment";
+		if (r.payment_status !== "Paid") return "payment";
+		return "paid";
+	}
+
+	_docs_draw_order_table() {
+		const fmt = (v) => "₹" + Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+		const badge = (l, c) => this._docs_badge(l, c);
+		const arrow = `<span class="ib-hub-chain-arrow">→</span>`;
+		const dn_badge = (r) => r.dn_status === "Dispatched" ? badge("Dispatched", "done")
+			: r.dn_status === "Pending" ? badge("DN Pending", "pending")
+			: badge("Not Dispatched", "none");
+		const si_badge = (r) => r.si_status === "Invoiced" ? badge("Invoiced", "done")
+			: r.si_status === "Pending" ? badge("SI Pending", "pending")
+			: badge("Not Invoiced", "none");
+		const pay_badge = (r) => r.payment_status === "Paid" ? badge("Paid", "done")
+			: r.payment_status === "Partial" ? badge("Partial", "pending")
+			: badge("Unpaid", "risk");
+		const prod_badge = (r) => {
+			if (!r.production_stage) return badge("No Production", "none");
+			const cls = r.risk === "overdue" ? "risk" : r.risk === "at-risk" ? "pending" : "done";
+			return badge(`${r.production_stage} (${r.production_pct || 0}%)`, cls);
+		};
+
+		const q = (this._docs_search || "").trim().toLowerCase();
+		let rows = this._docs_order_chain.filter(r => {
+			if (q && !`${r.sales_order} ${r.customer} ${r.quotation || ""}`.toLowerCase().includes(q)) return false;
+			if (this._docs_filter === "risk") return r.risk === "overdue" || r.risk === "at-risk";
+			if (this._docs_filter !== "all") return this._docs_stage_of(r) === this._docs_filter;
+			return true;
+		});
+
+		this.$wrap.find("#ib-hub-docs-count").text(`${rows.length} order${rows.length === 1 ? "" : "s"}`);
+
+		const start = this._docs_page * this._docs_page_size;
+		const page_rows = rows.slice(start, start + this._docs_page_size);
+
+		const $body = this.$wrap.find("#ib-hub-docs-body");
+		if (!page_rows.length) {
+			$body.html(`<div style="padding:30px;text-align:center;color:var(--text-muted);font-size:12px">No matching orders</div>`);
+			this.$wrap.find("#ib-hub-docs-pager").empty();
+			return;
+		}
+
+		$body.html(`
+			<table class="ib-hub-table">
+				<thead><tr>
+					<th>Order</th><th>Customer</th><th>Chain</th><th>Outstanding</th><th></th>
+				</tr></thead>
+				<tbody>${page_rows.map(r => `
+					<tr>
+						<td>
+							<div class="ib-hub-chain-link" data-so="${frappe.utils.escape_html(r.sales_order)}" style="font-weight:600;color:var(--ib-primary)">${frappe.utils.escape_html(r.sales_order)}</div>
+							<div style="font-size:10px;color:var(--text-muted)">${r.date ? frappe.datetime.str_to_user(r.date) : ""} · ${fmt(r.grand_total)}</div>
+						</td>
+						<td>${frappe.utils.escape_html(r.customer || "")}</td>
+						<td>
+							<div class="ib-hub-chain-row">
+								${r.quotation ? badge("Quoted", "done") : badge("No Quote", "none")}
+								${arrow}${dn_badge(r)}${arrow}${si_badge(r)}${arrow}${pay_badge(r)}${arrow}${prod_badge(r)}
+							</div>
+						</td>
+						<td style="text-align:right;font-weight:600;${r.outstanding > 0 ? "color:#dc2626" : ""}">${r.outstanding > 0 ? fmt(r.outstanding) : "—"}</td>
+						<td><a href="/app/sales-order/${encodeURIComponent(r.sales_order)}" style="font-size:11px;color:var(--ib-primary)">Open →</a></td>
+					</tr>
+				`).join("")}</tbody>
+			</table>
+		`);
+		this.$wrap.find(".ib-hub-chain-link").off("click").on("click", (e) => {
+			frappe.set_route("Form", "Sales Order", $(e.currentTarget).data("so"));
+		});
+		this._docs_render_pager(rows.length);
+	}
+
+	// ── Docs tab: HR request pipeline (Leave/Overtime/F&F/Salary Slip) ───────
+	_render_docs_hr_table(chain) {
+		this.$wrap.find("#ib-hub-table-title").text("HR Request Pipeline");
+		this._docs_hr_chain = chain;
+
+		if (!chain.length) {
+			this.$wrap.find("#ib-hub-table").html(
+				`<div style="padding:30px;text-align:center;color:var(--text-muted);font-size:12px">No pending requests</div>`
+			);
+			return;
+		}
+
+		const types = [...new Set(chain.map(r => r.doctype))];
+		const filters = [{ key: "all", label: "All" }].concat(types.map(t => ({ key: t, label: t })));
+		this.$wrap.find("#ib-hub-table").html(this._docs_toolbar_html(filters));
+		this._docs_bind_toolbar(() => this._docs_draw_hr_table());
+		this.$wrap.find("#ib-hub-docs-pager").off("click", "button").on("click", "button", (e) => {
+			this._docs_page += e.currentTarget.id === "ib-hub-docs-next" ? 1 : -1;
+			this._docs_draw_hr_table();
+		});
+		this._docs_draw_hr_table();
+	}
+
+	_docs_draw_hr_table() {
+		const dt_route = { "Leave Application": "Leave Application", "Overtime Request": "IB Overtime Request",
+			"Full & Final Settlement": "IB Full Final Settlement", "Salary Slip": "Salary Slip" };
+		const status_cls = (s) => ["Approved","Paid","Submitted"].includes(s) ? "done"
+			: ["Rejected"].includes(s) ? "risk" : "pending";
+
+		const q = (this._docs_search || "").trim().toLowerCase();
+		let rows = this._docs_hr_chain.filter(r => {
+			if (q && !`${r.employee_name || ""} ${r.detail || ""}`.toLowerCase().includes(q)) return false;
+			if (this._docs_filter !== "all") return r.doctype === this._docs_filter;
+			return true;
+		});
+
+		this.$wrap.find("#ib-hub-docs-count").text(`${rows.length} request${rows.length === 1 ? "" : "s"}`);
+
+		const start = this._docs_page * this._docs_page_size;
+		const page_rows = rows.slice(start, start + this._docs_page_size);
+
+		const $body = this.$wrap.find("#ib-hub-docs-body");
+		if (!page_rows.length) {
+			$body.html(`<div style="padding:30px;text-align:center;color:var(--text-muted);font-size:12px">No matching requests</div>`);
+			this.$wrap.find("#ib-hub-docs-pager").empty();
+			return;
+		}
+
+		$body.html(`
+			<table class="ib-hub-table">
+				<thead><tr><th>Employee</th><th>Request</th><th>Detail</th><th>Status</th><th></th></tr></thead>
+				<tbody>${page_rows.map(r => `
+					<tr>
+						<td style="font-weight:500">${frappe.utils.escape_html(r.employee_name || "")}</td>
+						<td>${frappe.utils.escape_html(r.doctype || "")}</td>
+						<td>${frappe.utils.escape_html(r.detail || "")}</td>
+						<td><span class="ib-hub-chain-badge ${status_cls(r.status)}">${frappe.utils.escape_html(r.status || "")}</span></td>
+						<td><a href="/app/${encodeURIComponent((dt_route[r.doctype] || r.doctype).toLowerCase().replace(/ /g,"-"))}/${encodeURIComponent(r.name)}" style="font-size:11px;color:var(--ib-primary)">Open →</a></td>
+					</tr>
+				`).join("")}</tbody>
+			</table>
+		`);
+		this._docs_render_pager(rows.length);
 	}
 
 	_render_me_section(d) {

@@ -19,7 +19,7 @@
   }
  ],
  "links": [],
- "modified": "2026-07-30 13:05:21.809297",
+ "modified": "2026-08-10 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "IB Transport",
@@ -35,8 +35,7 @@
    "report": 1,
    "role": "Sales User",
    "select": 1,
-   "share": 1,
-   "write": 1
+   "share": 1
   },
   {
    "create": 1,

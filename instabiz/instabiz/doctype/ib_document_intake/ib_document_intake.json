@@ -1,0 +1,204 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "IB-DI-.YYYY.-.#####",
+ "creation": "2026-08-10 00:00:00",
+ "description": "Document Intake AI — paste raw PO/SO text, extract structured fields via Claude, review/correct, then explicitly convert to a draft Sales Order / Purchase Order.",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "intake_type",
+  "status",
+  "location",
+  "col_break_1",
+  "customer_or_supplier",
+  "matched_party",
+  "match_status",
+  "section_raw",
+  "raw_text",
+  "section_extract",
+  "extracted_json",
+  "extraction_error",
+  "section_convert",
+  "created_doctype",
+  "created_docname"
+ ],
+ "fields": [
+  {
+   "fieldname": "intake_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Intake Type",
+   "options": "Sales Order\nPurchase Order",
+   "reqd": 1
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Draft\nExtracted\nConverted\nRejected",
+   "read_only": 1
+  },
+  {
+   "default": "Select",
+   "depends_on": "eval:doc.intake_type==\"Sales Order\"",
+   "description": "Required before converting a Sales Order intake to a draft — Sales Order itself hard-requires a Location.",
+   "fieldname": "location",
+   "fieldtype": "Select",
+   "label": "Location",
+   "options": "Select\nMAHARASHTRA\nGUJARAT\nCHENNAI"
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "customer_or_supplier",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Customer / Supplier (as extracted)"
+  },
+  {
+   "description": "Auto-filled on Exact/Fuzzy Match. If Match Status is Ambiguous or Not Matched, review the candidates in Extracted JSON and type the correct Customer/Supplier name here yourself before converting.",
+   "fieldname": "matched_party",
+   "fieldtype": "Data",
+   "label": "Matched Party (real record)"
+  },
+  {
+   "fieldname": "match_status",
+   "fieldtype": "Select",
+   "label": "Match Status",
+   "options": "\nNot Matched\nExact Match\nFuzzy Match\nAmbiguous",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_raw",
+   "fieldtype": "Section Break",
+   "label": "Raw Text"
+  },
+  {
+   "description": "Paste the raw PO/SO text here (email body, OCR'd scan, etc).",
+   "fieldname": "raw_text",
+   "fieldtype": "Long Text",
+   "label": "Raw Text",
+   "reqd": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_extract",
+   "fieldtype": "Section Break",
+   "label": "Extraction"
+  },
+  {
+   "fieldname": "extracted_json",
+   "fieldtype": "Code",
+   "label": "Extracted JSON",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "extraction_error",
+   "fieldtype": "Small Text",
+   "label": "Extraction Status / Error",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_convert",
+   "fieldtype": "Section Break",
+   "label": "Converted Document"
+  },
+  {
+   "fieldname": "created_doctype",
+   "fieldtype": "Data",
+   "label": "Created Doctype",
+   "read_only": 1
+  },
+  {
+   "fieldname": "created_docname",
+   "fieldtype": "Data",
+   "label": "Created Document",
+   "read_only": 1
+  }
+ ],
+ "icon": "fa fa-magic",
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-10 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "IB Document Intake",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 0,
+   "role": "Sales User",
+   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Purchase Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 0,
+   "role": "Purchase User",
+   "share": 0,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

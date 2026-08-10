@@ -1,7 +1,7 @@
 {
  "charts": [],
- "content": "[{\"id\": \"prod-h0\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>PRODUCTION</b></span>\", \"col\": 12}}, {\"id\": \"prod-pd\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Production Dashboard\", \"col\": 3}}, {\"id\": \"prod-dpr\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"DPR Report\", \"col\": 3}}, {\"id\": \"prod-analytics-hub\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Analytics Hub\", \"col\": 3}}, {\"id\": \"prod-h1\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>WORK MANAGEMENT</b></span>\", \"col\": 12}}, {\"id\": \"prod-mach\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Machines\", \"col\": 3}}, {\"id\": \"prod-wo\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Work Orders\", \"col\": 3}}, {\"id\": \"prod-h2\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>INVENTORY</b></span>\", \"col\": 12}}, {\"id\": \"prod-sb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Live Stock Balance\", \"col\": 3}}, {\"id\": \"prod-h3\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>REPORTS</b></span>\", \"col\": 12}}, {\"id\": \"prod-rpt\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Production Report\", \"col\": 3}}, {\"id\": \"prod-h4\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\", \"col\": 12}}, {\"id\": \"prod-kb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Knowledge Base\", \"col\": 3}}]",
- "creation": "2026-07-15 06:19:47.853353",
+ "content": "[{\"id\": \"prod-h0\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>PRODUCTION</b></span>\", \"col\": 12}}, {\"id\": \"prod-pd\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Production Dashboard\", \"col\": 3}}, {\"id\": \"prod-dpr\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"DPR Report\", \"col\": 3}}, {\"id\": \"prod-analytics-hub\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Analytics Hub\", \"col\": 3}}, {\"id\": \"prod-h1\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>WORK MANAGEMENT</b></span>\", \"col\": 12}}, {\"id\": \"prod-mach\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Machines\", \"col\": 3}}, {\"id\": \"prod-wo\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Work Orders\", \"col\": 3}}, {\"id\": \"prod-h2\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>INVENTORY</b></span>\", \"col\": 12}}, {\"id\": \"prod-sb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Live Stock Balance\", \"col\": 3}}, {\"id\": \"prod-h3\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>REPORTS</b></span>\", \"col\": 12}}, {\"id\": \"prod-rpt\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Production Report\", \"col\": 3}}, {\"id\": \"prod-h4\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\", \"col\": 12}}, {\"id\": \"prod-kb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Knowledge Base\", \"col\": 3}}, {\"id\": \"ai-h\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>PLANNING</b></span>\", \"col\": 12}}, {\"id\": \"ai-prec\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Production Recipe\", \"col\": 3}}, {\"id\": \"ai-cop\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Copilot\", \"col\": 3}}]",
+ "creation": "2026-08-10 20:28:49.376271",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
@@ -90,6 +90,21 @@
    "label": "Work Orders",
    "link_to": "IB Work Order",
    "type": "DocType"
+  },
+  {
+   "color": "",
+   "doc_view": "",
+   "label": "Production Recipe",
+   "link_to": "IB Production Recipe",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Purple",
+   "doc_view": "",
+   "label": "Copilot",
+   "link_to": "ib-copilot",
+   "type": "Page"
   }
  ],
  "title": "Instabiz Production"

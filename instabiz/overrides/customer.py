@@ -448,6 +448,8 @@ def backfill_territory_from_billing_state():
 
 @frappe.whitelist()
 def get_outstanding(customer):
+	if not frappe.has_permission("Customer", "read", customer):
+		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
 	return compute_customer_outstanding(customer)
 
 
@@ -509,6 +511,14 @@ def get_customer_phones(customers):
 	names = json.loads(customers)
 	if not names:
 		return {}
+	# Row-level isolation: only return phones for customers the caller can
+	# actually see (frappe.get_list applies Customer's own permission_query_conditions
+	# hook, customer_query_conditions) — the raw SQL below has no permission
+	# check of its own, so without this filter a non-privileged Sales User could
+	# request phone numbers for any customer system-wide, not just their own.
+	permitted = frappe.get_list("Customer", filters={"name": ["in", names]}, pluck="name")
+	if not permitted:
+		return {}
 	rows = frappe.db.sql(
 		"""
 		SELECT dl.link_name AS customer, cp.phone
@@ -518,7 +528,7 @@ def get_customer_phones(customers):
 		  AND dl.link_name IN %(names)s
 		ORDER BY cp.is_primary_mobile_no DESC, cp.idx ASC
 		""",
-		{"names": names},
+		{"names": permitted},
 		as_dict=True,
 	)
 	# Keep first phone per customer

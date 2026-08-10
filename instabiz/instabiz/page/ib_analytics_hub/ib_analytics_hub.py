@@ -20,10 +20,17 @@ _PRIVILEGED_ANALYTICS_ROLES = {"System Manager", "Sales Manager", "Accounts Mana
 # Management does for Production and Accounts Manager does for Finance.
 # They stay non-privileged (scoped to their own work) on every other tab,
 # same as any other non-privileged role.
+# Accounts User added to "finance" 2026-08-06 — was falling through to
+# _my_finance_data() (filtered by custom_sales_person_user = user), which is
+# always empty for an Accounts User since they aren't a sales rep and own no
+# Sales Orders. Their whole job is processing AR/AP company-wide, same
+# reasoning as Purchase Manager owning AP — bug, not intentional scoping.
 _TAB_EXTRA_PRIVILEGED_ROLES = {
 	"hr": {"HR Manager", "HR User"},
 	"inventory": {"Stock Manager"},
-	"finance": {"Purchase Manager"},
+	"finance": {"Purchase Manager", "Accounts User"},
+	"procurement": {"Purchase Manager", "Purchase User"},
+	"docs": {"Accounts User"},
 }
 
 
@@ -106,6 +113,18 @@ def get_analytics_data(tab="sales", period="monthly"):
 		if is_tab_privileged("finance"):
 			return _finance_data(today, since, date_fmt, group_fmt, pw)
 		return _my_finance_data(user, today, since, date_fmt, group_fmt, month_start, pw)
+	elif tab == "procurement":
+		if is_tab_privileged("procurement"):
+			return _procurement_data(today, since, date_fmt, group_fmt, pw)
+		return _my_procurement_data()
+	elif tab == "docs":
+		# HR doc-chain (Leave/Overtime/F&F/Salary Slip) is a completely
+		# different shape from the order-chain (Q/SO/DN/SI/Payment/Production/
+		# AR) — checked first and always company-wide, matching the existing
+		# hr-tab privilege (both HR Manager and HR User are privileged there).
+		if user_roles & {"HR Manager", "HR User"}:
+			return _docs_hr_data()
+		return _docs_order_data(user, is_tab_privileged("docs"))
 	elif tab == "me":
 		return _my_work_data(user, today, since, date_fmt, group_fmt, pw)
 	return {}
@@ -1062,6 +1081,308 @@ def _finance_data(today, since, date_fmt, group_fmt, pw):
 	}
 
 
+def _procurement_data(today, since, date_fmt, group_fmt, pw):
+	# Basis controlled by instabiz.overrides.billing_mode, same as Finance tab —
+	# dev mode reads Purchase Order (billing isn't live in ERP yet, PI-based
+	# spend would read empty); prod mode reads real Purchase Invoice.
+	period_start, period_end = pw["period_start"], pw["period_end"]
+	prev_start, prev_end = pw["prev_start"], pw["prev_end"]
+	period_label = pw["period_label"]
+
+	dev_mode = is_dev_billing_mode()
+	purch_dt = purchase_doctype()
+	purch_date = "transaction_date" if dev_mode else "posting_date"
+	purch_cond = "AND t.status NOT IN ('Closed', 'Cancelled')" if dev_mode else "AND t.is_return=0"
+	ap_expr = purchase_outstanding_expr("t")
+
+	spend_period = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM(grand_total),0) FROM `tab{purch_dt}` t
+		WHERE docstatus=1 {purch_cond} AND {purch_date} BETWEEN %s AND %s
+	""", (period_start, period_end))[0][0])
+
+	spend_prev = flt(frappe.db.sql(f"""
+		SELECT COALESCE(SUM(grand_total),0) FROM `tab{purch_dt}` t
+		WHERE docstatus=1 {purch_cond} AND {purch_date} BETWEEN %s AND %s
+	""", (prev_start, prev_end))[0][0])
+
+	open_po = flt(frappe.db.sql("""
+		SELECT COUNT(*) FROM `tabPurchase Order`
+		WHERE docstatus=1 AND status NOT IN ('Completed','Cancelled','Closed')
+	""")[0][0])
+
+	pending_grn = flt(frappe.db.sql("""
+		SELECT COUNT(*) FROM `tabPurchase Order`
+		WHERE docstatus=1 AND status IN ('To Receive and Bill','To Receive')
+	""")[0][0])
+
+	ap = flt(frappe.db.sql(
+		f"SELECT COALESCE(SUM({ap_expr}),0) FROM `tab{purch_dt}` t WHERE docstatus=1 {purch_cond}"
+	)[0][0])
+
+	trend = frappe.db.sql(f"""
+		SELECT DATE_FORMAT({purch_date}, '{date_fmt}') as label,
+			   DATE_FORMAT({purch_date}, '{group_fmt}') as grp,
+			   COALESCE(SUM(grand_total),0) as amount,
+			   COUNT(*) as count
+		FROM `tab{purch_dt}` t
+		WHERE docstatus=1 {purch_cond} AND {purch_date} >= %s
+		GROUP BY grp, label ORDER BY grp
+	""", (since,), as_dict=True)
+
+	by_vendor = frappe.db.sql(f"""
+		SELECT supplier_name as label, COALESCE(SUM(grand_total),0) as amount
+		FROM `tab{purch_dt}` t
+		WHERE docstatus=1 {purch_cond} AND {purch_date} BETWEEN %s AND %s
+		GROUP BY supplier_name ORDER BY amount DESC LIMIT 10
+	""", (period_start, period_end), as_dict=True)
+
+	open_po_list = frappe.db.sql("""
+		SELECT name, supplier_name, transaction_date, schedule_date, grand_total, status,
+			   DATEDIFF(%s, schedule_date) as days_overdue
+		FROM `tabPurchase Order`
+		WHERE docstatus=1 AND status NOT IN ('Completed','Cancelled','Closed')
+		ORDER BY schedule_date ASC LIMIT 15
+	""", (today,), as_dict=True)
+
+	overdue_pi = frappe.db.sql(f"""
+		SELECT name, supplier_name as supplier, {ap_expr} as outstanding_amount,
+			   {purch_date} as due_date, DATEDIFF(%s, {purch_date}) as days_overdue
+		FROM `tab{purch_dt}` t
+		WHERE docstatus=1 {purch_cond} AND {purch_date} < %s
+		HAVING outstanding_amount > 0
+		ORDER BY due_date ASC LIMIT 15
+	""", (today, today), as_dict=True)
+
+	return {
+		"kpis": [
+			{"label": f"Spend {period_label}", "value": spend_period, "type": "currency",
+			 "delta": round((spend_period - spend_prev) / spend_prev * 100, 1) if spend_prev else 0},
+			{"label": "Open POs", "value": int(open_po), "type": "count", "delta": 0},
+			{"label": "Pending GRNs", "value": int(pending_grn), "type": "count", "delta": 0},
+			{"label": "Outstanding AP", "value": ap, "type": "currency", "delta": 0},
+		],
+		"trend": trend,
+		"breakdown": by_vendor,
+		"pending": {
+			"open_po": open_po_list,
+			"overdue_pi": overdue_pi,
+		},
+	}
+
+
+def _docs_order_data(user, privileged):
+	"""Per-Sales-Order cross-module chain: Quotation → SO → DN → SI →
+	Payment → Production stage → AR, one row per order. Sales User sees only
+	their own orders; Sales Manager/Accounts Manager/Accounts User/System
+	Manager see company-wide (most-recent-first, capped at 50 — this is a
+	work-queue view, not a report). Chain always reads the real Sales
+	Order/Delivery Note/Sales Invoice doctypes regardless of billing_mode —
+	unlike the KPI tabs, a lifecycle tracker needs both SO and SI to exist as
+	distinct stages, not whichever one billing_mode currently treats as
+	"revenue"."""
+	from instabiz.overrides.production import get_my_production_orders
+
+	params = {}
+	so_filter = ""
+	if not privileged:
+		so_filter = "AND so.custom_sales_person_user = %(user)s"
+		params["user"] = user
+
+	orders = frappe.db.sql(f"""
+		SELECT so.name, so.customer_name, so.transaction_date, so.status,
+			   so.grand_total, so.custom_advance_paid as advance_paid,
+			   so.custom_sales_person_user, so.custom_sales_person
+		FROM `tabSales Order` so
+		WHERE so.docstatus=1 {so_filter}
+		ORDER BY so.transaction_date DESC LIMIT 50
+	""", params, as_dict=True)
+
+	empty = {
+		"kpis": [
+			{"label": "Orders", "value": 0, "type": "count", "delta": 0},
+			{"label": "Awaiting Dispatch", "value": 0, "type": "count", "delta": 0},
+			{"label": "Awaiting Payment", "value": 0, "type": "count", "delta": 0},
+			{"label": "Fully Paid", "value": 0, "type": "count", "delta": 0},
+		],
+		"trend": [], "breakdown": [],
+		"pending": {"chain": []},
+		"meta": {"chain_type": "order", "scoped": not privileged},
+	}
+	if not orders:
+		return empty
+
+	names = [o.name for o in orders]
+
+	# Quotation → SO link lives on the child row (prevdoc_docname), set by the
+	# Q→SO mapper — same field instabiz/overrides/sales_order.py already reads.
+	q_rows = frappe.db.sql("""
+		SELECT parent as so_name, prevdoc_docname as quotation
+		FROM `tabSales Order Item`
+		WHERE parent IN %(names)s AND prevdoc_docname IS NOT NULL AND prevdoc_docname != ''
+		GROUP BY parent, prevdoc_docname
+	""", {"names": names}, as_dict=True)
+	q_map = {r.so_name: r.quotation for r in q_rows}
+
+	dn_rows = frappe.db.sql("""
+		SELECT dni.against_sales_order as so_name, MAX(dn.docstatus) as any_submitted
+		FROM `tabDelivery Note Item` dni
+		JOIN `tabDelivery Note` dn ON dn.name = dni.parent
+		WHERE dni.against_sales_order IN %(names)s AND dn.docstatus != 2
+		GROUP BY dni.against_sales_order
+	""", {"names": names}, as_dict=True)
+	dn_map = {r.so_name: r for r in dn_rows}
+
+	si_rows = frappe.db.sql("""
+		SELECT sii.sales_order as so_name,
+			   MAX(si.docstatus) as any_submitted,
+			   COALESCE(SUM(CASE WHEN si.docstatus=1 THEN si.outstanding_amount ELSE 0 END),0) as outstanding,
+			   COALESCE(SUM(CASE WHEN si.docstatus=1 THEN si.grand_total ELSE 0 END),0) as invoiced
+		FROM `tabSales Invoice Item` sii
+		JOIN `tabSales Invoice` si ON si.name = sii.parent
+		WHERE sii.sales_order IN %(names)s AND si.docstatus != 2
+		GROUP BY sii.sales_order
+	""", {"names": names}, as_dict=True)
+	si_map = {r.so_name: r for r in si_rows}
+
+	# sales_person_user=None (privileged) reuses the exact function/shape that
+	# powers the sales-facing Production Tracker page — one source of truth
+	# for pct/current_stage, can't drift from that page's numbers.
+	prod_rows = get_my_production_orders(sales_person_user=(None if privileged else user), show_completed=1)
+	prod_map = {r["sales_order"]: r for r in prod_rows}
+
+	chain = []
+	c_ordered = c_dispatched = c_invoiced = c_paid = 0
+	for o in orders:
+		dn = dn_map.get(o.name)
+		si = si_map.get(o.name)
+		prod = prod_map.get(o.name)
+
+		dn_submitted = bool(dn and dn.any_submitted == 1)
+		si_submitted = bool(si and si.any_submitted == 1)
+		invoiced = flt(si.invoiced) if si else 0
+		advance = flt(o.advance_paid)
+
+		if si_submitted:
+			# Real invoice AR.
+			outstanding = flt(si.outstanding)
+			payment_status = "Paid" if outstanding <= 0 else "Partial" if outstanding < invoiced else "Unpaid"
+		else:
+			# No SI yet (the normal case right now — billing isn't live,
+			# everything's evaluated off Sales Order per instabiz.overrides.
+			# billing_mode). Same formula as sales_outstanding_expr()'s
+			# dev-mode branch: grand_total minus whatever advance has
+			# actually been paid — was previously hardcoded to 0 here, so
+			# every not-yet-invoiced order showed no outstanding at all.
+			outstanding = max(flt(o.grand_total) - advance, 0)
+			payment_status = "Paid" if outstanding <= 0 else "Partial" if advance > 0 else "Unpaid"
+
+		chain.append({
+			"sales_order": o.name,
+			"customer": o.customer_name,
+			"date": str(o.transaction_date) if o.transaction_date else None,
+			"grand_total": flt(o.grand_total),
+			"quotation": q_map.get(o.name),
+			"dn_status": "Dispatched" if dn_submitted else ("Pending" if dn else "Not Created"),
+			"si_status": "Invoiced" if si_submitted else ("Pending" if si else "Not Created"),
+			"payment_status": payment_status,
+			"outstanding": outstanding,
+			"production_stage": (prod or {}).get("current_stage"),
+			"production_pct": (prod or {}).get("pct"),
+			"risk": (prod or {}).get("risk"),
+			"sales_person": o.custom_sales_person or o.custom_sales_person_user,
+		})
+
+		if not dn_submitted:
+			c_ordered += 1
+		elif not si_submitted:
+			c_dispatched += 1
+		elif outstanding > 0:
+			c_invoiced += 1
+		else:
+			c_paid += 1
+
+	return {
+		"kpis": [
+			{"label": "Orders", "value": len(orders), "type": "count", "delta": 0},
+			{"label": "Awaiting Dispatch", "value": c_ordered, "type": "count", "delta": 0},
+			{"label": "Awaiting Payment", "value": c_invoiced, "type": "count", "delta": 0},
+			{"label": "Fully Paid", "value": c_paid, "type": "count", "delta": 0},
+		],
+		"trend": [],
+		"breakdown": [],
+		"pending": {"chain": chain},
+		"meta": {"chain_type": "order", "scoped": not privileged},
+	}
+
+
+def _docs_hr_data():
+	"""Company-wide HR request pipeline — Leave Application, IB Overtime
+	Request, IB Full Final Settlement, Salary Slip — merged into one list so
+	HR can see everything mid-flight in one place instead of checking 4
+	separate list views. Each doctype keeps its own status vocabulary as-is
+	(not normalized into a shared enum — HR already knows what "In Review"
+	vs "Pending Approval" means per doctype)."""
+	month_start = get_first_day(getdate(nowdate()))
+
+	leave_rows = frappe.db.sql("""
+		SELECT la.name, e.employee_name, 'Leave Application' as doctype,
+			   la.leave_type as detail, la.status, la.modified
+		FROM `tabLeave Application` la
+		LEFT JOIN `tabEmployee` e ON e.name = la.employee
+		WHERE la.docstatus IN (0,1) AND la.status = 'Open'
+		ORDER BY la.modified DESC LIMIT 20
+	""", as_dict=True)
+
+	ot_rows = frappe.db.sql("""
+		SELECT ot.name, e.employee_name, 'Overtime Request' as doctype,
+			   CONCAT(ot.overtime_hours, ' hrs') as detail, ot.status, ot.modified
+		FROM `tabIB Overtime Request` ot
+		LEFT JOIN `tabEmployee` e ON e.name = ot.employee
+		WHERE ot.status IN ('Draft','Pending Approval')
+		ORDER BY ot.modified DESC LIMIT 20
+	""", as_dict=True)
+
+	ffs_rows = frappe.db.sql("""
+		SELECT f.name, e.employee_name, 'Full & Final Settlement' as doctype,
+			   CONCAT('₹', FORMAT(f.total_payable,0)) as detail, f.status, f.modified
+		FROM `tabIB Full Final Settlement` f
+		LEFT JOIN `tabEmployee` e ON e.name = f.employee
+		WHERE f.status IN ('Draft','In Review','Approved')
+		ORDER BY f.modified DESC LIMIT 20
+	""", as_dict=True)
+
+	slip_rows = frappe.db.sql("""
+		SELECT s.name, e.employee_name, 'Salary Slip' as doctype,
+			   CONCAT('₹', FORMAT(s.net_pay,0)) as detail,
+			   CASE WHEN s.docstatus=1 THEN 'Submitted' ELSE 'Draft' END as status,
+			   s.modified
+		FROM `tabSalary Slip` s
+		LEFT JOIN `tabEmployee` e ON e.name = s.employee
+		WHERE s.docstatus IN (0,1) AND s.start_date >= %s
+		ORDER BY s.modified DESC LIMIT 20
+	""", (month_start,), as_dict=True)
+
+	all_rows = list(leave_rows) + list(ot_rows) + list(ffs_rows) + list(slip_rows)
+	all_rows.sort(key=lambda r: str(r.modified or ""), reverse=True)
+
+	by_type = {}
+	for r in all_rows:
+		by_type[r.doctype] = by_type.get(r.doctype, 0) + 1
+
+	return {
+		"kpis": [
+			{"label": "Pending Leave", "value": len(leave_rows), "type": "count", "delta": 0},
+			{"label": "Pending Overtime", "value": len(ot_rows), "type": "count", "delta": 0},
+			{"label": "F&F In Progress", "value": len(ffs_rows), "type": "count", "delta": 0},
+			{"label": "Salary Slips (Open)", "value": len(slip_rows), "type": "count", "delta": 0},
+		],
+		"trend": [],
+		"breakdown": [{"label": k, "amount": v} for k, v in sorted(by_type.items(), key=lambda x: -x[1])],
+		"pending": {"chain": all_rows[:40]},
+		"meta": {"chain_type": "hr"},
+	}
+
+
 # ── Non-privileged, content-aware tab views ──────────────────────────────────
 # Shown instead of _inventory_data/_production_data/_hr_data/_finance_data
 # when the caller doesn't hold any of _PRIVILEGED_ANALYTICS_ROLES. Never raw
@@ -1266,4 +1587,35 @@ def _my_finance_data(user, today, since, date_fmt, group_fmt, month_start, pw):
 		"trend": trend,
 		"breakdown": overdue_by_cust,
 		"meta": {"scoped": True, "user_type": "my_finance"},
+	}
+
+
+def _my_procurement_data():
+	"""No spend/AP figures — a non-procurement role (e.g. Sales User, HR) has
+	no business reason to see vendor spend or payables. Status-only signal,
+	same spirit as _my_inventory_data's in-stock/out-of-stock reduction."""
+	open_po = int(flt(frappe.db.sql("""
+		SELECT COUNT(*) FROM `tabPurchase Order`
+		WHERE docstatus=1 AND status NOT IN ('Completed','Cancelled','Closed')
+	""")[0][0]))
+	pending_grn = int(flt(frappe.db.sql("""
+		SELECT COUNT(*) FROM `tabPurchase Order`
+		WHERE docstatus=1 AND status IN ('To Receive and Bill','To Receive')
+	""")[0][0]))
+
+	by_status = frappe.db.sql("""
+		SELECT status as label, COUNT(*) as amount
+		FROM `tabPurchase Order`
+		WHERE docstatus=1 AND status NOT IN ('Completed','Cancelled','Closed')
+		GROUP BY status ORDER BY amount DESC
+	""", as_dict=True)
+
+	return {
+		"kpis": [
+			{"label": "Open POs", "value": open_po, "type": "count", "delta": 0},
+			{"label": "Pending GRNs", "value": pending_grn, "type": "count", "delta": 0},
+		],
+		"trend": [],
+		"breakdown": by_status,
+		"meta": {"scoped": True, "user_type": "procurement_status"},
 	}

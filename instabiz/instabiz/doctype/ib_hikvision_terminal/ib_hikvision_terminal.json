@@ -16,6 +16,7 @@
   "sec_break_1",
   "username",
   "password",
+  "webhook_secret",
   "last_sync"
  ],
  "fields": [
@@ -86,6 +87,13 @@
    "fieldtype": "Password",
    "label": "Password",
    "reqd": 1
+  },
+  {
+   "fieldname": "webhook_secret",
+   "fieldtype": "Data",
+   "label": "Webhook Secret",
+   "read_only": 1,
+   "description": "Auto-generated. Push-model devices must include this as a query/body field (e.g. ?secret=...) on every event POST to the webhook — requests without a matching secret are rejected. Configure it in the device's own push-target URL."
   },
   {
    "fieldname": "last_sync",

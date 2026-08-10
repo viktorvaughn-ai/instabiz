@@ -1,7 +1,7 @@
 {
  "charts": [],
- "content": "[{\"id\": \"proc-h0\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>DASHBOARDS</b></span>\", \"col\": 12}}, {\"id\": \"proc-pd\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Procurement Dashboard\", \"col\": 3}}, {\"id\": \"proc-analytics-hub\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Analytics Hub\", \"col\": 3}}, {\"id\": \"proc-h1\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>TRANSACTIONS</b></span>\", \"col\": 12}}, {\"id\": \"proc-po\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Purchase Order\", \"col\": 3}}, {\"id\": \"proc-pr\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Purchase Receipt\", \"col\": 3}}, {\"id\": \"proc-pinv\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Purchase Invoice\", \"col\": 3}}, {\"id\": \"proc-dbn\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Debit Note\", \"col\": 3}}, {\"id\": \"proc-h2\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>REPORTS</b></span>\", \"col\": 12}}, {\"id\": \"proc-ap\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"AP Aging\", \"col\": 3}}, {\"id\": \"proc-pp\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Purchase Pipeline\", \"col\": 3}}, {\"id\": \"proc-dbnr\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Debit Notes\", \"col\": 3}}, {\"id\": \"proc-preg\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Purchase Register\", \"col\": 3}}, {\"id\": \"proc-ipreg\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Item-wise Purchase Register\", \"col\": 3}}, {\"id\": \"proc-sup-ledger\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Supplier Ledger Summary\", \"col\": 3}}, {\"id\": \"proc-h3\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>HELP & KNOWLEDGE BASE</b></span>\", \"col\": 12}}, {\"id\": \"proc-kb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Knowledge Base\", \"col\": 3}}]",
- "creation": "2026-07-24 20:46:32.004195",
+ "content": "[{\"id\": \"proc-h0\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>DASHBOARDS</b></span>\", \"col\": 12}}, {\"id\": \"proc-pd\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Procurement Dashboard\", \"col\": 3}}, {\"id\": \"proc-analytics-hub\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Analytics Hub\", \"col\": 3}}, {\"id\": \"proc-h1\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>TRANSACTIONS</b></span>\", \"col\": 12}}, {\"id\": \"proc-po\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Purchase Order\", \"col\": 3}}, {\"id\": \"proc-pr\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Purchase Receipt\", \"col\": 3}}, {\"id\": \"proc-pinv\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Purchase Invoice\", \"col\": 3}}, {\"id\": \"proc-dbn\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Debit Note\", \"col\": 3}}, {\"id\": \"proc-h2\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>REPORTS</b></span>\", \"col\": 12}}, {\"id\": \"proc-ap\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"AP Aging\", \"col\": 3}}, {\"id\": \"proc-pp\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Purchase Pipeline\", \"col\": 3}}, {\"id\": \"proc-dbnr\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Debit Notes\", \"col\": 3}}, {\"id\": \"proc-preg\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Purchase Register\", \"col\": 3}}, {\"id\": \"proc-ipreg\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Item-wise Purchase Register\", \"col\": 3}}, {\"id\": \"proc-sup-ledger\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Supplier Ledger Summary\", \"col\": 3}}, {\"id\": \"proc-h3\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>HELP & KNOWLEDGE BASE</b></span>\", \"col\": 12}}, {\"id\": \"proc-kb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Knowledge Base\", \"col\": 3}}, {\"id\": \"ai-h\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>AI &amp; PLANNING</b></span>\", \"col\": 12}}, {\"id\": \"ai-vsc\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Vendor Scorecard\", \"col\": 3}}, {\"id\": \"ai-abc\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"ABC Analysis\", \"col\": 3}}, {\"id\": \"ai-dem\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Demand Forecast\", \"col\": 3}}, {\"id\": \"ai-dint\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Document Intake\", \"col\": 3}}, {\"id\": \"ai-cop\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Copilot\", \"col\": 3}}]",
+ "creation": "2026-08-10 20:28:49.351042",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
@@ -132,6 +132,45 @@
    "doc_view": "",
    "label": "Analytics Hub",
    "link_to": "ib-analytics-hub",
+   "type": "Page"
+  },
+  {
+   "color": "",
+   "doc_view": "",
+   "label": "Vendor Scorecard",
+   "link_to": "IB Vendor Scorecard",
+   "report_ref_doctype": "IB Supplier Score",
+   "type": "Report"
+  },
+  {
+   "color": "",
+   "doc_view": "",
+   "label": "ABC Analysis",
+   "link_to": "IB ABC Analysis",
+   "report_ref_doctype": "IB ABC Classification",
+   "type": "Report"
+  },
+  {
+   "color": "",
+   "doc_view": "",
+   "label": "Demand Forecast",
+   "link_to": "IB Demand Forecast",
+   "report_ref_doctype": "Delivery Note",
+   "type": "Report"
+  },
+  {
+   "color": "",
+   "doc_view": "",
+   "label": "Document Intake",
+   "link_to": "IB Document Intake",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Purple",
+   "doc_view": "",
+   "label": "Copilot",
+   "link_to": "ib-copilot",
    "type": "Page"
   }
  ],

@@ -83,7 +83,7 @@
   {% set total_boxes = namespace(v=0) %}
   {% set total_wt = namespace(v=0.0) %}
   {% for row in doc.items %}
-    {% set item = frappe.get_doc("Item", row.item_code) %}
+    {% set item = frappe.get_cached_doc("Item", row.item_code) %}
     {% set rolls_per_box = item.custom_rolls_per_box or 1 %}
     {% set carton_wt = item.custom_carton_weight_kg or 0 %}
     {% set boxes = (row.qty / rolls_per_box) | round(2) %}

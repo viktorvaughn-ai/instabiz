@@ -339,7 +339,20 @@ def get_production_dashboard(location=None):
 
 @frappe.whitelist()
 def get_machines(machine_type=None, location=None):
-	"""Return all machines, optionally filtered."""
+	"""Return all machines, optionally filtered.
+
+	Guard added 2026-08-10: uses frappe.get_all (ignore_permissions=True), so
+	before this it was reachable directly via frappe.call by any authenticated
+	user regardless of IB Machine's own doctype permissions -- harmless while
+	IB Machine granted role "All" read=1 (items 120/134 correctly reasoned
+	"leaks nothing beyond desk access"), but that reasoning broke the moment
+	item 135 removed the "All" row: a plain Sales User (confirmed live,
+	has_permission("IB Machine","read")==False) could still call this RPC and
+	get every machine's capacity/wastage_norm_pct. The only real frontend
+	caller (ib_production_dashboard.js) already only renders on a page gated
+	to the same three roles below, so this closes the gap with zero UI impact.
+	"""
+	_require_production_role()
 	filters = {}
 	if machine_type:
 		filters["machine_type"] = machine_type
@@ -552,6 +565,20 @@ def create_order_sheet(sales_order, priority="Normal", notes=None):
 			)
 
 		so = frappe.get_doc("Sales Order", sales_order)
+
+		# custom_location is not a mandatory field on Sales Order — a blank value
+		# used to silently fall through _get_stage_route() into the full Gujarat
+		# factory route (Coating/Slitting/...) for any item whose item_group
+		# matched a factory route, even though there's no way to know the order
+		# is actually meant for Gujarat vs a warehouse-only location. Hard-block
+		# instead of guessing (2026-08-10, user's explicit decision after this
+		# was flagged across 3 earlier audits — see CLAUDE.md item 96/119/120).
+		if not so.custom_location:
+			frappe.throw(_(
+				"Sales Order {0} has no Location set. Set Location on the Sales "
+				"Order before creating its Order Sheet — Production stage routing "
+				"depends on it."
+			).format(sales_order))
 
 		customer_name = frappe.db.get_value("Customer", so.customer, "customer_name") or so.customer
 
@@ -1954,8 +1981,8 @@ def get_item_wise_view(from_date=None, to_date=None, item_code=None):
 		fields=[
 			"name", "item_code", "item_name", "stage", "status",
 			"machine", "jumbo_roll", "target_qty", "completed_qty",
-			"wastage_qty", "wastage_pct", "order_sheet",
-			"started_at", "completed_at", "creation",
+			"wastage_qty", "wastage_pct", "order_sheet", "order_sheet_item",
+			"sales_order", "started_at", "completed_at", "creation",
 		],
 		order_by="item_code asc, stage asc",
 	)
@@ -2062,6 +2089,124 @@ def get_item_wise_view(from_date=None, to_date=None, item_code=None):
 
 
 @frappe.whitelist()
+def _get_available_hours_per_day(shift_hours=None):
+	"""Planned available hours/day, used as the Utilization/OEE Availability denominator.
+
+	IB Machine has no machine-to-shift link field at all (confirmed: zero
+	Custom Fields on IB Machine, and no "shift" fieldname in its own JSON) —
+	so there is no clean per-machine Shift Type join to query. Falls back to
+	the real "Factory Shift" Shift Type's actual start_time/end_time span
+	(08:00-20:00 = 12h in this site's data, verified live) as the
+	standardized single-shift default for the whole factory floor. Callers
+	(report filter / dashboard) may override via shift_hours.
+	"""
+	if shift_hours:
+		return flt(shift_hours)
+	row = frappe.db.get_value(
+		"Shift Type", "Factory Shift", ["start_time", "end_time"], as_dict=True
+	)
+	if row and row.start_time is not None and row.end_time is not None:
+		start = row.start_time.total_seconds() if hasattr(row.start_time, "total_seconds") else flt(row.start_time)
+		end = row.end_time.total_seconds() if hasattr(row.end_time, "total_seconds") else flt(row.end_time)
+		span = (end - start) / 3600.0
+		if span <= 0:
+			span += 24  # overnight-wrapping shift (e.g. Night: 22:00-06:00)
+		if span > 0:
+			return round(span, 2)
+	return 8.0  # last-resort constant if the "Factory Shift" master is ever removed/misconfigured
+
+
+def _capacity_per_hour(capacity, capacity_uom, available_hours):
+	"""Normalize IB Machine.capacity to a per-hour rate.
+
+	Returns None when capacity/capacity_uom is unset — many real machines have
+	this blank (confirmed via prior audit + live query), and callers must
+	treat None as "no data", never silently divide by / default to 0.
+	"""
+	if not capacity or not capacity_uom:
+		return None
+	if capacity_uom == "ctn/shift":
+		return flt(capacity) / available_hours if available_hours else None
+	# sqm/hour, rolls/hour, pcs/hour, kg/hour are already per-hour rates.
+	return flt(capacity)
+
+
+def compute_oee(run_hours, output_qty, avg_wastage_pct, wo_count, capacity, capacity_uom, available_hours):
+	"""Pure calc: Availability x Performance x Quality for one machine on one day/window.
+
+	Deliberately takes plain pre-aggregated numbers (no frappe.db calls, no
+	doc objects) so it's directly unit-testable and reusable by both the
+	Machine Utilization report (grouped per machine per day from a date
+	range) and get_machine_wise_dashboard()'s "today" per-machine stats —
+	one formula, not two copies that can drift.
+
+	Grain: whatever the caller aggregated to (this app uses machine-per-day
+	both places). Formulas, and why they're shaped this way given the real
+	live data as of 2026-08-10 (verified via console before writing this):
+
+	Availability = run_hours (real SUM(completed_at - started_at) across
+	  Completed WOs in the window — the same field get_dpr()/
+	  get_weekly_dpr() already trust) / available_hours, capped at 100%.
+	  NOTE: in the live dataset, WOs are completed 0-67s after being started
+	  (avg 5.8s across all 30 Completed WOs, verified live) because
+	  production is still in a testing phase (CLAUDE.md item 96) — floor
+	  users aren't yet leaving WOs "In Progress" for real durations. This
+	  formula is correct and will self-correct automatically as real usage
+	  matures; today it reads low for every machine, which honestly reflects
+	  the current data-capture-maturity gap rather than a bug here (same
+	  class of gap already flagged for wastage_pct in this file, see below).
+
+	Performance = ideal hours to produce output_qty at the machine's rated
+	  capacity, divided by run_hours, capped at 100% (standard OEE
+	  convention — exceeding 100% just means the rate assumption/capacity
+	  master is off, not that the machine outran physics; given run_hours is
+	  currently tiny per the note above, the raw ratio is often far above
+	  100% before capping). None when capacity/capacity_uom is unset on the
+	  Machine (many real machines have this blank) or run_hours is 0.
+
+	Quality = 1 - avg_wastage_pct/100. IB Work Order.wastage_qty/wastage_pct
+	  are hardcoded 0.0 at WO creation and never written by any real
+	  completion path system-wide (confirmed via grep + live query: 0/30
+	  Completed WOs have nonzero wastage) — the exact gap get_dpr() already
+	  documents and deliberately omits wastage for. Reported as None
+	  ("no data") rather than a false 100%/perfect-quality reading, matching
+	  that precedent, until a real wastage-capture flow exists. Known
+	  limitation: a genuinely zero-wastage day would also read as "no data"
+	  under this heuristic (there's no separate "measured" flag on the WO to
+	  disambiguate) — acceptable today since no capture path ever writes a
+	  real value at all yet; revisit if that ever changes.
+
+	OEE = Availability x Performance x Quality, only when all three are
+	  available; otherwise None.
+	"""
+	availability_pct = None
+	if available_hours:
+		availability_pct = round(min(100.0, flt(run_hours) / available_hours * 100), 1)
+
+	capacity_per_hour = _capacity_per_hour(capacity, capacity_uom, available_hours)
+	performance_pct = None
+	if capacity_per_hour and flt(run_hours) > 0:
+		ideal_hours = flt(output_qty) / capacity_per_hour
+		performance_pct = round(min(100.0, ideal_hours / flt(run_hours) * 100), 1)
+
+	quality_pct = None
+	if wo_count and flt(avg_wastage_pct) > 0:
+		quality_pct = round(100 - flt(avg_wastage_pct), 1)
+
+	oee_pct = None
+	if availability_pct is not None and performance_pct is not None and quality_pct is not None:
+		oee_pct = round((availability_pct / 100) * (performance_pct / 100) * (quality_pct / 100) * 100, 1)
+
+	return {
+		"run_hours": round(flt(run_hours), 2),
+		"available_hours": available_hours,
+		"availability_pct": availability_pct,
+		"performance_pct": performance_pct,
+		"quality_pct": quality_pct,
+		"oee_pct": oee_pct,
+	}
+
+
 def get_machine_wise_dashboard(location=None):
 	"""Machine-wise dashboard: per machine — current WOs, today stats, load %.
 
@@ -2083,6 +2228,7 @@ def get_machine_wise_dashboard(location=None):
 	)
 
 	today_date = today()
+	available_hours = _get_available_hours_per_day()
 	result = []
 	for m in machines:
 		current_wos = frappe.db.get_all(
@@ -3007,7 +3153,8 @@ def update_production_qty(work_order, pcs_to_make=None, logs_to_make=None):
 	target qty. Simple field update — IB Work Order is not submittable, so no
 	need for a full doc.save() cycle here."""
 	_require_production_role()
-	if not frappe.db.exists("IB Work Order", work_order):
+	target_uom = frappe.db.get_value("IB Work Order", work_order, "target_uom")
+	if target_uom is None:
 		frappe.throw(_("Work Order {0} not found").format(work_order))
 
 	values = {}
@@ -3018,6 +3165,16 @@ def update_production_qty(work_order, pcs_to_make=None, logs_to_make=None):
 
 	if not values:
 		frappe.throw(_("Provide at least one of pcs_to_make or logs_to_make"))
+
+	# pcs_to_make only means anything against a PCS-target WO, logs_to_make only
+	# against SQMT — was previously accepted with no check at all (confirmed live:
+	# logs_to_make silently stored on a PCS WO), which prints/reports garbage since
+	# nothing else in the code re-derives which field is the "real" one from
+	# target_uom itself.
+	if "pcs_to_make" in values and target_uom != "PCS":
+		frappe.throw(_("This Work Order's UOM is {0}, not PCS — pcs_to_make does not apply").format(target_uom))
+	if "logs_to_make" in values and target_uom != "SQMT":
+		frappe.throw(_("This Work Order's UOM is {0}, not SQMT — logs_to_make does not apply").format(target_uom))
 
 	# Was previously silently accepting negative values (confirmed live: -5 and
 	# -100 both persisted with no error) — a negative pieces/logs count is never

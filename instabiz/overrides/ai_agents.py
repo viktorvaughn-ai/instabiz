@@ -1271,7 +1271,7 @@ def run_prod_wastage_flag(trigger="schedule"):
 			JOIN `tabIB Order Sheet` os ON os.name = wo.order_sheet
 			LEFT JOIN `tabIB Machine` m ON m.name = wo.machine
 			WHERE wo.status = 'Completed'
-			  AND DATE(COALESCE(wo.completed_at, wo.modified)) = CURDATE()
+			  AND TIMESTAMPDIFF(HOUR, COALESCE(wo.completed_at, wo.modified), NOW()) BETWEEN 0 AND 24
 			  AND wo.wastage_pct > COALESCE(m.wastage_norm_pct, 3)
 			ORDER BY wo.wastage_pct DESC
 			LIMIT 15
@@ -2015,6 +2015,8 @@ def raven_draft_quotation(lead, item_code=None, rate=None, note=None):
 	when a manager clicks Approve in AI Inbox)."""
 	if not frappe.db.exists("Lead", lead):
 		return {"ok": False, "message": f"Lead {lead} not found — no action taken."}
+	if not frappe.has_permission("Lead", ptype="read", doc=lead):
+		frappe.throw(frappe._("Not permitted to read this Lead"), frappe.PermissionError)
 
 	lead_doc = frappe.db.get_value(
 		"Lead", lead,

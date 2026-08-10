@@ -2268,7 +2268,7 @@ class IBProductionStages {
 				? `<span class="ib-iw-jr-pill" style="font-size:11px">${frappe.utils.escape_html(wo.jumbo_roll)}</span>`
 				: "—";
 
-			return `<tr>
+			return `<tr class="ib-iw-stage-row" data-woname="${frappe.utils.escape_html(wo.name)}" style="cursor:pointer">
 				<td><span class="ib-ps-stage-chip" style="background:${color};color:#fff">${frappe.utils.escape_html(wo.stage || "")}</span></td>
 				<td><code style="font-size:11px">${frappe.utils.escape_html(wo.name)}</code></td>
 				<td>${_ib_status_pill(wo.status, "sm")}</td>
@@ -2328,6 +2328,11 @@ class IBProductionStages {
 		// on every call, same bug class as the WO side panel fix.
 		$c.off();
 		$c.on("click", "#ib-iw-back", () => this._load_item_wise());
+		$c.on("click", ".ib-iw-stage-row", (e) => {
+			const woname = $(e.currentTarget).data("woname");
+			const wo = (item.work_orders || []).find((w) => w.name === woname);
+			if (wo) this._open_wo_panel(wo, IB_STAGES.find((s) => s.label === wo.stage)?.key || "");
+		});
 	}
 
 	// -----------------------------------------------------------------------
@@ -3336,6 +3341,9 @@ class IBProductionStages {
 						${_ib_status_pill(wo.status, "sm")}
 					</div>
 					<div class="ib-ps-panel-meta" style="margin-top:4px">
+						<span style="font-size:10px;color:var(--text-muted)">Target: <strong>${wo.target_qty || 0} ${frappe.utils.escape_html(wo.target_uom || "—")}</strong></span>
+					</div>
+					<div class="ib-ps-panel-meta" style="margin-top:4px">
 						<span style="font-size:10px;color:var(--text-muted)">Created: ${wo.creation ? frappe.datetime.str_to_user(wo.creation) : "—"}</span>
 						<span style="font-size:10px;color:var(--text-muted)">ETD: ${wo.delivery_date ? frappe.datetime.str_to_user(wo.delivery_date) : "—"}</span>
 					</div>
@@ -3484,6 +3492,11 @@ class IBProductionStages {
 				const d = new frappe.ui.Dialog({
 					title: `Adjust ${label}`,
 					fields: [
+						{
+							fieldname: "item_uom_note",
+							fieldtype: "HTML",
+							options: `<div style="margin-bottom:8px;color:var(--text-muted);font-size:12px">Item UOM: <strong>${frappe.utils.escape_html(wo.target_uom || "—")}</strong> — target qty <strong>${wo.target_qty || 0} ${frappe.utils.escape_html(wo.target_uom || "")}</strong></div>`,
+						},
 						{
 							fieldname,
 							label,

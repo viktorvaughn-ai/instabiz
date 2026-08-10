@@ -42,6 +42,17 @@ scheduler_events = {
         "instabiz.overrides.ai_agents.run_daily_agents",
         # Monthly payroll draft creation — fires daily but only acts on the 7th
         "instabiz.overrides.payroll.run_monthly_payroll_draft",
+        # Vendor Scorecard: trailing-90-day on-time/quality/fulfillment score per vendor
+        "instabiz.overrides.vendor_scorecard.run_vendor_scorecard",
+        # MRP Phase 1: explode open SO demand through IB Production Recipe,
+        # auto-create draft Purchase Material Requests for raw-material shortfalls
+        "instabiz.overrides.mrp.run_mrp",
+    ],
+    "weekly": [
+        # ABC Analysis: trailing-12-month Pareto classification of items by consumption value
+        "instabiz.overrides.abc_analysis.run_abc_analysis",
+        # Price Recommender: velocity/margin-driven price suggestions per item into IB Price Suggestion
+        "instabiz.overrides.price_recommender.run_weekly_price_suggestions",
     ],
     "cron": {
         # Poll Active Hikvision terminals (Pull/Both sync_mode) for new

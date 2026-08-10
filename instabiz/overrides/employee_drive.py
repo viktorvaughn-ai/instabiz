@@ -234,6 +234,8 @@ def _file_to_drive(url, folder_name, team_name, doc_label, manager, home):
 @frappe.whitelist()
 def get_employee_drive_folder(employee):
 	"""Return Drive folder entity name for this employee, or None if not synced yet."""
+	if not frappe.has_permission("Employee", "read", employee):
+		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
 	try:
 		from drive.utils import get_home_folder
 	except ImportError:

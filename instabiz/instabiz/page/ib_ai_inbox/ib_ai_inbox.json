@@ -1,15 +1,37 @@
 {
  "content": null,
  "creation": "2026-06-22 00:00:00",
+ "docstatus": 0,
  "doctype": "Page",
- "module": "instabiz",
+ "idx": 0,
+ "modified": "2026-08-10 03:06:26.893497",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
  "name": "ib-ai-inbox",
  "page_name": "ib-ai-inbox",
  "roles": [
-  {"role": "System Manager"},
-  {"role": "Sales Manager"},
-  {"role": "Accounts Manager"}
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Sales Manager"
+  },
+  {
+   "role": "Accounts Manager"
+  },
+  {
+   "role": "HR Manager"
+  },
+  {
+   "role": "Purchase Manager"
+  },
+  {
+   "role": "Manufacturing Manager"
+  }
  ],
+ "script": null,
  "standard": "Yes",
+ "style": null,
+ "system_page": 0,
  "title": "AI Inbox"
 }

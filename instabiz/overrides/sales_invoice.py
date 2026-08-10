@@ -113,6 +113,13 @@ class CustomSalesInvoice(IbStatusMixin, SalesInvoice):
             self.outstanding_amount     = flt(self.outstanding_amount) + total_extra
             if self.rounded_total is not None:
                 self.rounded_total = flt(self.grand_total, 2)
+            # super().validate() already computed in_words/base_in_words off the
+            # pre-transport grand_total/rounded_total (ERPNext's
+            # AccountsController.validate() calls set_total_in_words() before this
+            # method runs) — recompute now so the printed "Amount in Words" on the
+            # Tax Invoice matches the actual (post-transport) Grand Total instead
+            # of silently showing a stale, smaller figure.
+            self.set_total_in_words()
 
     def _apply_location_gstin(self):
         loc = (self.custom_location or "").lower()
