@@ -47,6 +47,12 @@ scheduler_events = {
         # MRP Phase 1: explode open SO demand through IB Production Recipe,
         # auto-create draft Purchase Material Requests for raw-material shortfalls
         "instabiz.overrides.mrp.run_mrp",
+        # Cross-module Correlation: merge open IB Insights across 2+ domains for
+        # the same customer within 7 days into one consolidated Insight
+        "instabiz.overrides.insight_correlation.run_insight_correlation",
+        # Anomaly/Fraud Watch: duplicate PI bill numbers, duplicate payments,
+        # off-market SO/Quotation line rates → IB Insight (severity=Critical)
+        "instabiz.overrides.insight_correlation.run_fraud_watch",
     ],
     "weekly": [
         # ABC Analysis: trailing-12-month Pareto classification of items by consumption value
@@ -242,6 +248,7 @@ doc_events = {
             "instabiz.overrides.stock_events.publish_stock_update",
             "instabiz.overrides.dispatch_notification.run_dispatch_notification",
             "instabiz.overrides.ewaybill.run_ewaybill_on_submit",
+            "instabiz.overrides.production.mark_wos_delivered",
         ],
         "on_cancel": "instabiz.overrides.stock_events.publish_stock_update",
     },

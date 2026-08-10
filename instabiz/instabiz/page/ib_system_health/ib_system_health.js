@@ -116,9 +116,6 @@ class IBSystemHealth {
 			checks
 				.map((c) => {
 					const color = IB_HEALTH_COLOR[c.status] || IB_HEALTH_COLOR.unknown;
-					const restart_btn = c.key
-						? `<button class="ib-health-restart" data-key="${c.key}" data-label="${frappe.utils.escape_html(c.label || "")}">Restart</button>`
-						: "";
 					return `
 					<div class="ib-health-card">
 						<div class="ib-health-card-top">
@@ -127,41 +124,9 @@ class IBSystemHealth {
 							<span class="ib-health-status" style="color:${color}">${frappe.utils.escape_html(c.status || "")}</span>
 						</div>
 						<div class="ib-health-detail">${frappe.utils.escape_html(c.detail || "")}</div>
-						${restart_btn}
 					</div>`;
 				})
 				.join("")
-		);
-
-		$grid.find(".ib-health-restart").on("click", (e) => this._restart(e));
-	}
-
-	_restart(e) {
-		const $btn = $(e.currentTarget);
-		const key = $btn.data("key");
-		const label = $btn.data("label");
-
-		frappe.confirm(
-			`Restart <b>${frappe.utils.escape_html(label)}</b>? It will be briefly unavailable.`,
-			() => {
-				$btn.prop("disabled", true).text("Restarting…");
-				frappe.call({
-					method: "instabiz.instabiz.page.ib_system_health.ib_system_health.restart_component",
-					args: { component: key },
-					callback: (r) => {
-						const res = r.message || {};
-						if (res.ok) {
-							frappe.show_alert({ message: `${label} restarted`, indicator: "green" });
-						} else {
-							frappe.show_alert({ message: `${label} restart failed: ${res.error || res.output || ""}`, indicator: "red" });
-						}
-						setTimeout(() => this.refresh(), 3000);
-					},
-					error: () => {
-						$btn.prop("disabled", false).text("Restart");
-					},
-				});
-			}
 		);
 	}
 }

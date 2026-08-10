@@ -33,16 +33,10 @@ frappe.query_reports["IB Credit Note Register"] = {
 			options:   "Customer",
 		},
 		{
-			fieldname: "territory",
-			label:     __("Territory"),
-			fieldtype: "Link",
-			options:   "Territory",
-		},
-		{
-			fieldname: "sales_person_user",
-			label:     __("Sales Person"),
-			fieldtype: "Link",
-			options:   "User",
+			fieldname: "reason_code",
+			label:     __("Reason Code"),
+			fieldtype: "Select",
+			options:   "\nSales Return\nRate Difference\nPost Sale Discount",
 		},
 		{
 			fieldname: "chart_type",

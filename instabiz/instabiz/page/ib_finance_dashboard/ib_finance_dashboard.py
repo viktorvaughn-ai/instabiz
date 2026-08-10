@@ -186,6 +186,10 @@ def get_finance_data():
 	""", as_dict=True)[0]
 
 	return {
+		"sales_dt": sales_dt,
+		"purch_dt": purch_dt,
+		"sales_date_field": sales_date,
+		"purch_date_field": purch_date,
 		"rev_mtd": rev_mtd,
 		"rev_last": rev_last,
 		"rev_delta": round((rev_mtd - rev_last) / rev_last * 100, 1) if rev_last else 0,

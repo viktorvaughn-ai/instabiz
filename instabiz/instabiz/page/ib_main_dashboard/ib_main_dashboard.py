@@ -131,6 +131,8 @@ def get_dashboard_data():
 	""", as_dict=True)
 
 	return {
+		"sales_dt": sales_dt,
+		"sales_date_field": date_field,
 		"rev_mtd": rev_mtd,
 		"rev_last": rev_last,
 		"rev_delta": rev_delta,

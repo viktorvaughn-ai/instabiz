@@ -187,25 +187,6 @@ def _so_extra_steps(doc):
 
 
 @frappe.whitelist()
-def get_so_rounded_total(filters=None):
-	from frappe.utils import flt
-	raw = frappe.parse_json(filters or "[]")
-	# List view sends [[doctype, field, op, value]] — strip doctype prefix
-	clean = []
-	for f in raw:
-		if isinstance(f, (list, tuple)) and len(f) == 4:
-			clean.append([f[1], f[2], f[3]])
-		elif isinstance(f, (list, tuple)) and len(f) == 3:
-			clean.append(list(f))
-	result = frappe.get_all(
-		"Sales Order",
-		filters=clean,
-		fields=["sum(rounded_total) as total"],
-	)
-	return flt((result[0].get("total") or 0) if result else 0)
-
-
-@frappe.whitelist()
 def reopen_sales_order(name):
     """Reopen a cancelled Sales Order, resetting it back to Draft (docstatus=0)."""
     reopen_sales_doc(

@@ -119,7 +119,20 @@ class IBCpq {
 		const d = new frappe.ui.Dialog({
 			title: __("Add Line Item"),
 			fields: [
-				{ fieldtype: "Link", fieldname: "item_code", options: "Item", label: __("Item"), reqd: 1 },
+				{
+					fieldtype: "Link", fieldname: "item_code", options: "Item", label: __("Item"), reqd: 1,
+					onchange: () => {
+						const item_code = d.get_value("item_code");
+						if (!item_code) {
+							d.set_df_property("qty", "label", __("Qty"));
+							return;
+						}
+						frappe.db.get_value("Item", item_code, "stock_uom").then((r) => {
+							const uom = (r.message && r.message.stock_uom) || "";
+							d.set_df_property("qty", "label", uom ? __("Qty (in {0})", [uom]) : __("Qty"));
+						});
+					},
+				},
 				{ fieldtype: "Float", fieldname: "qty", label: __("Qty"), default: 1, reqd: 1 },
 			],
 			primary_action_label: __("Add"),

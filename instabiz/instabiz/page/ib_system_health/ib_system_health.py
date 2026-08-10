@@ -7,9 +7,7 @@ report configuration/session state only (avoids burning quota / hitting rate
 limits on every page refresh).
 """
 
-import shutil
 import socket
-import subprocess
 
 import frappe
 from frappe.utils import now_datetime
@@ -76,31 +74,6 @@ def _check_socketio():
 			return _ok("online", "Socket.IO / Realtime", f"port {port}")
 	except Exception as e:
 		return _ok("offline", "Socket.IO / Realtime", f"port {port}: {e}")
-
-
-# Components that can be restarted from the page, restricted to these exact
-# PM2 process names — never built from user input, so no injection surface
-# even though we call subprocess with an explicit arg list (no shell=True).
-_RESTARTABLE = {}
-
-
-def _pm2_status(process_name):
-	"""Best-effort PM2 process lookup. Returns 'online'/'stopped'/None (pm2 not found)."""
-	pm2_bin = shutil.which("pm2")
-	if not pm2_bin:
-		return None
-	try:
-		r = subprocess.run([pm2_bin, "jlist"], capture_output=True, text=True, timeout=5)
-		if r.returncode != 0:
-			return None
-		import json
-		procs = json.loads(r.stdout or "[]")
-		for p in procs:
-			if p.get("name") == process_name:
-				return p.get("pm2_env", {}).get("status")
-		return "not_found"
-	except Exception:
-		return None
 
 
 def _check_claude():
@@ -175,35 +148,3 @@ def get_health_status():
 		"checked_at": now_datetime(),
 		"checks": results,
 	}
-
-
-@frappe.whitelist()
-def restart_component(component):
-	frappe.only_for("System Manager")
-
-	process_name = _RESTARTABLE.get(component)
-	if not process_name:
-		frappe.throw(f"Unknown or non-restartable component: {component}")
-
-	pm2_bin = shutil.which("pm2")
-	if not pm2_bin:
-		return {"ok": False, "error": "pm2 not found on PATH"}
-
-	try:
-		r = subprocess.run(
-			[pm2_bin, "restart", process_name],
-			capture_output=True, text=True, timeout=20,
-		)
-	except Exception as e:
-		frappe.log_error("IB System Health Restart", f"{component}: {e}")
-		return {"ok": False, "error": str(e)}
-
-	ok = r.returncode == 0
-	frappe.logger("ib_system_health").info(
-		f"{frappe.session.user} restarted {component} (pm2 process {process_name}): "
-		f"{'ok' if ok else 'FAILED — ' + r.stderr[:300]}"
-	)
-	if not ok:
-		frappe.log_error("IB System Health Restart", f"{component}: {r.stderr[:500]}")
-
-	return {"ok": ok, "output": (r.stdout or r.stderr)[:500]}

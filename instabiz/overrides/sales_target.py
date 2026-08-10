@@ -102,33 +102,6 @@ def get_my_target(month=None):
 	}
 
 
-@frappe.whitelist()
-def get_all_targets(month=None):
-	"""Return all users' targets + actuals. Requires Sales Manager or System Manager."""
-	_require_manager()
-	mf = _month_first(month)
-
-	docs = frappe.db.get_all(
-		"IB Sales Target",
-		filters={"month": mf},
-		fields=["sales_user", "target_amount"],
-	)
-	result = []
-	for d in docs:
-		actual = _get_actuals(d.sales_user, mf)
-		target = flt(d.target_amount)
-		pct = round(actual / target * 100) if target else 0
-		full_name = frappe.db.get_value("User", d.sales_user, "full_name") or d.sales_user
-		result.append({
-			"sales_user": d.sales_user,
-			"full_name": full_name,
-			"target": target,
-			"actual": actual,
-			"pct": min(pct, 100),
-		})
-	return result
-
-
 def get_target_map(month_first):
 	"""Return {sales_user: {target, actual, pct}} for embedding in roster."""
 	docs = frappe.db.get_all(

@@ -513,6 +513,25 @@ class IBAnalyticsHub {
 	}
 
 	// ── KPI deep-link map ────────────────────────────────────────────────────
+	// KNOWN GAP (flagged, not fixed, 2026-08-11): every "sales"/"finance"/
+	// "procurement" link below is hardcoded to Sales Invoice/Purchase
+	// Invoice, but ib_analytics_hub.py's 6 data functions (_sales_data,
+	// _my_work_sales, _my_work_finance, _finance_data, _procurement_data,
+	// _my_finance_data) are ALL billing_mode-aware (import is_dev_billing_mode/
+	// sales_doctype/purchase_doctype from instabiz.overrides.billing_mode) and
+	// currently compute every KPI number from Sales Order/Purchase Order (dev
+	// mode, the site's current ib_billing_mode). So today, clicking any KPI
+	// card on Sales/Finance/Procurement/"Me" opens an empty Sales/Purchase
+	// Invoice list — the number matches Sales Order/Purchase Order, the link
+	// doesn't. Same bug class already found+fixed 2026-08-11 in
+	// ib_finance_dashboard.js/ib_procurement_dashboard.js/
+	// ib_collections_dashboard.js/ib_main_dashboard.js (backend already
+	// exposes sales_dt/purch_dt in its response, frontend reads it instead of
+	// a literal string). Not applied here yet — would need `sales_dt`/
+	// `purch_dt` added to all 6 return dicts above, threaded into this
+	// function's `d` parameter, and every "Sales Invoice"/"Purchase Invoice"
+	// literal below swapped for it. See memory "billing-mode-so-si-toggle-map"
+	// for the full file inventory.
 	_kpi_link(tab, idx) {
 		const today = frappe.datetime.get_today();
 		const m0 = today.slice(0, 7) + "-01";

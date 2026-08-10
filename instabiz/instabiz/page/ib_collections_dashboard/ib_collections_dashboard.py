@@ -200,6 +200,7 @@ def get_collections_data(search=None, filter_sp=None, overdue_only=False, offset
 	""", [str(frappe.utils.add_days(str(today), -90))] + params)[0][0])
 
 	return {
+		"doctype": doctype,
 		"customers": customers,
 		"customer_total": customer_total,
 		"invoices": invoices,

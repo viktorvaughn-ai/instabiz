@@ -169,15 +169,32 @@ def _create_draft_mr(item_code, qty):
 		"schedule_date": add_days(nowdate(), MRP_LEAD_TIME_DAYS),
 	})
 	mr.insert(ignore_permissions=True)
+
+	# Guardrailed Autonomy (Wave 2, additive only) — auto-submits this draft
+	# MR if a System Manager has explicitly enabled+configured autonomy for
+	# "MRP Draft Material Request" (instabiz.overrides.autonomy) and it
+	# matches the configured conditions and today's cap isn't exceeded.
+	# Leaves it as the draft it already is (today's unchanged default)
+	# otherwise. Never allowed to block draft creation itself.
+	try:
+		from instabiz.overrides.autonomy import maybe_auto_submit_mr
+		maybe_auto_submit_mr(mr)
+	except Exception:
+		frappe.log_error(
+			title=f"MRP autonomy hook failed for {mr.name}",
+			message=frappe.get_traceback(),
+		)
+
 	return mr.name
 
 
 # ── entry points ─────────────────────────────────────────────────────────
 
 def run_mrp(trigger="schedule"):
-	"""Daily scheduler entry point (also called by the 'Run MRP' dashboard
-	button via run_mrp_now). Never throws — every failure is caught, logged,
-	and isolated so one bad item can't zero out the whole run.
+	"""Daily scheduler entry point (also callable on-demand via run_mrp_now(),
+	console/API only — no dashboard button wired to it yet). Never throws —
+	every failure is caught, logged, and isolated so one bad item can't zero
+	out the whole run.
 	"""
 	result = {"shortfalls": 0, "created": [], "errors": 0}
 	try:

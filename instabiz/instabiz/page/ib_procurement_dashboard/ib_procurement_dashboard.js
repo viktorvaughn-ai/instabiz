@@ -154,7 +154,7 @@ class IBProcurementDashboard {
 			  click: () => { frappe.route_options = { docstatus: 1, status: ["in", ["To Receive and Bill", "To Receive"]] }; frappe.set_route("List", "Purchase Order"); } },
 			{ label: "Spend MTD",   value: this._fmt(d.spend_mtd),   raw: d.spend_mtd,      isInr: true,
 			  sub: `<span class="${delta_cls}">${delta_lbl}</span>`, color: "#d97757",
-			  click: () => { frappe.route_options = { docstatus: 1, is_return: 0 }; frappe.set_route("List", "Purchase Invoice"); } },
+			  click: () => { frappe.route_options = { docstatus: 1 }; frappe.set_route("List", d.spend_doctype); } },
 			{ label: "Overdue AP",  value: this._fmt(d.overdue_ap),  raw: d.overdue_ap,     isInr: true,
 			  sub: "past due date", color: d.overdue_ap > 0 ? "#ef4444" : "#10b981",
 			  click: () => { frappe.route_options = { docstatus: 1, outstanding_amount: [">", 0] }; frappe.set_route("List", "Purchase Invoice"); } },

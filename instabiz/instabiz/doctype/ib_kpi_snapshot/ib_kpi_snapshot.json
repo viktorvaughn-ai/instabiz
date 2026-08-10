@@ -1,0 +1,170 @@
+{
+ "actions": [],
+ "autoname": "format:IB-KPI-{YYYY}-{#####}",
+ "creation": "2026-08-10 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "domain",
+  "metric_name",
+  "col1",
+  "period",
+  "metric_value",
+  "comparison_value",
+  "pct_change"
+ ],
+ "fields": [
+  {
+   "fieldname": "domain",
+   "fieldtype": "Select",
+   "label": "Domain",
+   "options": "Sales\nFinance\nProduction\nProcurement\nStock\nHR",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "metric_name",
+   "fieldtype": "Data",
+   "label": "Metric Name",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "col1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "period",
+   "fieldtype": "Datetime",
+   "label": "Period",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "The hour this snapshot represents"
+  },
+  {
+   "fieldname": "metric_value",
+   "fieldtype": "Float",
+   "label": "Metric Value",
+   "in_list_view": 1,
+   "precision": "2"
+  },
+  {
+   "fieldname": "comparison_value",
+   "fieldtype": "Float",
+   "label": "Comparison Value",
+   "description": "Same metric, prior comparable period (168 hours back)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "pct_change",
+   "fieldtype": "Percent",
+   "label": "% Change",
+   "in_list_view": 1,
+   "read_only": 1
+  }
+ ],
+ "icon": "fa fa-line-chart",
+ "index_web_pages_for_search": 0,
+ "is_submittable": 0,
+ "links": [],
+ "modified": "2026-08-10 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "IB KPI Snapshot",
+ "naming_rule": "Expression (old-style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager",
+   "share": 1,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Factory Management",
+   "share": 1,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Purchase Manager",
+   "share": 1,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR Manager",
+   "share": 1,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "write": 0
+  }
+ ],
+ "sort_field": "period",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

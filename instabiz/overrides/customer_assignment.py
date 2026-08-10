@@ -739,88 +739,6 @@ def search_customer_pool(pool_type, search):
 	return frappe.db.sql(sql, params, as_dict=True)
 
 
-def _get_claimed_pool(user):
-	"""Return customers claimed by the given user."""
-	return frappe.db.sql(
-		"""
-		SELECT c.name AS customer, c.customer_name, c.territory, c.mobile_no,
-		       c.custom_contact_person_name, c.custom_primary_contact_person,
-		       c.ib_claimed_by, c.ib_claimed_on,
-		       MAX(so.transaction_date) AS last_so_date
-		FROM `tabCustomer` c
-		LEFT JOIN `tabSales Order` so ON so.customer = c.name AND so.docstatus = 1
-		WHERE c.ib_claimed_by = %(user)s
-		  AND c.disabled = 0
-		GROUP BY c.name
-		ORDER BY c.ib_claimed_on DESC
-		""",
-		{"user": user},
-		as_dict=True,
-	)
-
-
-@frappe.whitelist()
-def claim_customer(customer):
-	"""Claim a customer for the current manager. Removes it from the general assignment pool."""
-	_require_manager()
-	# Atomic conditional UPDATE — the previous read-then-write (get_value, then set_value)
-	# was a TOCTOU race: two managers claiming the same customer within the same instant
-	# could both pass the check and the second write would silently clobber the first,
-	# unlike every other multi-actor mutation in this module (which lock or use ON DUPLICATE).
-	if not _atomic_claim("Customer", customer, "ib_claimed_by", frappe.session.user):
-		existing = frappe.db.get_value("Customer", customer, "ib_claimed_by")
-		claimer_name = frappe.db.get_value("User", existing, "full_name") or existing
-		frappe.throw(_(f"Already claimed by {claimer_name}."))
-	frappe.db.commit()
-	return {"status": "ok", "claimed_by": frappe.session.user}
-
-
-def _atomic_claim(doctype, name, field, user):
-	"""Conditionally UPDATE `field` -> user only if currently unset or already owned by user.
-	Returns True if the row now belongs to `user`, False if someone else holds it."""
-	frappe.db.sql(
-		f"""
-		UPDATE `tab{doctype}`
-		SET `{field}` = %(user)s, ib_claimed_on = %(now)s, modified = %(now)s
-		WHERE name = %(name)s AND (`{field}` IS NULL OR `{field}` = '' OR `{field}` = %(user)s)
-		""",
-		{"user": user, "now": now(), "name": name},
-	)
-	return frappe.db.get_value(doctype, name, field) == user
-
-
-@frappe.whitelist()
-def bulk_claim_customers(customers):
-	"""Claim multiple customers for the current manager."""
-	import json
-	_require_manager()
-	if isinstance(customers, str):
-		customers = json.loads(customers)
-	user = frappe.session.user
-	claimed = []
-	skipped = []
-	for customer in customers:
-		if _atomic_claim("Customer", customer, "ib_claimed_by", user):
-			claimed.append(customer)
-		else:
-			skipped.append(customer)
-	if claimed:
-		frappe.db.commit()
-	return {"status": "ok", "claimed": len(claimed), "skipped": skipped}
-
-
-@frappe.whitelist()
-def unclaim_customer(customer):
-	"""Release a claimed customer back to the general assignment pool."""
-	_require_manager()
-	frappe.db.set_value("Customer", customer, {
-		"ib_claimed_by": None,
-		"ib_claimed_on": None,
-	})
-	frappe.db.commit()
-	return {"status": "ok"}
-
-
 @frappe.whitelist()
 def mark_customer_contacted(assignment_id, notes, outcome):
 	"""Mark assignment as Contacted. Notes and outcome are mandatory."""
@@ -861,28 +779,15 @@ def skip_assignment(assignment_id, reason=None):
 
 
 @frappe.whitelist()
-def unskip_assignment(assignment_id):
-	"""Revert a Skipped assignment back to Pending."""
-	doc = frappe.get_doc("IB Customer Assignment", assignment_id)
-	if doc.assigned_to != frappe.session.user:
-		frappe.throw(_("Not authorized."))
-	if doc.status != "Skipped":
-		frappe.throw(_("Assignment is not Skipped."))
-	doc.status = "Pending"
-	doc.completed_at = None
-	doc.save(ignore_permissions=True)
-	frappe.db.commit()
-	return {"status": "ok"}
-
-
-@frappe.whitelist()
 def self_assign_customer(customer):
 	"""Managers claim ownership of an unowned (or self-owned) customer.
 	Fails if the customer already belongs to a DIFFERENT user."""
 	_require_manager()
 	user = frappe.session.user
 	full_name = frappe.db.get_value("User", user, "full_name") or user
-	# Atomic conditional UPDATE — see claim_customer() for why read-then-write is unsafe here.
+	# Atomic conditional UPDATE — a read-then-write (get_value, then set_value) is a TOCTOU
+	# race: two managers self-assigning the same customer within the same instant could both
+	# pass the check and the second write would silently clobber the first.
 	frappe.db.sql(
 		"""
 		UPDATE `tabCustomer`
@@ -1254,50 +1159,6 @@ def get_manager_queue():
 
 
 @frappe.whitelist()
-def assign_claimed_to_user(customer, assigned_to, date=None):
-	"""Assign a customer to a sales user and release any claim. Manager only.
-	Claim only blocks auto-pool; this path always works regardless of claim state."""
-	_require_manager()
-	date = date or today()
-
-	if str(date) < str(today()):
-		frappe.throw(_("Cannot assign to a past date."))
-
-	# Cancel any existing active assignment (manager override / reassignment)
-	existing = frappe.db.get_value(
-		"IB Customer Assignment",
-		{"customer": customer, "assigned_date": date, "status": ["in", ["Pending", "Contacted"]]},
-		"name",
-	)
-	if existing:
-		frappe.db.set_value("IB Customer Assignment", existing, "status", "Skipped")
-
-	config = get_assignment_config()
-	existing_count = frappe.db.count(
-		"IB Customer Assignment",
-		{"assigned_to": assigned_to, "assigned_date": date, "status": ["in", ["Pending", "Contacted"]]},
-	)
-	if existing_count >= config["assignments_per_day"]:
-		frappe.throw(_(
-			f"{assigned_to} is at the daily quota ({config['assignments_per_day']}) on {date}."
-		))
-
-	territory = frappe.db.get_value("Customer", customer, "territory")
-	source_pool = classify_customer(customer, config["dormant_threshold_days"])
-	_create_assignment(customer, territory, assigned_to, date, source_pool)
-
-	# Release claim so the customer re-enters the pool after this assignment
-	frappe.db.set_value(
-		"Customer",
-		customer,
-		{"ib_claimed_by": None, "ib_claimed_on": None},
-		update_modified=False,
-	)
-	frappe.db.commit()
-	return {"status": "ok"}
-
-
-@frappe.whitelist()
 def get_assignments_for_customers(customers):
 	"""Return active assignment info for a list of customers. Manager only."""
 	import json
@@ -1592,15 +1453,6 @@ def unshare_customer(customer, share_with):
 	return {"status": "ok"}
 
 
-@frappe.whitelist()
-def bulk_unshare_all(customer):
-	"""Remove ALL shares for a customer (e.g., when reassigning to a new user). Manager only."""
-	_require_manager()
-	frappe.db.delete("IB Customer Share", {"customer": customer})
-	frappe.db.commit()
-	return {"status": "ok"}
-
-
 # ── Manager: Today board per-user filter ──────────────────────────────────────
 
 @frappe.whitelist()
@@ -1622,46 +1474,3 @@ def get_active_sales_users_detail():
 	return rows
 
 
-@frappe.whitelist()
-def get_user_today_assignments(view_user, date=None):
-	"""Return today's IB Customer Assignments for a specific sales user.
-	Used by manager to view any rep's Today column on the Customer Board.
-	Manager / Team Leader only.
-	"""
-	_require_manager_or_leader()
-	leader_team = None if any(r in frappe.get_roles() for r in ["Sales Manager", "System Manager"]) else _get_leader_team()
-	if leader_team and view_user not in _get_team_member_users(leader_team):
-		frappe.throw(_("Not authorized."), frappe.PermissionError)
-
-	date = date or today()
-
-	rows = frappe.db.sql(
-		"""
-		SELECT ca.name, ca.customer, ca.status, ca.outcome, ca.source_pool, ca.territory,
-		       c.customer_name, c.mobile_no,
-		       c.custom_contact_person_name, c.custom_primary_contact_person,
-		       c.custom_sales_person_user,
-		       MAX(so.transaction_date) AS last_so_date,
-		       (SELECT prev.outcome
-		        FROM `tabIB Customer Assignment` prev
-		        WHERE prev.customer = ca.customer AND prev.status = 'Contacted'
-		          AND prev.name != ca.name
-		        ORDER BY prev.completed_at DESC LIMIT 1) AS last_outcome,
-		       (SELECT DATE(prev.completed_at)
-		        FROM `tabIB Customer Assignment` prev
-		        WHERE prev.customer = ca.customer AND prev.status = 'Contacted'
-		          AND prev.name != ca.name
-		        ORDER BY prev.completed_at DESC LIMIT 1) AS last_contacted_at
-		FROM `tabIB Customer Assignment` ca
-		INNER JOIN `tabCustomer` c ON c.name = ca.customer
-		LEFT JOIN `tabSales Order` so ON so.customer = ca.customer AND so.docstatus = 1
-		WHERE ca.assigned_to = %(user)s
-		  AND ca.assigned_date = %(date)s
-		  AND ca.status IN ('Pending', 'Contacted', 'Order Placed', 'Skipped')
-		GROUP BY ca.name
-		ORDER BY ca.status = 'Pending' DESC, ca.creation DESC
-		""",
-		{"user": view_user, "date": date},
-		as_dict=True,
-	)
-	return rows

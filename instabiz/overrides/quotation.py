@@ -88,31 +88,6 @@ def recalculate_quotation(doc, method=None):
 
 # ── New-document defaults ─────────────────────────────────────────────────────
 
-def _set_default_taxes(doc):
-    """Auto-apply the default Sales Taxes and Charges template on new documents only."""
-    if not doc.is_new() or doc.get("taxes") or doc.get("custom_sale_type") == "Export":
-        return
-    if doc.currency and doc.currency != "INR":
-        return
-    tax_template = frappe.db.get_value(
-        "Sales Taxes and Charges Template",
-        {"is_default": 1, "company": doc.company},
-        "name",
-    )
-    if not tax_template:
-        return
-    doc.taxes_and_charges = tax_template
-    template_doc = frappe.get_doc("Sales Taxes and Charges Template", tax_template)
-    for row in template_doc.taxes:
-        doc.append("taxes", {
-            "charge_type":           row.charge_type,
-            "account_head":          row.account_head,
-            "description":           row.description,
-            "rate":                  row.rate,
-            "included_in_print_rate": row.included_in_print_rate,
-        })
-
-
 def _set_default_terms(doc):
     """Auto-populate tc_name and terms on new documents only."""
     if not doc.is_new():

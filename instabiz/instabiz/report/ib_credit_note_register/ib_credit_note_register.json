@@ -8,7 +8,7 @@
  "module": "Instabiz",
  "name": "IB Credit Note Register",
  "prepared_report": 0,
- "ref_doctype": "Sales Invoice",
+ "ref_doctype": "IB Credit Note",
  "report_name": "IB Credit Note Register",
  "report_type": "Script Report",
  "roles": [

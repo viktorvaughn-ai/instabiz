@@ -138,9 +138,9 @@ class IBFinanceDashboard {
 
 		this.$wrap.find("#ib-fin-btn-si").on("click", () => {
 			frappe.route_options = { docstatus: 1, outstanding_amount: [">", 0] };
-			frappe.set_route("List", "Sales Invoice");
+			frappe.set_route("List", this.sales_dt || "Sales Invoice");
 		});
-		this.$wrap.find("#ib-fin-btn-pi").on("click", () => frappe.set_route("List", "Purchase Invoice"));
+		this.$wrap.find("#ib-fin-btn-pi").on("click", () => frappe.set_route("List", this.purch_dt || "Purchase Invoice"));
 		this.$wrap.find("#ib-fin-btn-pe").on("click", () => frappe.set_route("List", "Payment Entry"));
 		this.$wrap.find("#ib-fin-refresh").on("click", () => this.refresh());
 	}
@@ -167,6 +167,8 @@ class IBFinanceDashboard {
 	}
 
 	_render(d) {
+		this.sales_dt = d.sales_dt;
+		this.purch_dt = d.purch_dt;
 		this._render_kpis(d);
 		this._render_pl_chart(d.pl_trend);
 		this._render_vendors(d.top_vendors);
@@ -183,7 +185,7 @@ class IBFinanceDashboard {
 			{
 				label: "Revenue MTD", raw: d.rev_mtd, color: IB_FIN_COLOR_REVENUE,
 				delta: ib_delta_html(d.rev_delta),
-				click: () => { frappe.route_options = { docstatus: 1, is_return: 0, posting_date: ["between", [ms, today]] }; frappe.set_route("List", "Sales Invoice"); },
+				click: () => { frappe.route_options = { docstatus: 1, [d.sales_date_field]: ["between", [ms, today]] }; frappe.set_route("List", d.sales_dt); },
 			},
 			{
 				label: "Gross Profit MTD", raw: d.gross_profit, color: d.gross_margin > 20 ? IB_FIN_COLOR_PROFIT : IB_FIN_COLOR_DANGER,
@@ -193,7 +195,7 @@ class IBFinanceDashboard {
 			{
 				label: "Outstanding AR", raw: d.ar, color: IB_FIN_COLOR_WARNING,
 				delta: `<span class="ib-delta neu">AP: ${this._fmt(d.ap)}</span>`,
-				click: () => { frappe.route_options = { docstatus: 1, outstanding_amount: [">", 0] }; frappe.set_route("List", "Sales Invoice"); },
+				click: () => { frappe.route_options = { docstatus: 1, outstanding_amount: [">", 0] }; frappe.set_route("List", d.sales_dt); },
 			},
 			{
 				label: "Cash & Bank", raw: d.total_cash_bank, color: IB_FIN_COLOR_CASH,
@@ -203,12 +205,12 @@ class IBFinanceDashboard {
 			{
 				label: "Expenses MTD", raw: d.exp_mtd, color: IB_FIN_COLOR_EXPENSE,
 				delta: ib_delta_html(d.exp_delta),
-				click: () => { frappe.route_options = { docstatus: 1, is_return: 0, posting_date: ["between", [ms, today]] }; frappe.set_route("List", "Purchase Invoice"); },
+				click: () => { frappe.route_options = { docstatus: 1, [d.purch_date_field]: ["between", [ms, today]] }; frappe.set_route("List", d.purch_dt); },
 			},
 			{
 				label: "Revenue YTD", raw: d.rev_ytd, color: IB_FIN_COLOR_YTD,
 				delta: `<span class="ib-delta neu">fiscal year to date</span>`,
-				click: () => { frappe.route_options = { docstatus: 1, is_return: 0 }; frappe.set_route("List", "Sales Invoice"); },
+				click: () => { frappe.route_options = { docstatus: 1 }; frappe.set_route("List", d.sales_dt); },
 			},
 		];
 

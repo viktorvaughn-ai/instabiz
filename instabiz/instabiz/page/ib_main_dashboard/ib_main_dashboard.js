@@ -203,7 +203,7 @@ class IBMainDashboard {
 	_render(d) {
 		this._render_kpis(d);
 		this._render_chart(this._active_tab);
-		this._render_recent(d.recent_si || []);
+		this._render_recent(d.recent_si || [], d.sales_dt);
 		ib_countup_all && ib_countup_all(this.$wrap);
 	}
 
@@ -221,8 +221,12 @@ class IBMainDashboard {
 				label: "Revenue MTD", raw: d.rev_mtd, icon: ICON.rev, color: "#d97757",
 				delta: ib_delta_html(d.rev_delta),
 				click() {
-					frappe.route_options = { docstatus: 1, is_return: 0, posting_date: ["between", [ms, today]] };
-					frappe.set_route("List", "Sales Invoice");
+					// billing_mode-aware (instabiz.overrides.billing_mode) — d.sales_dt/
+					// d.sales_date_field come straight off the backend's own toggle, so
+					// this link stays correct whichever mode is active (dev: Sales Order /
+					// transaction_date, prod: Sales Invoice / posting_date).
+					frappe.route_options = { docstatus: 1, [d.sales_date_field]: ["between", [ms, today]] };
+					frappe.set_route("List", d.sales_dt);
 				},
 			},
 			{
@@ -230,7 +234,7 @@ class IBMainDashboard {
 				delta: `<span class="ib-delta neu">${d.open_so} open orders</span>`,
 				click() {
 					frappe.route_options = { docstatus: 1, outstanding_amount: [">", 0] };
-					frappe.set_route("List", "Sales Invoice");
+					frappe.set_route("List", d.sales_dt);
 				},
 			},
 			{
@@ -322,7 +326,8 @@ class IBMainDashboard {
 		}
 	}
 
-	_render_recent(rows) {
+	_render_recent(rows, doctype) {
+		doctype = doctype || "Sales Invoice";
 		const $el = this.$wrap.find("#ib-md-recent-si");
 		if (!rows.length) {
 			$el.html(`<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">No recent invoices</div>`);
@@ -350,7 +355,7 @@ class IBMainDashboard {
 			</table>
 		`);
 		$el.find("tbody tr[data-name]").on("click", function () {
-			frappe.set_route("Form", "Sales Invoice", $(this).data("name"));
+			frappe.set_route("Form", doctype, $(this).data("name"));
 		});
 	}
 }

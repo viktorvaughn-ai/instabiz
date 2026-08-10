@@ -15,19 +15,6 @@ _BANK_ACCOUNTS = [
     "Cash - IB",
 ]
 
-_CATEGORY_COLORS = {
-    "Customer Collections": "#1a6b3c",
-    "Vendor Payments":      "#c0392b",
-    "Salary & Wages":       "#8e44ad",
-    "Operating Expenses":   "#e67e22",
-    "Financing":            "#2980b9",
-    "Tax Payments":         "#7f8c8d",
-    "Inter-account":        "#95a5a6",
-    "Other Inflow":         "#27ae60",
-    "Other Outflow":        "#e74c3c",
-}
-
-
 def execute(filters=None):
     filters = filters or {}
     _validate(filters)

@@ -148,7 +148,7 @@ class IBCollectionsDashboard {
 		});
 		this.$wrap.find("#ib-col-refresh").on("click", () => this.load());
 		this.$wrap.find("#ib-col-si").on("click", () =>
-			frappe.set_route("List", "Sales Invoice", { outstanding_amount: [">", 0], docstatus: 1 })
+			frappe.set_route("List", this._doctype || "Sales Invoice", { outstanding_amount: [">", 0], docstatus: 1 })
 		);
 
 		let _min_od_t;
@@ -204,6 +204,7 @@ class IBCollectionsDashboard {
 				this._loading = false;
 				if (!r.message) return;
 				const d = r.message;
+				this._doctype = d.doctype;
 				this._invoices = d.invoices || [];
 				this._privileged = d.privileged;
 				this._customer_total = d.customer_total || 0;
@@ -386,9 +387,10 @@ class IBCollectionsDashboard {
 			frappe.set_route("Form", "Customer", $(this).data("customer"));
 		});
 
-		// Invoice chip → SI form
+		// Invoice chip → SI (or SO, in dev billing mode) form
+		const inv_doctype = this._doctype || "Sales Invoice";
 		this.$wrap.find(".ib-col-inv-chip").on("click", function () {
-			frappe.set_route("Form", "Sales Invoice", $(this).data("inv"));
+			frappe.set_route("Form", inv_doctype, $(this).data("inv"));
 		});
 
 		// Log Payment button
@@ -399,6 +401,7 @@ class IBCollectionsDashboard {
 	}
 
 	_show_payment_dialog(customer, customer_name) {
+		const doctype = this._doctype || "Sales Invoice";
 		const inv_list = this._invoices.filter(i => i.customer === customer);
 		const fields = [
 			{ fieldtype: "Currency", fieldname: "amount", label: "Amount Received", reqd: 1 },
@@ -437,7 +440,7 @@ class IBCollectionsDashboard {
 				};
 				if (against_invoice) {
 					frappe.route_options["references"] = JSON.stringify([{
-						reference_doctype: "Sales Invoice",
+						reference_doctype: doctype,
 						reference_name: against_invoice,
 					}]);
 				}

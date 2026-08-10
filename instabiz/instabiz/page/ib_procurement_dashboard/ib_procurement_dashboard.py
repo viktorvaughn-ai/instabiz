@@ -112,6 +112,8 @@ def get_procurement_data():
 	)[0][0])
 
 	return {
+		"spend_doctype": spend_doctype,
+		"spend_date_field": spend_date_field,
 		"open_po_count": int(open_po_count),
 		"open_po_value": open_po_value,
 		"pending_grn": int(pending_grn),

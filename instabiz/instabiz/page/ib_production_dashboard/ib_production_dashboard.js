@@ -197,13 +197,15 @@ class IBProductionDashboard {
 		// Production Stages page — this toggle has no such cross-page need).
 		// Defaults ON per the "do not show done WO" request.
 		this.hide_completed_items = true;
-		// Full set of Order Sheets loaded so far (accumulated across infinite
-		// scroll pages) — kept so toggling hide_completed_items can re-render
-		// the whole list instantly without a re-fetch.
+		// Current page's Order Sheets — kept so toggling hide_completed_items
+		// can re-render the visible page instantly without a re-fetch.
 		this._plan_all_rows = [];
-		this._plan_offset = 0;
+		// 1-indexed. Server-side paginated (not accumulated) — Prev/Next, not
+		// infinite scroll. _plan_has_more reflects whether the last fetch
+		// returned a full page (so there's likely a next page), same signal
+		// the old infinite-scroll sentinel used, just driving a button now.
+		this._plan_page = 1;
 		this._plan_has_more = true;
-		this._plan_loading_more = false;
 		// Order Sheet name (os.name) to force-expand on the next _render_plan()
 		// call — set right before a row action (Start/Next Stage/Move) or a
 		// manual chevron-open triggers a reload, so the card the user was just
@@ -222,8 +224,7 @@ class IBProductionDashboard {
 		this._fetching = true;
 		this._set_refresh_label("Loading…");
 		this.$container.find("#ib-pd-kpis").html(window.ib_skel_kpis ? ib_skel_kpis(4) : "");
-		this._plan_offset = 0;
-		this._plan_has_more = true;
+		this._plan_page = 1;
 
 		let _done = 0;
 		const _total = 3;
@@ -245,24 +246,7 @@ class IBProductionDashboard {
 			},
 			error: () => { this._set_refresh_label("Error loading data"); _check_done(); },
 		});
-		frappe.call({
-			method: "instabiz.overrides.production.get_production_plan",
-			args: {
-				limit: PLAN_PAGE_SIZE, start: 0,
-				location: this.location_filter || "",
-				search: this.plan_search || "",
-				priority: this.plan_priority || "",
-			},
-			callback: (r) => {
-				const rows = (r.message && r.message.order_wise) || [];
-				this._plan_offset = rows.length;
-				this._plan_has_more = rows.length === PLAN_PAGE_SIZE;
-				this._plan_all_rows = rows;
-				this._render_plan(rows);
-				_check_done();
-			},
-			error: () => _check_done(),
-		});
+		this._load_plan_page(1, _check_done);
 		frappe.call({
 			method: "instabiz.overrides.ai_agents.get_ai_actions",
 			args: { status: "pending", agent: "all", start: 0, page_length: 5 },
@@ -278,27 +262,34 @@ class IBProductionDashboard {
 		});
 	}
 
-	_load_more_plan() {
-		if (this._plan_loading_more || !this._plan_has_more) return;
-		this._plan_loading_more = true;
-		this.$container.find("#ib-pd-plan-more").text("Loading more…");
+	// Pagination (not infinite scroll — replaced 2026-08-11): fetches exactly
+	// one page, replaces the visible list. `page` is 1-indexed; `on_done` is
+	// an optional callback wired only by refresh()'s parallel-fetch tracker.
+	_load_plan_page(page, on_done) {
+		if (this._plan_loading) return;
+		this._plan_loading = true;
+		this.$container.find("#ib-pd-plan-pager").html("Loading…");
 		frappe.call({
 			method: "instabiz.overrides.production.get_production_plan",
 			args: {
-				limit: PLAN_PAGE_SIZE, start: this._plan_offset,
+				limit: PLAN_PAGE_SIZE, start: (page - 1) * PLAN_PAGE_SIZE,
 				location: this.location_filter || "",
 				search: this.plan_search || "",
 				priority: this.plan_priority || "",
 			},
 			callback: (r) => {
 				const rows = (r.message && r.message.order_wise) || [];
-				this._plan_offset += rows.length;
+				this._plan_page = page;
 				this._plan_has_more = rows.length === PLAN_PAGE_SIZE;
-				this._plan_loading_more = false;
-				this._plan_all_rows = this._plan_all_rows.concat(rows);
-				this._render_plan(rows, true);
+				this._plan_loading = false;
+				this._plan_all_rows = rows;
+				this._render_plan(rows);
+				if (on_done) on_done();
 			},
-			error: () => { this._plan_loading_more = false; },
+			error: () => {
+				this._plan_loading = false;
+				if (on_done) on_done();
+			},
 		});
 	}
 
@@ -362,7 +353,7 @@ class IBProductionDashboard {
 					</label>
 				</div>
 				<div id="ib-pd-plan"></div>
-				<div id="ib-pd-plan-more" class="ib-pd-empty" style="padding:14px;font-size:12px"></div>
+				<div id="ib-pd-plan-pager" class="ib-pd-pager"></div>
 				<div class="ib-pd-quick-actions" id="ib-pd-actions"></div>
 			</div>
 		`).appendTo(this.$mount);
@@ -399,18 +390,8 @@ class IBProductionDashboard {
 		this.$container.find("#ib-pd-hide-done").prop("checked", this.hide_completed_items);
 		this.$container.find("#ib-pd-hide-done").on("change", (e) => {
 			this.hide_completed_items = $(e.target).is(":checked");
-			this._render_plan(this._plan_all_rows, false);
+			this._render_plan(this._plan_all_rows);
 		});
-
-		// Infinite scroll — the Desk layout scrolls the whole page, not this
-		// container, so listen on window and check how close #ib-pd-plan-more is.
-		this._scroll_handler = () => {
-			const $sentinel = this.$container.find("#ib-pd-plan-more");
-			if (!$sentinel.length || !$sentinel.is(":visible")) return;
-			const rect = $sentinel[0].getBoundingClientRect();
-			if (rect.top < window.innerHeight + 300) this._load_more_plan();
-		};
-		$(window).on("scroll.ib-pd-plan", this._scroll_handler);
 
 		// Close any open manual-move panel when clicking outside it.
 		$(document).on("click.ib-pd-move-panel", (e) => {
@@ -443,7 +424,6 @@ class IBProductionDashboard {
 	// _show_comment_popover) — without this it would keep floating over the
 	// Stages tab after switching away.
 	_cleanup() {
-		$(window).off("scroll.ib-pd-plan");
 		$(document).off("click.ib-pd-move-panel");
 		this._close_comment_popover();
 	}
@@ -620,16 +600,14 @@ class IBProductionDashboard {
 		$actions.off("click", "#ib-pd-goto-dpr").on("click", "#ib-pd-goto-dpr", () => frappe.set_route("ib-dpr"));
 	}
 
-	_render_plan(order_sheets, append) {
+	_render_plan(order_sheets) {
 		const $el = this.$container.find("#ib-pd-plan");
-		const $more = this.$container.find("#ib-pd-plan-more");
-		if (!append && !order_sheets.length) {
-			$el.html(`<div class="ib-pd-empty">No active production orders. Submit a Sales Order to auto-generate production.</div>`);
-			$more.text("");
-			return;
-		}
-		if (append && !order_sheets.length) {
-			$more.text(this._plan_has_more ? "" : "— end of list —");
+		const $pager = this.$container.find("#ib-pd-plan-pager");
+		if (!order_sheets.length) {
+			$el.html(this._plan_page > 1
+				? `<div class="ib-pd-empty">No orders on this page.</div>`
+				: `<div class="ib-pd-empty">No active production orders. Submit a Sales Order to auto-generate production.</div>`);
+			this._render_plan_pager($pager);
 			return;
 		}
 
@@ -706,7 +684,7 @@ class IBProductionDashboard {
 						</span>`
 					: "";
 
-				const canMove = woName && curInfo.status !== "Completed";
+				const canMove = woName && curInfo.status !== "Completed" && curInfo.status !== "Cancelled";
 				const moveHtml = canMove
 					? `<span class="ib-pd-row-move-wrap">
 							<button type="button" class="ib-pd-row-move-toggle" data-wo="${frappe.utils.escape_html(woName)}"
@@ -756,6 +734,19 @@ class IBProductionDashboard {
 			const collapsedByDefault = visibleItems.length > 2 && os.name !== this._plan_keep_open;
 			const customerName = os.customer_name || os.customer || "—";
 			const commentCount = os.comment_count || 0;
+			// Independent of the "hide completed items" toggle (which only
+			// controls what's visible, not what's true) — this order's Order
+			// Sheet is about to flip to Completed status server-side the moment
+			// this page next refreshes, but the DN option shouldn't have to
+			// wait for that refresh when every item is already provably done
+			// right now from the same data this card is already rendering.
+			const orderFullyDone = allItems.length > 0 && allItems.every(_item_is_done);
+			const dnBtn = (orderFullyDone && os.sales_order)
+				? `<button class="btn btn-primary btn-xs ib-pd-plan-create-dn" data-so="${frappe.utils.escape_html(os.sales_order)}" style="margin-left:10px">
+						<iconify-icon icon="lucide:truck" width="11" height="11" style="vertical-align:middle;margin-right:3px"></iconify-icon>
+						Create Delivery Note
+					</button>`
+				: "";
 			const bodyHtml = visibleItems.length
 				? `<table class="ib-pd-table ib-pd-plan-table">
 						<thead>
@@ -765,7 +756,7 @@ class IBProductionDashboard {
 					</table>`
 				: `<div class="ib-pd-plan-all-done">
 						<iconify-icon icon="lucide:check-circle-2" width="14" height="14"></iconify-icon>
-						All items in this order are complete
+						All items in this order are complete${dnBtn}
 					</div>`;
 
 			return `
@@ -802,8 +793,8 @@ class IBProductionDashboard {
 				</div>`;
 		}).join("");
 
-		if (append) $el.append(rows); else $el.html(rows);
-		$more.text(this._plan_has_more ? "" : (this._plan_offset ? "— end of list —" : ""));
+		$el.html(rows);
+		this._render_plan_pager($pager);
 		$el.off("click", ".ib-pd-plan-toggle").on("click", ".ib-pd-plan-toggle", (e) => {
 			const os = $(e.currentTarget).data("os");
 			const $body = $el.find(`[data-os-body="${os}"]`);
@@ -820,20 +811,31 @@ class IBProductionDashboard {
 
 		$el.off("click", ".ib-pd-row-start").on("click", ".ib-pd-row-start", (e) => {
 			e.stopPropagation();
-			this._plan_keep_open = $(e.currentTarget).closest("[data-os-body]").data("osBody") || null;
+			// Disable immediately — refresh() re-renders everything with fresh
+			// buttons on success, but the RPC round-trip leaves a window where
+			// this exact button would otherwise still be sitting there
+			// clickable, showing "Start" on a WO that's already In Progress.
+			const $btn = $(e.currentTarget);
+			if ($btn.prop("disabled")) return;
+			$btn.prop("disabled", true);
+			this._plan_keep_open = $btn.closest("[data-os-body]").data("osBody") || null;
 			this._plan_row_call("instabiz.overrides.production.start_work_order",
-				{ work_order: $(e.currentTarget).data("wo") }, "Started");
+				{ work_order: $btn.data("wo") }, "Started", $btn);
 		});
 		$el.off("click", ".ib-pd-row-advance").on("click", ".ib-pd-row-advance", (e) => {
 			e.stopPropagation();
-			const wo = $(e.currentTarget).data("wo");
-			this._plan_keep_open = $(e.currentTarget).closest("[data-os-body]").data("osBody") || null;
+			const $btn = $(e.currentTarget);
+			if ($btn.prop("disabled")) return;
+			$btn.prop("disabled", true);
+			const wo = $btn.data("wo");
+			this._plan_keep_open = $btn.closest("[data-os-body]").data("osBody") || null;
 			frappe.call({
 				method: "instabiz.overrides.production.advance_to_next_stage",
 				args: { work_order: wo },
 				callback: (r) => {
 					if (r.exc || !r.message || r.message.status !== "ok") {
 						frappe.show_alert({ message: r.message?.message || "Failed to advance.", indicator: "red" });
+						$btn.prop("disabled", false);
 						return;
 					}
 					frappe.show_alert({ message: r.message.message || "Advanced.", indicator: "green" }, 3);
@@ -881,6 +883,50 @@ class IBProductionDashboard {
 			const sales_order = $(e.currentTarget).data("so");
 			if (!sales_order) return;
 			this._show_comment_popover(sales_order, $(e.currentTarget));
+		});
+
+		$el.off("click", ".ib-pd-plan-create-dn").on("click", ".ib-pd-plan-create-dn", (e) => {
+			e.stopPropagation();
+			const $btn = $(e.currentTarget);
+			if ($btn.prop("disabled")) return;
+			$btn.prop("disabled", true);
+			frappe.call({
+				method: "instabiz.overrides.sales_order.custom_make_delivery_note",
+				args: { source_name: $btn.data("so") },
+				callback: (r) => {
+					if (!r.message) {
+						frappe.show_alert({ message: "Failed to create Delivery Note.", indicator: "red" });
+						$btn.prop("disabled", false);
+						return;
+					}
+					frappe.model.sync(r.message);
+					frappe.set_route("Form", r.message.doctype, r.message.name);
+				},
+				error: () => $btn.prop("disabled", false),
+			});
+		});
+	}
+
+	// Prev/Next pager for the Active Production Plan list — replaced the old
+	// scroll-to-bottom infinite scroll (2026-08-11). No total-page count from
+	// the server (would need an extra COUNT query the old scroll version never
+	// needed either) — Next just stays enabled whenever the last fetch
+	// returned a full page, same "is there more" signal the scroll sentinel
+	// used, just driving a button instead of a scroll listener.
+	_render_plan_pager($pager) {
+		$pager.html(`
+			<button type="button" class="btn btn-default btn-xs ib-pd-plan-prev" ${this._plan_page <= 1 ? "disabled" : ""}>
+				<iconify-icon icon="lucide:chevron-left" width="12" height="12"></iconify-icon> Prev
+			</button>
+			<span class="ib-pd-plan-page-label">Page ${this._plan_page}</span>
+			<button type="button" class="btn btn-default btn-xs ib-pd-plan-next" ${this._plan_has_more ? "" : "disabled"}>
+				Next <iconify-icon icon="lucide:chevron-right" width="12" height="12"></iconify-icon>
+			</button>`);
+		$pager.off("click", ".ib-pd-plan-prev").on("click", ".ib-pd-plan-prev", () => {
+			if (this._plan_page > 1) { this._plan_keep_open = null; this._load_plan_page(this._plan_page - 1); }
+		});
+		$pager.off("click", ".ib-pd-plan-next").on("click", ".ib-pd-plan-next", () => {
+			if (this._plan_has_more) { this._plan_keep_open = null; this._load_plan_page(this._plan_page + 1); }
 		});
 	}
 
@@ -1057,13 +1103,14 @@ class IBProductionDashboard {
 		});
 	}
 
-	_plan_row_call(method, args, successLabel) {
+	_plan_row_call(method, args, successLabel, $btn) {
 		frappe.call({
 			method,
 			args,
 			callback: (r) => {
 				if (r.exc || (r.message && r.message.status && r.message.status !== "ok")) {
 					frappe.show_alert({ message: `Failed — ${successLabel.toLowerCase()} did not apply.`, indicator: "red" });
+					if ($btn) $btn.prop("disabled", false);
 					return;
 				}
 				frappe.show_alert({ message: successLabel, indicator: "green" }, 2);
@@ -1439,6 +1486,17 @@ class IBProductionDashboard {
 				font-size: 13px;
 				text-align: center;
 			}
+			.ib-pd-pager {
+				display: flex; align-items: center; justify-content: center; gap: 12px;
+				padding: 16px 0; font-size: 12px;
+			}
+			.ib-pd-pager .btn {
+				display: inline-flex; align-items: center; gap: 4px;
+				border-radius: 6px; font-size: 12px; font-weight: 600;
+				transition: background .12s, opacity .12s;
+			}
+			.ib-pd-pager .btn:disabled { opacity: .4; cursor: not-allowed; }
+			.ib-pd-plan-page-label { color: var(--text-muted, #6b7280); font-weight: 600; min-width: 50px; text-align: center; }
 			.ib-pd-refresh-time {
 				font-size: 11px;
 				color: var(--text-muted, #6b7280);
@@ -1888,6 +1946,12 @@ class IBProductionStages {
 		this._machine_data = new Map();
 		this._sortables = [];
 
+		// Mass-select for bulk Start / Next Stage — one Set shared across every
+		// tab's WO checkboxes, so a selection made in one tab (e.g. Stage-wise)
+		// survives a tab switch rather than resetting. Cleared explicitly after
+		// a bulk action runs or via the mass-bar's Clear button.
+		this._selected_wos = new Set();
+
 		// Consume frappe.route_options (standard Frappe convention — a caller
 		// sets it right before frappe.set_route(), we read + clear it here so a
 		// later plain navigation to this page doesn't replay stale filters).
@@ -2269,6 +2333,7 @@ class IBProductionStages {
 				: "—";
 
 			return `<tr class="ib-iw-stage-row" data-woname="${frappe.utils.escape_html(wo.name)}" style="cursor:pointer">
+				<td style="width:24px">${this._mass_select_cb_html(wo.name, wo.status)}</td>
 				<td><span class="ib-ps-stage-chip" style="background:${color};color:#fff">${frappe.utils.escape_html(wo.stage || "")}</span></td>
 				<td><code style="font-size:11px">${frappe.utils.escape_html(wo.name)}</code></td>
 				<td>${_ib_status_pill(wo.status, "sm")}</td>
@@ -2308,13 +2373,15 @@ class IBProductionStages {
 					<div class="ib-ps-detail-meta">
 						<strong class="ib-ps-detail-name">${frappe.utils.escape_html(item.item_code)}</strong>
 						<span class="ib-ps-detail-customer">${frappe.utils.escape_html(item.item_name || "")}</span>
+						<span id="ib-iw-dn-slot"></span>
 					</div>
 				</div>
 
 				<div class="ib-iw-section-title">Stage Progress</div>
+				${this._mass_bar_html()}
 				<div class="ib-ps-table-wrap">
 					<table class="ib-ps-table">
-						<thead><tr><th>Stage</th><th>Work Order</th><th>Status</th><th>Machine</th><th>Progress</th><th>Jumbo Roll</th><th>Created</th><th>ETD</th></tr></thead>
+						<thead><tr><th style="width:24px"></th><th>Stage</th><th>Work Order</th><th>Status</th><th>Machine</th><th>Progress</th><th>Jumbo Roll</th><th>Created</th><th>ETD</th></tr></thead>
 						<tbody>${stage_rows}</tbody>
 					</table>
 				</div>
@@ -2333,6 +2400,34 @@ class IBProductionStages {
 			const wo = (item.work_orders || []).find((w) => w.name === woname);
 			if (wo) this._open_wo_panel(wo, IB_STAGES.find((s) => s.label === wo.stage)?.key || "");
 		});
+		$c.on("click", "#ib-iw-create-dn", (e) => {
+			const $btn = $(e.currentTarget);
+			if ($btn.prop("disabled")) return;
+			$btn.prop("disabled", true);
+			this._create_dn_for_order($btn.data("so"), $btn);
+		});
+		this._wire_mass_bar($c);
+
+		// Same readiness check the WO panel's Create Delivery Note button uses
+		// (whole order, not just this one item) — resolved async since it
+		// needs its own RPC, same pattern as _hydrate_dn_slot.
+		const anyWo = (item.work_orders || [])[0];
+		if (anyWo && anyWo.order_sheet && anyWo.sales_order) {
+			frappe.call({
+				method: "instabiz.overrides.production.get_order_dn_readiness",
+				args: { order_sheet: anyWo.order_sheet },
+				callback: (r) => {
+					const $slot = $c.find("#ib-iw-dn-slot");
+					if (!$slot.length || !(r.message && r.message.ready)) return;
+					$slot.html(
+						`<button class="btn btn-primary btn-xs" id="ib-iw-create-dn" data-so="${frappe.utils.escape_html(anyWo.sales_order)}" style="margin-left:8px">
+							<iconify-icon icon="lucide:truck" width="11" height="11" style="vertical-align:middle;margin-right:3px"></iconify-icon>
+							Create Delivery Note
+						</button>`
+					);
+				},
+			});
+		}
 	}
 
 	// -----------------------------------------------------------------------
@@ -2395,6 +2490,7 @@ class IBProductionStages {
 				this._wo_data.set(row.name, row);
 				const pct = row.target_qty > 0 ? Math.min(100, Math.round((row.completed_qty / row.target_qty) * 100)) : 0;
 				return `<tr class="ib-ps-wo-sub-item--clickable" data-woid="${frappe.utils.escape_html(row.name)}">
+					<td style="width:24px">${this._mass_select_cb_html(row.name, row.status)}</td>
 					<td>${frappe.utils.escape_html(row.item_code || "")}</td>
 					<td>${row.sales_order ? `<a class="ib-ps-os-link" data-so-nav="${frappe.utils.escape_html(row.sales_order)}">${frappe.utils.escape_html(row.sales_order)}</a>` : "—"}</td>
 					<td>${frappe.utils.escape_html(row.customer_name || "")}</td>
@@ -2410,14 +2506,16 @@ class IBProductionStages {
 					<td>${row.delivery_date ? frappe.datetime.str_to_user(row.delivery_date) : "—"}</td>
 				</tr>`;
 			}).join("")
-			: `<tr><td colspan="8"><div class="ib-ps-empty">Nothing at this stage${this.stage_wise_search ? " matching your search" : ""}.</div></td></tr>`;
+			: `<tr><td colspan="9"><div class="ib-ps-empty">Nothing at this stage${this.stage_wise_search ? " matching your search" : ""}.</div></td></tr>`;
 
 		$c.html(`
 			<div class="ib-sw-pills">${pills}</div>
 			${toolbar}
+			${this._mass_bar_html()}
 			<div class="ib-ps-table-wrap">
 				<table class="ib-ps-table">
 					<thead><tr>
+						<th style="width:24px"></th>
 						<th>Item Code</th><th>Sales Order</th><th>Customer</th><th>Machine</th>
 						<th>Priority</th><th>Status</th><th>Progress</th><th>ETD</th>
 					</tr></thead>
@@ -2442,6 +2540,7 @@ class IBProductionStages {
 			const wo = this._wo_data.get($(e.currentTarget).data("woid"));
 			if (wo) this._open_wo_panel(wo, IB_STAGES.find((s) => s.label === wo.stage)?.key || this.stage_wise_pill);
 		});
+		this._wire_mass_bar($c);
 	}
 
 	// -----------------------------------------------------------------------
@@ -2646,6 +2745,17 @@ class IBProductionStages {
 			? `<a class="ib-ps-os-link" style="cursor:pointer" data-so-nav="${frappe.utils.escape_html(os.sales_order)}">${frappe.utils.escape_html(os.sales_order)}</a>`
 			: `<span style="color:var(--text-muted)">No SO</span>`;
 		const date_fmt = (d) => d ? frappe.datetime.str_to_user(d) : "—";
+		// IB Order Sheet.status is only ever "Completed" once every item's every
+		// stage is Completed (_update_order_sheet_progress) — the exact same
+		// source of truth get_order_dn_readiness() reads for the WO side
+		// panel's own Create Delivery Note gate, so no extra RPC needed here:
+		// it's already sitting on the detail payload this header renders from.
+		const dn_btn = (os.status === "Completed" && os.sales_order)
+			? `<button class="btn btn-primary btn-sm ib-os-create-dn" data-so="${frappe.utils.escape_html(os.sales_order)}" style="margin-left:auto">
+					<iconify-icon icon="lucide:truck" width="12" height="12" style="vertical-align:middle;margin-right:4px"></iconify-icon>
+					Create Delivery Note
+				</button>`
+			: "";
 		const header = `
 			<div class="ib-ps-detail-header">
 				<button class="ib-ps-back-btn" id="ib-os-back">← Back</button>
@@ -2656,6 +2766,7 @@ class IBProductionStages {
 					${os.delivery_date ? `<span style="font-size:11px;color:#dc2626">Deliver: ${date_fmt(os.delivery_date)}</span>` : ""}
 					${_ib_status_pill(os.priority || "Normal", "sm")}
 					${_ib_status_pill(os.status, "sm")}
+					${dn_btn}
 				</div>
 			</div>`;
 
@@ -2698,6 +2809,41 @@ class IBProductionStages {
 		$c.on("click", "#ib-os-back", () => {
 			this.current_os = null;
 			this._load_order_sheets();
+		});
+
+		$c.on("click", ".ib-os-create-dn", (e) => {
+			const $btn = $(e.currentTarget);
+			if ($btn.prop("disabled")) return;
+			$btn.prop("disabled", true);
+			this._create_dn_for_order($btn.data("so"), $btn);
+		});
+	}
+
+	// Whole-order Delivery Note — no item_code/order_sheet_item passed, which
+	// custom_make_delivery_note() documents as "keeps the existing whole-order
+	// behavior used by the SO form's own Create > Delivery Note button". Only
+	// reachable once IB Order Sheet.status is Completed (every item, every
+	// stage), so there's nothing left to scope out — unlike the WO panel's
+	// per-item button, which exists to let one item ship before its siblings
+	// finish, this one only appears once there's no siblings left to wait on.
+	_create_dn_for_order(sales_order, $btn) {
+		if (!sales_order) {
+			frappe.show_alert({ message: "No Sales Order linked to this order.", indicator: "red" });
+			return;
+		}
+		frappe.call({
+			method: "instabiz.overrides.sales_order.custom_make_delivery_note",
+			args: { source_name: sales_order },
+			callback: (r) => {
+				if (!r.message) {
+					frappe.show_alert({ message: "Failed to create Delivery Note.", indicator: "red" });
+					if ($btn) $btn.prop("disabled", false);
+					return;
+				}
+				frappe.model.sync(r.message);
+				frappe.set_route("Form", r.message.doctype, r.message.name);
+			},
+			error: () => { if ($btn) $btn.prop("disabled", false); },
 		});
 	}
 
@@ -2756,9 +2902,15 @@ class IBProductionStages {
 				const title = `${wo.stage || ""}: ${wo.name || ""} — ${wo.status || ""} `
 					+ `(${wo.completed_qty || 0}/${wo.target_qty || 0}) — Created: ${created}`;
 				const cancelled_cls = wo.status === "Cancelled" ? " ib-ps-wo-chip--cancelled" : "";
-				return `<span class="ib-ps-wo-chip indicator-pill ib-ps-pill-sm ${_ib_status_color(wo.status)}${cancelled_cls}"
-					data-woid="${frappe.utils.escape_html(wo.name)}"
-					title="${frappe.utils.escape_html(title)}">${abbr}</span>`;
+				const cb = this._wo_mass_selectable(wo.status)
+					? `<input type="checkbox" class="ib-mass-select-cb" data-wo="${frappe.utils.escape_html(wo.name)}" ${this._selected_wos.has(wo.name) ? "checked" : ""} style="width:11px;height:11px;margin:0">`
+					: `<input type="checkbox" class="ib-mass-select-cb" disabled title="${wo.status} — not eligible for Start / Next Stage" style="width:11px;height:11px;margin:0">`;
+				return `<span class="ib-ps-wo-chip-pair" style="display:inline-flex;align-items:center;gap:1px">
+					${cb}
+					<span class="ib-ps-wo-chip indicator-pill ib-ps-pill-sm ${_ib_status_color(wo.status)}${cancelled_cls}"
+						data-woid="${frappe.utils.escape_html(wo.name)}"
+						title="${frappe.utils.escape_html(title)}">${abbr}</span>
+				</span>`;
 			}).join("");
 
 			const wo_cell = wos.length
@@ -2787,6 +2939,7 @@ class IBProductionStages {
 		}).join("");
 
 		$body.html(`
+			${this._mass_bar_html()}
 			<div class="ib-ps-table-wrap">
 				<table class="ib-ps-table">
 					<thead><tr><th>Item Code</th><th>Item Name</th><th>Qty</th><th>Progress</th><th>Work Orders</th></tr></thead>
@@ -2799,6 +2952,7 @@ class IBProductionStages {
 			const wo = this._wo_data.get(woid);
 			if (wo) this._open_wo_panel(wo, IB_STAGES.find(s => s.label === wo.stage)?.key || "");
 		});
+		this._wire_mass_bar($body);
 	}
 
 	_render_os_product_wise($body, detail) {
@@ -3103,6 +3257,7 @@ class IBProductionStages {
 				const meta = `${wo.item_name || "—"} · ${wo.customer_name || "—"}`;
 				return `<div class="ib-mw-wo-row" data-woid="${frappe.utils.escape_html(wo.name)}">
 					<div class="ib-mw-wo-row-top">
+						<span style="margin-right:2px">${this._mass_select_cb_html(wo.name, wo.status)}</span>
 						<span class="ib-mw-stage-chip" style="background:${color}18;color:${color}" title="${frappe.utils.escape_html(wo.stage || "")}">${stage_abbr}</span>
 						<span class="ib-mw-wo-item-cell" title="${frappe.utils.escape_html(wo.item_code || "")}">${frappe.utils.escape_html(wo.item_code || "")}</span>
 						${_ib_status_pill(wo.status, "sm")}
@@ -3146,7 +3301,7 @@ class IBProductionStages {
 				</div>`;
 		}).join("");
 
-		$c.html(toolbar + `<div class="ib-mw-grid">${cards}</div>`);
+		$c.html(this._mass_bar_html() + toolbar + `<div class="ib-mw-grid">${cards}</div>`);
 
 		// $c (#ib-ps-content) persists across refresh() calls (realtime floor
 		// updates, tab re-switch, Refresh button) — unbind before rebinding,
@@ -3163,6 +3318,7 @@ class IBProductionStages {
 			const wo = this._wo_data.get(woid);
 			if (wo) this._open_wo_panel(wo, IB_STAGES.find((s) => s.label === wo.stage)?.key || "");
 		});
+		this._wire_mass_bar($c);
 	}
 
 	_show_machine_dialog(machine) {
@@ -3233,6 +3389,199 @@ class IBProductionStages {
 	}
 
 	// -----------------------------------------------------------------------
+	// Mass select — checkbox + bulk Start / Next Stage, shared across every
+	// WO-row view (Stage-wise, Item-wise detail, Machine-wise, Order-wise
+	// chips, Job Bundles). One selection Set + one bulk RPC
+	// (instabiz.overrides.production.bulk_wo_action) reused everywhere —
+	// each tab only needs to render a checkbox per row/chip and call
+	// _toggle_wo_select() + _mass_bar_html()/_wire_mass_bar().
+	// -----------------------------------------------------------------------
+	// Completed/Cancelled WOs are a dead end for both actions (Start requires
+	// Pending/On Hold, Next Stage requires In Progress) — never render them as
+	// selectable, so a finished stage can't be checked in the first place
+	// instead of relying on the backend to reject it after the fact.
+	_wo_mass_selectable(status) {
+		return status !== "Completed" && status !== "Cancelled";
+	}
+
+	// Renders either a live checkbox or a disabled placeholder, keeping table
+	// column counts identical either way.
+	_mass_select_cb_html(wo_name, status) {
+		if (!this._wo_mass_selectable(status)) {
+			return `<input type="checkbox" class="ib-mass-select-cb" disabled title="${status} — not eligible for Start / Next Stage">`;
+		}
+		const checked = this._selected_wos.has(wo_name) ? "checked" : "";
+		return `<input type="checkbox" class="ib-mass-select-cb" data-wo="${frappe.utils.escape_html(wo_name)}" ${checked}>`;
+	}
+
+	_toggle_wo_select(wo_name, checked) {
+		if (checked) this._selected_wos.add(wo_name);
+		else this._selected_wos.delete(wo_name);
+	}
+
+	// Splits the current selection by what action actually applies to each
+	// WO's real status — Pending/On Hold -> Start, In Progress -> Next Stage
+	// (which the backend already treats as "Finish" when it's the WO's last
+	// stage, same as the single-row panel's own Complete/Next-Stage split).
+	// Completed/Cancelled entries can't reach here in practice (checkbox is
+	// disabled for them — see _wo_mass_selectable), but are simply excluded
+	// from both groups if a stale one ever does.
+	_classify_selection() {
+		const start = [];
+		const next_stage = [];
+		let all_next_are_last_stage = true;
+		for (const name of this._selected_wos) {
+			const wo = this._wo_data.get(name);
+			const status = wo ? wo.status : null;
+			if (status === "Pending" || status === "On Hold") {
+				start.push(name);
+			} else if (status === "In Progress") {
+				next_stage.push(name);
+				if (!wo || wo.stage !== "Ready to Deliver") all_next_are_last_stage = false;
+			}
+		}
+		return { start, next_stage, all_next_are_last_stage };
+	}
+
+	_mass_bar_html() {
+		const n = this._selected_wos.size;
+		if (!n) return "";
+		const { start, next_stage, all_next_are_last_stage } = this._classify_selection();
+		let label, hint = "";
+		if (start.length && next_stage.length) {
+			label = `Process Selected (${start.length + next_stage.length})`;
+			hint = ` — ${start.length} will Start, ${next_stage.length} will ${all_next_are_last_stage ? "Finish" : "move to Next Stage"}`;
+		} else if (start.length) {
+			label = `Start Selected (${start.length})`;
+		} else if (next_stage.length) {
+			label = all_next_are_last_stage ? `Finish Selected (${next_stage.length})` : `Next Stage Selected (${next_stage.length})`;
+		} else {
+			label = "Nothing eligible";
+		}
+		return `
+			<div class="ib-mass-bar" id="ib-mass-bar">
+				<span class="ib-mass-bar-count">${n} Work Order${n > 1 ? "s" : ""} selected<span style="opacity:.85;font-weight:400">${hint}</span></span>
+				<button type="button" class="btn btn-default btn-xs" id="ib-mass-clear">Clear</button>
+				<span style="margin-left:auto">
+					<button type="button" class="btn btn-primary btn-xs" id="ib-mass-go" ${(start.length + next_stage.length) === 0 ? "disabled" : ""}>${label}</button>
+				</span>
+			</div>`;
+	}
+
+	// Bind once per render onto the tab's own content root ($c/$body) — caller
+	// must have already put _mass_bar_html()'s markup somewhere in that scope.
+	_wire_mass_bar($scope) {
+		$scope.off("click", "#ib-mass-clear").on("click", "#ib-mass-clear", () => {
+			this._selected_wos.clear();
+			this._refresh_active_tab();
+		});
+		$scope.off("click", "#ib-mass-go").on("click", "#ib-mass-go", () => this._run_smart_bulk_action());
+		$scope.off("click", ".ib-mass-select-cb").on("click", ".ib-mass-select-cb", (e) => {
+			e.stopPropagation();
+			const $cb = $(e.currentTarget);
+			this._toggle_wo_select($cb.data("wo"), $cb.prop("checked"));
+			// Re-render just the bar in place — avoids tearing down and losing
+			// scroll position / open state for a change that only affects the
+			// selection count.
+			const $bar = $scope.find("#ib-mass-bar");
+			if (this._selected_wos.size) {
+				if ($bar.length) $bar.replaceWith(this._mass_bar_html());
+				else $scope.prepend(this._mass_bar_html());
+				this._wire_mass_bar($scope);
+			} else {
+				$bar.remove();
+			}
+		});
+	}
+
+	_refresh_active_tab() {
+		if (this.active_tab === "stage_wise") this._render_stage_wise();
+		else if (this.active_tab === "item_wise") this._render_item_wise();
+		else if (this.active_tab === "machine_wise") this._render_machine_wise(this.machines_cache || []);
+		else if (this.active_tab === "job_bundles") this._load_job_bundles();
+		else if (this.active_tab === "order_wise" && this.current_os) this._load_os_detail(this.current_os);
+	}
+
+	// One RPC per action group (bulk_wo_action takes a single action for its
+	// whole list), resolved as a promise so _run_smart_bulk_action can fire
+	// the Start batch and the Next-Stage batch together and merge results —
+	// never asks the user to pick the "right" button, since a mixed
+	// selection legitimately needs both actions applied to different rows.
+	_bulk_call(action, wos) {
+		return new Promise((resolve) => {
+			frappe.call({
+				method: "instabiz.overrides.production.bulk_wo_action",
+				args: { work_orders: wos, action },
+				callback: (r) => resolve(r.message || { succeeded: [], failed: [] }),
+				error: () => resolve({
+					succeeded: [],
+					failed: wos.map((w) => ({ work_order: w, error: "Request failed" })),
+				}),
+			});
+		});
+	}
+
+	_run_smart_bulk_action() {
+		// Defense in depth beyond the disabled checkbox: if a selected WO's
+		// status flipped to Completed/Cancelled since it was checked (another
+		// user advanced it, or a stale selection survived a tab switch), drop
+		// it here rather than sending it to the backend at all.
+		for (const name of Array.from(this._selected_wos)) {
+			const wo = this._wo_data.get(name);
+			if (wo && !this._wo_mass_selectable(wo.status)) this._selected_wos.delete(name);
+		}
+		const { start, next_stage } = this._classify_selection();
+		const total = start.length + next_stage.length;
+		if (!total) {
+			frappe.show_alert({ message: "Nothing eligible left in the selection.", indicator: "orange" });
+			this._selected_wos.clear();
+			this._refresh_active_tab();
+			return;
+		}
+		const parts = [];
+		if (start.length) parts.push(`${start.length} will Start`);
+		if (next_stage.length) parts.push(`${next_stage.length} will advance (Next Stage / Finish)`);
+		frappe.confirm(
+			`Process ${total} selected Work Order${total > 1 ? "s" : ""}? ${parts.join(", ")}. Anything not actually eligible when this runs will be skipped and reported.`,
+			() => {
+				frappe.dom.freeze(`Processing ${total} Work Order${total > 1 ? "s" : ""}…`);
+				const calls = [];
+				if (start.length) calls.push(this._bulk_call("start", start));
+				if (next_stage.length) calls.push(this._bulk_call("next_stage", next_stage));
+				Promise.all(calls).then((results) => {
+					frappe.dom.unfreeze();
+					const merged = { succeeded: [], failed: [] };
+					results.forEach((res) => {
+						merged.succeeded.push(...(res.succeeded || []));
+						merged.failed.push(...(res.failed || []));
+					});
+					this._selected_wos.clear();
+					this._show_bulk_result("Process Selected", merged);
+					this._refresh_active_tab();
+				});
+			}
+		);
+	}
+
+	_show_bulk_result(label, res) {
+		const ok = (res.succeeded || []).length;
+		const fail = res.failed || [];
+		let message = `<b>${ok}</b> succeeded`;
+		if (fail.length) {
+			message += `, <b>${fail.length}</b> failed:</div><ul style="margin:6px 0 0;padding-left:18px">`
+				+ fail.map((f) => `<li><code>${frappe.utils.escape_html(f.work_order)}</code> — ${frappe.utils.escape_html(f.error || "")}</li>`).join("")
+				+ `</ul>`;
+		} else {
+			message += ".";
+		}
+		frappe.msgprint({
+			title: `${label} Selected — Result`,
+			message,
+			indicator: fail.length ? "orange" : "green",
+		});
+	}
+
+	// -----------------------------------------------------------------------
 	// WO Side Panel
 	// -----------------------------------------------------------------------
 	_open_wo_panel(wo, stage_key) {
@@ -3242,8 +3591,6 @@ class IBProductionStages {
 		$backdrop.show();
 		$panel.show().addClass("ib-ps-side-panel--open");
 		this._render_wo_panel(wo, stage_key);
-		// Fetch entries immediately so panel shows history without waiting for user action
-		this._reload_wo_entries(wo, stage_key);
 	}
 
 	_close_side_panel() {
@@ -3292,11 +3639,18 @@ class IBProductionStages {
 		// Progress, not just In Progress as the old single hold_btn assumed);
 		// Adjust Qty / Move Stage keep their existing conditions.
 		const can_hold = wo.status === "Pending" || wo.status === "In Progress";
-		const can_move = wo.status !== "Completed";
+		const can_move = wo.status !== "Completed" && wo.status !== "Cancelled";
+		// Adjust Qty is wastage/efficiency planning for work not yet done —
+		// meaningless (and, backend-enforced as of 2026-08-11, blocked) once
+		// the WO is Completed/Cancelled, which also covers Delivered (a
+		// Delivered WO is always status=Completed — see mark_wos_delivered).
+		// Was previously gated only on target_uom, letting the option appear
+		// for a WO that had already shipped.
+		const can_adjust_qty = wo.status !== "Completed" && wo.status !== "Cancelled";
 		const menu_items = [
 			can_hold ? `<a class="dropdown-item" href="#" id="ib-wo-hold"><iconify-icon icon="lucide:pause" width="12" height="12" style="vertical-align:middle;margin-right:6px"></iconify-icon>Put On Hold</a>` : "",
 			`<a class="dropdown-item" href="#" id="ib-wo-print-job-order"><iconify-icon icon="lucide:printer" width="12" height="12" style="vertical-align:middle;margin-right:6px"></iconify-icon>Print Job Order</a>`,
-			(wo.target_uom === "PCS" || wo.target_uom === "SQMT")
+			(can_adjust_qty && (wo.target_uom === "PCS" || wo.target_uom === "SQMT"))
 				? `<a class="dropdown-item" href="#" id="ib-wo-adjust-qty"><iconify-icon icon="lucide:sliders-horizontal" width="12" height="12" style="vertical-align:middle;margin-right:6px"></iconify-icon>Adjust Qty</a>`
 				: "",
 			can_move ? `<a class="dropdown-item" href="#" id="ib-wo-move-toggle" title="Escape hatch for out-of-sequence corrections only"><iconify-icon icon="lucide:move-right" width="12" height="12" style="vertical-align:middle;margin-right:6px"></iconify-icon>Move to Different Stage</a>` : "",
@@ -3370,10 +3724,32 @@ class IBProductionStages {
 		// each leaving its own live click handler behind.
 		$panel.off("click");
 		$panel.on("click", "#ib-panel-close", () => this._close_side_panel());
+		// Every state-transition button below shares one guard: disable
+		// immediately on click, before the RPC round-trip, so a fast
+		// double-click (or a slow network) can't fire the same transition
+		// twice while the panel is still showing the pre-click state. The
+		// panel re-renders with a fresh button (a different id, since the
+		// primary button changes per status — see _render_wo_panel) once the
+		// call lands, so there's nothing to explicitly re-enable on success;
+		// only re-enable on failure, same as the Create Delivery Note guard
+		// this pattern was lifted from.
+		const guarded = (selector, fn) => {
+			$panel.on("click", selector, (e) => {
+				const $btn = $(e.currentTarget);
+				if ($btn.prop("disabled")) return;
+				$btn.prop("disabled", true);
+				fn($btn);
+			});
+		};
+		// Assign Machine only opens a picker dialog here — the real RPC (and
+		// its own guard) fires later from the dialog's primary action, so this
+		// one is deliberately NOT wrapped: disabling it now with nothing to
+		// re-enable it if the dialog is cancelled would strand the button.
 		$panel.on("click", "#ib-wo-assign-machine", () => this._assign_machine_to_wo(wo, stage_key));
-		$panel.on("click", "#ib-wo-start", () => this._update_wo_status(wo, "In Progress", stage_key));
-		$panel.on("click", "#ib-wo-hold", (e) => { e.preventDefault(); this._update_wo_status(wo, "On Hold", stage_key); });
-		$panel.on("click", "#ib-wo-advance", () => this._advance_wo(wo, stage_key));
+		guarded("#ib-wo-start", () => this._update_wo_status(wo, "In Progress", stage_key));
+		guarded("#ib-wo-hold", () => this._update_wo_status(wo, "On Hold", stage_key));
+		guarded("#ib-wo-advance", () => this._advance_wo(wo, stage_key));
+		guarded("#ib-wo-complete", () => this._update_wo_status(wo, "Completed", stage_key));
 		$panel.on("click", "#ib-wo-create-dn", (e) => {
 			// Belt-and-braces guard against any future double-bind: disable
 			// immediately so a second click (or a stray duplicate handler)
@@ -3391,7 +3767,6 @@ class IBProductionStages {
 			e.preventDefault();
 			$panel.find("#ib-wo-move-row").toggle();
 		});
-		$panel.on("click", "#ib-wo-complete", () => this._update_wo_status(wo, "Completed", stage_key));
 		$panel.on("click", "#ib-wo-print-job-order", (e) => { e.preventDefault(); this._print_job_order(wo); });
 		$panel.on("click", "#ib-wo-adjust-qty", (e) => { e.preventDefault(); this._show_adjust_qty_dialog(wo, stage_key); });
 
@@ -3576,6 +3951,12 @@ class IBProductionStages {
 		});
 	}
 
+	// Undoes the click-guard's disable when an RPC fails and the panel isn't
+	// re-rendering (so there's no fresh, enabled button coming to replace it).
+	_reenable_panel_buttons() {
+		this.$body.find("#ib-ps-side-panel .ib-ps-panel-primary, #ib-ps-side-panel #ib-wo-hold").prop("disabled", false);
+	}
+
 	_update_wo_status(wo, new_status, stage_key) {
 		const method_map = {
 			"In Progress": "instabiz.overrides.production.start_work_order",
@@ -3590,6 +3971,10 @@ class IBProductionStages {
 			callback: (r) => {
 				if (r.exc) {
 					frappe.show_alert({ message: `Failed to set status to ${new_status}.`, indicator: "red" });
+					// Panel isn't re-rendering on failure (still showing the
+					// pre-click state), so the click guard's disabled button
+					// has to be explicitly freed here or it'd be stuck forever.
+					this._reenable_panel_buttons();
 					return;
 				}
 				frappe.show_alert({ message: `Status updated to ${new_status}.`, indicator: "green" });
@@ -3619,6 +4004,7 @@ class IBProductionStages {
 			callback: (r) => {
 				if (r.exc || !r.message || r.message.status !== "ok") {
 					frappe.show_alert({ message: r.message?.message || "Failed to advance.", indicator: "red" });
+					this._reenable_panel_buttons();
 					return;
 				}
 				frappe.show_alert({ message: r.message.message || "Advanced.", indicator: "green" }, 3);
@@ -3821,8 +4207,6 @@ class IBProductionStages {
 									});
 								}
 								d.hide();
-								// Reload WO entries
-								this._reload_wo_entries(wo, stage_key);
 							},
 						});
 					},
@@ -3855,18 +4239,6 @@ class IBProductionStages {
 		});
 	}
 
-	_reload_wo_entries(wo, stage_key) {
-		frappe.call({
-			method: "instabiz.overrides.production.get_wo_entries",
-			args: { work_order: wo.name },
-			callback: (r) => {
-				if (r.message) {
-					wo.entries = r.message;
-					this._render_wo_panel(wo, stage_key);
-				}
-			},
-		});
-	}
 
 	// -----------------------------------------------------------------------
 	// TAB 5 — Job Bundles
@@ -3942,6 +4314,7 @@ class IBProductionStages {
 				this._wo_data.set(wo.name, { ...wo, stage: bundle.stage, status: "Pending" });
 				return `
 				<tr class="ib-ps-wo-sub-item--clickable" data-woid="${frappe.utils.escape_html(wo.name)}" title="Click to open this Work Order">
+					<td style="padding:4px 8px;width:20px">${this._mass_select_cb_html(wo.name, "Pending")}</td>
 					<td style="padding:4px 8px;font-size:11px;font-family:monospace">${frappe.utils.escape_html(wo.name)}</td>
 					<td style="padding:4px 8px;font-size:11px">${frappe.utils.escape_html(wo.sales_order || "")}</td>
 					<td style="padding:4px 8px;font-size:11px">${frappe.utils.escape_html(wo.customer_name || "")}</td>
@@ -4015,6 +4388,7 @@ class IBProductionStages {
 				<div class="ib-ps-bundle-body" data-bundle="${frappe.utils.escape_html(bundleKey)}" style="display:none;overflow-x:auto">
 					<table class="table table-bordered">
 						<thead><tr style="border-bottom:1px solid var(--border-color)">
+							<th style="padding:5px 8px;width:20px"></th>
 							<th style="padding:5px 8px;text-align:left;font-size:10px;font-weight:700;
 								text-transform:uppercase;color:var(--text-muted)">Work Order</th>
 							<th style="padding:5px 8px;text-align:left;font-size:10px;font-weight:700;
@@ -4048,10 +4422,12 @@ class IBProductionStages {
 		$c.html(`
 			<div style="padding:16px">
 				${this._bundle_search_bar_html()}
+				${this._mass_bar_html()}
 				<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">
 					${bundles.length} bundle${bundles.length!==1?"s":""} found
 					(showing ${start + 1}-${start + pageBundles.length}).
-					Select "Batch Assign" to assign all WOs in a bundle to the same machine in one click.
+					Select "Batch Assign" to assign all WOs in a bundle to the same machine in one click,
+					or check individual WOs and mass Start / Next Stage from the bar above.
 				</div>
 				${cards}
 				${pager}
@@ -4093,6 +4469,7 @@ class IBProductionStages {
 			this._render_job_bundles(null, this._job_bundle_page + 1);
 		});
 		this._bind_bundle_search($c);
+		this._wire_mass_bar($c);
 	}
 
 	_show_batch_assign_dialog(woList, suggestedMachine, $btn) {
@@ -4187,6 +4564,46 @@ class IBProductionStages {
 	background: rgba(0,0,0,0.08); vertical-align: middle;
 }
 .ib-ps-tab.active .ib-ps-tab-badge { background: rgba(255,255,255,0.25); }
+.ib-mass-bar {
+	position: sticky; top: 0; z-index: 5;
+	display: flex; align-items: center; gap: 10px;
+	background: linear-gradient(135deg, var(--ib-primary), color-mix(in srgb, var(--ib-primary) 82%, #000));
+	color: #fff;
+	border-radius: 10px; padding: 9px 14px; margin-bottom: 12px;
+	font-size: 12px;
+	box-shadow: 0 2px 10px rgba(0,0,0,.14);
+	animation: ib-mass-bar-in .16s ease-out;
+}
+@keyframes ib-mass-bar-in {
+	from { opacity: 0; transform: translateY(-4px); }
+	to   { opacity: 1; transform: translateY(0); }
+}
+.ib-mass-bar-count {
+	font-weight: 700; display: inline-flex; align-items: center; gap: 6px;
+}
+.ib-mass-bar-count::before {
+	content: ""; width: 6px; height: 6px; border-radius: 50%;
+	background: #fff; display: inline-block; opacity: .85;
+}
+.ib-mass-bar .btn {
+	border-radius: 6px; font-size: 12px; font-weight: 600;
+	padding: 4px 12px; transition: background .12s, transform .1s, box-shadow .12s;
+}
+.ib-mass-bar .btn:active { transform: translateY(1px); }
+.ib-mass-bar .btn-default {
+	background: rgba(255,255,255,0.14); color: #fff; border: 1px solid rgba(255,255,255,0.25);
+}
+.ib-mass-bar .btn-default:hover { background: rgba(255,255,255,0.24); }
+.ib-mass-bar .btn-primary {
+	background: #fff; color: var(--ib-primary); border: none;
+	box-shadow: 0 1px 3px rgba(0,0,0,.15);
+}
+.ib-mass-bar .btn-primary:hover { background: rgba(255,255,255,0.92); box-shadow: 0 2px 6px rgba(0,0,0,.2); }
+.ib-mass-select-cb {
+	width: 15px; height: 15px; margin: 0; cursor: pointer;
+	accent-color: var(--ib-primary); vertical-align: middle;
+}
+.ib-mass-select-cb:disabled { cursor: not-allowed; opacity: .35; }
 .ib-sw-pills { display: flex; gap: 6px; flex-wrap: wrap; }
 .ib-ps-refresh-btn {
 	margin-left: auto;
