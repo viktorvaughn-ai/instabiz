@@ -940,7 +940,15 @@ def remove_all_pending(user, date=None):
 def sync_team_leader_role(doc, method=None):
 	"""Grant 'Team Leader' role to the new team_leader; revoke from the old one if changed."""
 	new_leader = (doc.team_leader or "").strip() or None
-	old_leader = (frappe.db.get_value("Lead Sales Team", doc.name, "team_leader") or "").strip() or None
+	# after_save fires once the DB row already holds the NEW value — a plain
+	# get_value() here would just read back new_leader again, making
+	# old_leader always equal new_leader and permanently disabling the
+	# revoke-from-old-leader branch below. get_doc_before_save() is captured
+	# earlier in the save cycle and still holds the real pre-save value —
+	# same pattern already used in employee_drive.py's rename detection.
+	before = doc.get_doc_before_save()
+	old_leader = (before.team_leader if before else None) or None
+	old_leader = old_leader.strip() if old_leader else None
 
 	# Revoke from old leader if they're no longer leading any team
 	if old_leader and old_leader != new_leader:
@@ -953,12 +961,29 @@ def sync_team_leader_role(doc, method=None):
 
 
 def _set_role(user, role, grant=True):
-	"""Add or remove a role for a user."""
-	has_role = frappe.db.exists("Has Role", {"parent": user, "role": role, "parenttype": "User"})
-	if grant and not has_role:
-		frappe.get_doc("User", user).add_roles(role)
-	elif not grant and has_role:
-		frappe.get_doc("User", user).remove_roles(role)
+	"""Add or remove a role for a user.
+
+	Deliberately bypasses User.add_roles()/remove_roles() (and therefore
+	doc.save()): for any user with role_profile_name set, User.validate() ->
+	populate_role_profile_roles() wipes self.roles and repopulates it ONLY
+	from the linked Role Profile on every save, silently dropping a
+	dynamically-granted role like "Team Leader" that isn't part of that
+	profile (same class of bug already hit for "Raven User" — see CLAUDE.md).
+	Writing the Has Role child row directly, then invalidating Frappe's own
+	roles cache, survives that resync.
+	"""
+	existing = frappe.db.exists("Has Role", {"parent": user, "role": role, "parenttype": "User"})
+	if grant and not existing:
+		frappe.get_doc({
+			"doctype": "Has Role",
+			"parent": user,
+			"parenttype": "User",
+			"parentfield": "roles",
+			"role": role,
+		}).insert(ignore_permissions=True)
+	elif not grant and existing:
+		frappe.delete_doc("Has Role", existing, ignore_permissions=True, force=True)
+	frappe.cache.hdel("roles", user)
 
 
 # ── Whitelisted: admin-facing ─────────────────────────────────────────────────
@@ -1255,7 +1280,35 @@ def get_team_details(team_name):
 		full_name = m.full_name or frappe.db.get_value("User", m.user, "full_name") or m.user
 		members.append({"user": m.user, "full_name": full_name})
 	territories = [{"territory": t.territory} for t in doc.territories]
-	return {"name": doc.name, "members": members, "territories": territories}
+	team_leader_name = frappe.db.get_value("User", doc.team_leader, "full_name") if doc.team_leader else None
+	return {
+		"name": doc.name,
+		"members": members,
+		"territories": territories,
+		"team_leader": doc.team_leader,
+		"team_leader_name": team_leader_name,
+	}
+
+
+@frappe.whitelist()
+def update_team_leader(team_name, team_leader=None):
+	"""Set/clear the team's leader — fires Lead Sales Team.after_save
+	(sync_team_leader_role) so the 'Team Leader' role grant/revoke and the
+	Team Overview roster's TL badge both follow. Leader must be a real
+	member of the team, or blank to clear leadership entirely — matches the
+	real-world rule "you lead the team you're actually on"; setting an
+	outsider as leader would show a TL badge for someone the roster never
+	displays under this team at all.
+	"""
+	_require_manager()
+	team_leader = (team_leader or "").strip() or None
+	doc = frappe.get_doc("Lead Sales Team", team_name)
+	if team_leader and not any(m.user == team_leader for m in doc.members):
+		frappe.throw(_(f"{team_leader} must be a member of {team_name} before becoming its leader."))
+	doc.team_leader = team_leader
+	doc.save()
+	frappe.db.commit()
+	return {"status": "ok"}
 
 
 @frappe.whitelist()

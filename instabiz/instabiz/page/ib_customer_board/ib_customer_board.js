@@ -2036,6 +2036,41 @@ class IBAssignmentAdmin {
 		self._load_team_modal(d, $body, team_name);
 	}
 
+	// Every mutation inside the Manage Team dialog (member/territory add or
+	// remove, team leader change) needs BOTH: the dialog's own body re-drawn
+	// (so the person editing sees their change), AND the Team Overview
+	// section behind the dialog re-fetched + re-rendered (so the team card's
+	// member avatars, territory badges, and TL crown all reflect it too,
+	// without needing a full page reload). The dialog reload alone was the
+	// only thing every mutation guaranteed before this fix — Team Overview
+	// only got refreshed by the member handlers, never the territory ones,
+	// which read as "the change didn't save" even though it always had.
+	_refresh_roster_and_reload_modal(d, $body, team_name) {
+		const self = this;
+		frappe.call({
+			method: "instabiz.overrides.customer_assignment.get_admin_overview",
+			args: { date: self._date, territory: self._territory },
+			callback(rr) {
+				if (rr.message) self._render_roster(rr.message.roster, rr.message.team_territories || {});
+				self._load_team_modal(d, $body, team_name);
+			},
+			error(r) { self._load_team_modal(d, $body, team_name); self._show_team_modal_error(r); },
+		});
+	}
+
+	// Every save/remove action in this dialog previously reverted its button
+	// silently on failure (frappe.throw'd errors — e.g. "already a member of
+	// another team" race, or a permission error) with no visible feedback at
+	// all, which is exactly what "the feature doesn't work" looks like from
+	// the outside even when the only real problem was a transient/expected
+	// rejection. Surface it.
+	_show_team_modal_error(r) {
+		const msg = (r && r._server_messages && (() => {
+			try { return JSON.parse(JSON.parse(r._server_messages)[0]).message; } catch (e) { return null; }
+		})()) || (r && r.message) || __("Something went wrong. Please try again.");
+		frappe.msgprint({ title: __("Couldn't save"), message: msg, indicator: "red" });
+	}
+
 	_load_team_modal(d, $body, team_name) {
 		const self = this;
 		$body.html('<div class="ib-tm-loading">Loading…</div>');
@@ -2146,7 +2181,26 @@ class IBAssignmentAdmin {
 			</div>`;
 		}).join("") || `<div class="ib-tm-empty">All territories already assigned</div>`;
 
+		// Team Leader — must be a current member (backend enforces this too);
+		// options list is built fresh from team.members every render, so a
+		// member removed a moment ago can't linger as a selectable leader.
+		const TL_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><polygon points="12,1 13.6,6.2 17.5,2.5 16.2,7.8 21.5,6.5 17.8,10.5 23,12 17.8,13.6 21.5,17.5 16.2,16.2 17.5,21.5 13.6,17.8 12,23 10.4,17.8 6.5,21.5 7.8,16.2 2.5,17.5 6.2,13.6 1,12 6.2,10.4 2.5,6.5 7.8,7.8 6.5,2.5 10.4,6.2" fill="#f59e0b"/></svg>`;
+		const leader_options = [`<option value="">— No leader —</option>`]
+			.concat(team.members.map(m =>
+				`<option value="${frappe.utils.escape_html(m.user)}"${m.user === team.team_leader ? " selected" : ""}>${frappe.utils.escape_html(m.full_name || m.user)}</option>`
+			)).join("");
+		const leader_html = `
+			<div class="ib-tm-leader-row">
+				<div class="ib-tm-leader-label">${TL_SVG} <span>Team Leader</span></div>
+				<select class="ib-tm-leader-select form-control" id="ib-tm-leader-select" ${team.members.length ? "" : "disabled"}>
+					${leader_options}
+				</select>
+				<button class="btn btn-default btn-xs" id="ib-tm-leader-save" disabled>Save</button>
+				${!team.members.length ? `<span class="ib-tm-leader-hint">Add a member first</span>` : ""}
+			</div>`;
+
 		$body.html(`
+			${leader_html}
 			<div class="ib-tm-cols">
 
 				<!-- ── Members column ── -->
@@ -2177,6 +2231,34 @@ class IBAssignmentAdmin {
 
 			</div>
 		`);
+
+		// Team Leader — enable Save only once the picker actually differs
+		// from what's saved, so a no-op click can't fire a pointless request.
+		const $leaderSelect = $body.find("#ib-tm-leader-select");
+		const $leaderSave = $body.find("#ib-tm-leader-save");
+		$leaderSelect.on("change", function() {
+			$leaderSave.prop("disabled", this.value === (team.team_leader || ""));
+		});
+		$leaderSave.on("click", function() {
+			const team_leader = $leaderSelect.val() || null;
+			const $btn = $(this).prop("disabled", true).text("Saving…");
+			frappe.call({
+				method: "instabiz.overrides.customer_assignment.update_team_leader",
+				args: { team_name, team_leader },
+				callback(r) {
+					if (r.message && r.message.status === "ok") {
+						frappe.show_alert({
+							message: team_leader ? `Team leader set` : `Team leader cleared`,
+							indicator: "green",
+						});
+						self._refresh_roster_and_reload_modal(d, $body, team_name);
+					} else {
+						$btn.prop("disabled", false).text("Save");
+					}
+				},
+				error(r) { $btn.prop("disabled", false).text("Save"); self._show_team_modal_error(r); },
+			});
+		});
 
 		// Member search filter (multi-token: every word must match)
 		$body.find("#ib-tm-member-search").on("input", function() {
@@ -2216,20 +2298,12 @@ class IBAssignmentAdmin {
 				callback(r) {
 					if (r.message && r.message.status === "ok") {
 						frappe.show_alert({ message: `Added to ${team_name}`, indicator: "green" });
-						// Reload roster first so _last_roster has fresh team data before modal re-renders
-						frappe.call({
-							method: "instabiz.overrides.customer_assignment.get_admin_overview",
-							args: { date: self._date, territory: self._territory },
-							callback(rr) {
-								if (rr.message) self._render_roster(rr.message.roster, rr.message.team_territories || {});
-								self._load_team_modal(d, $body, team_name);
-							},
-						});
+						self._refresh_roster_and_reload_modal(d, $body, team_name);
 					} else {
 						$btn.prop("disabled", false).text("+ Add");
 					}
 				},
-				error() { $btn.prop("disabled", false).text("+ Add"); },
+				error(r) { $btn.prop("disabled", false).text("+ Add"); self._show_team_modal_error(r); },
 			});
 		});
 
@@ -2245,19 +2319,12 @@ class IBAssignmentAdmin {
 				callback(r) {
 					if (r.message && r.message.status === "ok") {
 						frappe.show_alert({ message: `Removed from ${team_name}`, indicator: "orange" });
-						frappe.call({
-							method: "instabiz.overrides.customer_assignment.get_admin_overview",
-							args: { date: self._date, territory: self._territory },
-							callback(rr) {
-								if (rr.message) self._render_roster(rr.message.roster, rr.message.team_territories || {});
-								self._load_team_modal(d, $body, team_name);
-							},
-						});
+						self._refresh_roster_and_reload_modal(d, $body, team_name);
 					} else {
 						$btn.prop("disabled", false).text("Remove");
 					}
 				},
-				error() { $btn.prop("disabled", false).text("Remove"); },
+				error(r) { $btn.prop("disabled", false).text("Remove"); self._show_team_modal_error(r); },
 			});
 		});
 
@@ -2271,12 +2338,19 @@ class IBAssignmentAdmin {
 				callback(r) {
 					if (r.message && r.message.status === "ok") {
 						frappe.show_alert({ message: `${territory} removed`, indicator: "orange" });
-						self._load_team_modal(d, $body, team_name);
+						// Was only reloading the dialog itself — the Team Overview
+						// section behind it (territory badges on the team card)
+						// kept showing the pre-change state until a full page
+						// reload. Member add/remove already refreshed both; this
+						// was the one real gap causing "looks reverted after
+						// refresh" (it wasn't actually reverted — the roster
+						// view just never re-rendered with the new data).
+						self._refresh_roster_and_reload_modal(d, $body, team_name);
 					} else {
 						$btn.prop("disabled", false).text("Remove");
 					}
 				},
-				error() { $btn.prop("disabled", false).text("Remove"); },
+				error(r) { $btn.prop("disabled", false).text("Remove"); self._show_team_modal_error(r); },
 			});
 		});
 
@@ -2298,12 +2372,12 @@ class IBAssignmentAdmin {
 				callback(r) {
 					if (r.message && r.message.status === "ok") {
 						frappe.show_alert({ message: `${territory} added`, indicator: "green" });
-						self._load_team_modal(d, $body, team_name);
+						self._refresh_roster_and_reload_modal(d, $body, team_name);
 					} else {
 						$btn.prop("disabled", false).text("+ Add");
 					}
 				},
-				error() { $btn.prop("disabled", false).text("+ Add"); },
+				error(r) { $btn.prop("disabled", false).text("+ Add"); self._show_team_modal_error(r); },
 			});
 		});
 	}
@@ -2980,6 +3054,19 @@ class IBAssignmentAdmin {
 			/* Team manage modal */
 			.ib-tm-body { padding: 4px 0; }
 			.ib-tm-loading { text-align: center; color: var(--text-muted); padding: 20px; font-size: 13px; }
+			.ib-tm-leader-row {
+				display: flex; align-items: center; gap: 10px;
+				padding: 10px 14px; margin-bottom: 14px;
+				border: 1px solid var(--border-color); border-radius: 7px;
+				background: var(--subtle-bg);
+			}
+			.ib-tm-leader-label {
+				display: flex; align-items: center; gap: 6px;
+				font-size: 12px; font-weight: 700; color: var(--text-color);
+				white-space: nowrap;
+			}
+			.ib-tm-leader-select { max-width: 260px; font-size: 12px; }
+			.ib-tm-leader-hint { font-size: 11px; color: var(--text-muted); }
 			.ib-tm-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
 			.ib-tm-col { display: flex; flex-direction: column; min-width: 0; }
 			.ib-tm-col .ib-tm-section { display: flex; flex-direction: column; }

@@ -216,7 +216,9 @@ doc_events = {
         ],
     },
     "Lead Sales Team": {
-        "after_save": "instabiz.overrides.customer_assignment.sync_team_leader_role",
+        # "after_save" is not a real Frappe doc-event (never fired by core) —
+        # this hook silently never ran; "on_update" is the correct post-save event.
+        "on_update": "instabiz.overrides.customer_assignment.sync_team_leader_role",
     },
     "Lead": {
         "before_insert": [

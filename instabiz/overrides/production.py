@@ -1881,53 +1881,6 @@ def assign_machine_to_wo(work_order, machine):
 
 
 @frappe.whitelist()
-def get_jumbo_rolls_available(search=None, limit=20):
-	"""Return In Stock + In Production IB Jumbo Rolls for the picker."""
-	_require_production_role()
-	filters = {"status": ["in", ["In Stock", "In Production"]]}
-	if search:
-		filters["name"] = ["like", f"%{search}%"]
-	return frappe.db.get_all(
-		"IB Jumbo Roll",
-		filters=filters,
-		fields=["name", "batch_no", "supplier", "received_date", "status",
-		        "gsm", "width_mm", "length_mtr", "sqm", "liner_type"],
-		order_by="received_date desc",
-		limit=int(limit),
-	)
-
-
-@frappe.whitelist()
-def link_jumbo_roll_to_wo(work_order, jumbo_roll):
-	"""Link a Jumbo Roll to a Work Order. Updates JR status to In Production."""
-	_require_production_role()
-	# Advisory lock on the roll itself — without it, two concurrent calls can both
-	# pass the "already linked?" check before either write lands, double-linking
-	# the same physical roll to two Work Orders.
-	lock_name = f"IB-JR-{jumbo_roll}"
-	locked = frappe.db.sql("SELECT GET_LOCK(%s, 5)", lock_name)[0][0]
-	if not locked:
-		frappe.throw(_("Could not acquire lock for Jumbo Roll {0}. Please try again.").format(jumbo_roll))
-	try:
-		if not frappe.db.exists("IB Jumbo Roll", jumbo_roll):
-			frappe.throw(_("Jumbo Roll {0} does not exist").format(jumbo_roll))
-		# Prevent the same JR from being linked to multiple active WOs
-		already = frappe.db.get_value(
-			"IB Work Order",
-			{"jumbo_roll": jumbo_roll, "name": ["!=", work_order], "status": ["not in", ["Cancelled"]]},
-			"name",
-		)
-		if already:
-			frappe.throw(_("Jumbo Roll {0} is already linked to Work Order {1}").format(jumbo_roll, already))
-		frappe.db.set_value("IB Work Order", work_order, "jumbo_roll", jumbo_roll)
-		frappe.db.set_value("IB Jumbo Roll", jumbo_roll, "status", "In Production")
-		frappe.db.commit()
-		return {"ok": True}
-	finally:
-		frappe.db.sql("SELECT RELEASE_LOCK(%s)", lock_name)
-
-
-@frappe.whitelist()
 def get_item_wise_view(from_date=None, to_date=None, item_code=None):
 	"""Item-wise production view.
 
@@ -3064,7 +3017,7 @@ def batch_assign_machine(work_orders, machine, batch_group=None):
 	# number of WOs to one machine with no check at all.
 	#
 	# Advisory lock on the machine itself (same pattern as the per-WO locks
-	# elsewhere in this file, e.g. link_jumbo_roll_to_wo's IB-JR-{jumbo_roll}):
+	# elsewhere in this file, e.g. IB-WO-{name}):
 	# without it, two concurrent batch-assign calls to the SAME machine can
 	# both read current_load before either write lands, both pass the
 	# capacity check, and together push the machine over capacity.
