@@ -103,7 +103,14 @@ def get_hrms_data(month=None, att_search=None, att_status=None, leave_search=Non
 
 	# ── Leave applications ────────────────────────────────────────────────────
 	try:
-		conditions = ["la.docstatus=1"]
+		# docstatus IN (0, 1), not just 1: a self-service Leave Application
+		# stays Draft (docstatus=0) with status="Open" while pending approval
+		# (see ib_my_hr.apply_leave / approve_leave/reject_leave below — HRMS's
+		# own Leave Application refuses to be submitted while status="Open").
+		# Filtering to docstatus=1 only would make every such pending request
+		# invisible here, leaving the Approve/Reject buttons with nothing to
+		# ever act on. docstatus=2 (Cancelled) stays excluded.
+		conditions = ["la.docstatus IN (0, 1)"]
 		params = {}
 		if leave_status:
 			conditions.append("la.status = %(leave_status)s")
@@ -332,10 +339,32 @@ def generate_single_slip(employee, month=None, notify=1):
 def approve_leave(leave_id):
 	frappe.only_for(["HR Manager", "System Manager"])
 	doc = frappe.get_doc("Leave Application", leave_id)
-	if doc.status not in ("Open", "Approved"):
-		frappe.throw(f"Cannot approve leave in status '{doc.status}'")
-	# Leave Applications are already submitted (docstatus=1); update status in-place
-	frappe.db.set_value("Leave Application", leave_id, "status", "Approved")
+	# HRMS's Leave Application only creates its Leave Ledger Entry (the actual
+	# balance deduction) inside on_submit() — a raw frappe.db.set_value() on
+	# `status` bypasses Document events entirely (see CLAUDE.md "Frappe /
+	# ERPNext Gotchas"), so the previous version here could mark a leave
+	# "Approved" while never touching the employee's real leave balance.
+	# Confirmed live: this whole self-service apply→approve pipeline had never
+	# processed a single leave end-to-end (see ib_my_hr.apply_leave fix,
+	# same session) — every existing real Leave Application was created via
+	# the native HRMS form instead, which sets status before submit.
+	if doc.docstatus == 0:
+		if doc.status != "Open":
+			frappe.throw(f"Cannot approve leave in status '{doc.status}'")
+		doc.status = "Approved"
+		doc.submit()  # HRMS on_submit(): validates, creates Leave Ledger Entry, notifies employee
+	elif doc.docstatus == 1:
+		# Already submitted — HRMS's own doctype has no post-submit transition
+		# for `status` (permlevel=1, no allow_on_submit), so there is nothing
+		# safe to do here via the framework; a doc reaching this branch is
+		# already in whatever state it was submitted with.
+		if doc.status != "Approved":
+			frappe.throw(
+				f"Leave {leave_id} is already submitted with status '{doc.status}' — "
+				"it cannot be re-approved. Cancel and re-create it if this is wrong."
+			)
+	else:
+		frappe.throw(f"Cannot approve a cancelled leave application ({leave_id}).")
 	frappe.db.commit()
 	return {"status": "ok"}
 
@@ -344,8 +373,18 @@ def approve_leave(leave_id):
 def reject_leave(leave_id):
 	frappe.only_for(["HR Manager", "System Manager"])
 	doc = frappe.get_doc("Leave Application", leave_id)
-	if doc.status not in ("Open", "Approved"):
-		frappe.throw(f"Cannot reject leave in status '{doc.status}'")
-	frappe.db.set_value("Leave Application", leave_id, "status", "Rejected")
+	if doc.docstatus == 0:
+		if doc.status != "Open":
+			frappe.throw(f"Cannot reject leave in status '{doc.status}'")
+		doc.status = "Rejected"
+		doc.submit()  # on_submit() allows Rejected; no ledger entry created for a rejection
+	elif doc.docstatus == 1:
+		if doc.status != "Rejected":
+			frappe.throw(
+				f"Leave {leave_id} is already submitted with status '{doc.status}' — "
+				"it cannot be re-rejected."
+			)
+	else:
+		frappe.throw(f"Cannot reject a cancelled leave application ({leave_id}).")
 	frappe.db.commit()
 	return {"status": "ok"}

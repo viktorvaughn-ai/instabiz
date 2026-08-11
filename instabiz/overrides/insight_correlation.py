@@ -221,11 +221,25 @@ def run_fraud_watch():
 		frappe.log_error("IB Fraud Watch: dup payment", frappe.get_traceback())
 		results["duplicate_payments"] = 0
 
-	try:
-		results["off_market_rates"] = _check_off_market_rates()
-	except Exception:
-		frappe.log_error("IB Fraud Watch: off-market", frappe.get_traceback())
-		results["off_market_rates"] = 0
+	# TEMPORARILY DISABLED 2026-08-11 (user's explicit call): this check
+	# compares each sale against one flat company-wide average price, blind to
+	# this business's own legitimate quantity-tier slab pricing (CLAUDE.md
+	# item 12) and per-customer rate contracts via Pricing Rules (item 17) —
+	# a live test run against 7 days of real data produced 201 false-positive
+	# Critical Insights even after fixing a UOM-blending bug in the average
+	# (was 318 before that fix). Needs a product decision on how to properly
+	# baseline (per-customer? per-qty-tier? exclude rate-contract lines? just
+	# raise _OFF_MARKET_PCT?) before this runs again — see memory
+	# "billing-mode-so-si-toggle-map"-adjacent session notes from 2026-08-11
+	# for the full investigation. duplicate_purchase_invoices/duplicate_payments
+	# are unaffected and still run every night.
+	results["off_market_rates"] = "disabled — see comment above, needs re-baselining before re-enabling"
+
+	# try:
+	# 	results["off_market_rates"] = _check_off_market_rates()
+	# except Exception:
+	# 	frappe.log_error("IB Fraud Watch: off-market", frappe.get_traceback())
+	# 	results["off_market_rates"] = 0
 
 	frappe.db.commit()
 	return results
@@ -384,7 +398,7 @@ def _check_off_market_rates():
 def _scan_off_market_doctype(child_doctype, parent_doctype, since):
 	rows = frappe.db.sql(
 		f"""
-		SELECT ci.name AS row_name, ci.parent AS parent_name, ci.item_code, ci.rate
+		SELECT ci.name AS row_name, ci.parent AS parent_name, ci.item_code, ci.rate, ci.uom
 		FROM `tab{child_doctype}` ci
 		INNER JOIN `tab{parent_doctype}` p ON p.name = ci.parent
 		WHERE p.docstatus = 1 AND p.transaction_date >= %(since)s
@@ -403,9 +417,18 @@ def _scan_off_market_doctype(child_doctype, parent_doctype, since):
 			continue
 
 		item_code = row.item_code
-		if item_code not in avg_cache:
-			avg_cache[item_code] = _recent_avg_rate(item_code)
-		avg = avg_cache[item_code]
+		# Same item can sell in multiple UOMs at very different price scales
+		# (e.g. per-PCS vs per-SQMT — same caveat get_item_uoms()'s own
+		# docstring already documents for this exact data). Blending them
+		# into one flat average compares apples to oranges and was
+		# confirmed live to flood Accounts Manager with false "off-market"
+		# flags (318 in one run against 7 days of real Quotation/SO data,
+		# many just normal cross-UOM price variation, not real anomalies).
+		# Scope the average to the same UOM as the row being checked.
+		cache_key = (item_code, row.uom)
+		if cache_key not in avg_cache:
+			avg_cache[cache_key] = _recent_avg_rate(item_code, uom=row.uom)
+		avg = avg_cache[cache_key]
 		if not avg:
 			continue
 
@@ -435,13 +458,15 @@ def _scan_off_market_doctype(child_doctype, parent_doctype, since):
 	return created
 
 
-def _recent_avg_rate(item_code):
+def _recent_avg_rate(item_code, uom=None):
 	"""Recent average sold rate for an item, via the existing Item Price History
 	lookup. Requires at least _MIN_RATE_SAMPLE priced rows to avoid flagging
-	noise off a brand-new item with barely any sales history.
+	noise off a brand-new item with barely any sales history. Scoped to a
+	single UOM (see caller) since this item's real per-unit price legitimately
+	varies by UOM.
 	"""
 	try:
-		result = get_item_price_history(item_code=item_code, limit=_RATE_HISTORY_LIMIT)
+		result = get_item_price_history(item_code=item_code, uom=uom, limit=_RATE_HISTORY_LIMIT)
 	except Exception:
 		return None
 	data = (result or {}).get("data") or []

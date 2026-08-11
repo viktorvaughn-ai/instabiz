@@ -11,7 +11,10 @@
      see CLAUDE.md item 96/119/120 for why the page-2 header-repeat itself
      is still an open gap (this Frappe version has no Chrome PDF generator
      to fall back on — pdf_generator's only real option is wkhtmltopdf). */
-  .jos-header { text-align: center; margin-bottom: 6px; }
+  /* Negative side-margins matching body's own padding so the letterhead image
+     bleeds truly edge-to-edge (100% of the page) instead of 100% of the
+     10px-inset content area it would otherwise be constrained to. */
+  .jos-header { text-align: center; margin: 0 -10px 6px; }
   .jos-header img { width: 100%; max-height: 36px; object-fit: contain; display: block; margin: 0 auto 4px; }
   .jos-header h2 { margin: 0; font-size: 16px; letter-spacing: 1px; }
 
@@ -97,7 +100,10 @@
         {%- if not st.in_route -%}
         <td class="jos-stage-cell jos-stage-na">&mdash;</td>
         {%- elif st.status == "Completed" -%}
-        <td class="jos-stage-cell jos-stage-done">{{ st.machine or "Done" }}</td>
+        <td class="jos-stage-cell jos-stage-done">
+          <div>{{ st.machine or "Done" }}</div>
+          {%- if st.operator -%}<div class="jos-subnote">{{ st.operator }}</div>{%- endif -%}
+        </td>
         {%- elif st.status == "On Hold" -%}
         <td class="jos-stage-cell jos-stage-hold">{{ st.machine or "" }} (Hold)</td>
         {%- elif st.is_current -%}

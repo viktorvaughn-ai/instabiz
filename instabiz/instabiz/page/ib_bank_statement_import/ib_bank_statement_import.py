@@ -180,25 +180,37 @@ def preview_statement(bank_account, csv_text, profile):
 	}
 
 
-def _find_confident_match(amount, receiving):
+def _find_confident_match(amount, receiving, company=None):
 	"""Exactly one open Sales/Purchase document with this outstanding amount,
-	system-wide — anything less certain (0 or 2+ candidates) is left for manual
-	reconciliation via the native Bank Reconciliation Tool. Respects
-	instabiz.overrides.billing_mode so this matches against Sales/Purchase
-	Order in dev mode (billing isn't live) the same way the rest of the app does.
+	system-wide (scoped to the bank's own company, if given) — anything less
+	certain (0 or 2+ candidates) is left for manual reconciliation via the
+	native Bank Reconciliation Tool. Respects instabiz.overrides.billing_mode
+	so this matches against Sales/Purchase Order in dev mode (billing isn't
+	live) the same way the rest of the app does.
+
+	Company filter: `import_statement()` already resolves the bank account's
+	own company but never passed it down here, so a deposit could in principle
+	auto-match an open order/invoice belonging to a different company (single-
+	company today, so currently a no-op in practice — kept as a real guard,
+	not dead code, since this app's own per-location accounting has been
+	moving toward stricter separation, see the per-location stock account
+	work). Left unscoped (None) only preserves the prior no-filter behavior
+	for any caller that doesn't have a company to hand.
 	"""
 	if receiving:
 		dt, expr, party_field, party_type = sales_doctype(), sales_outstanding_expr("t"), "customer", "Customer"
 	else:
 		dt, expr, party_field, party_type = purchase_doctype(), purchase_outstanding_expr("t"), "supplier", "Supplier"
 
+	company_cond = "AND t.company = %(company)s" if company else ""
 	rows = frappe.db.sql(
 		f"""
 		SELECT t.name, t.{party_field} AS party
 		FROM `tab{dt}` t
 		WHERE t.docstatus = 1 AND ROUND({expr}, 2) = %(amount)s
+		{company_cond}
 		""",
-		{"amount": round(flt(amount), 2)},
+		{"amount": round(flt(amount), 2), "company": company},
 		as_dict=True,
 	)
 	if len(rows) == 1 and rows[0].party:
@@ -206,7 +218,7 @@ def _find_confident_match(amount, receiving):
 	return None, None, None, None
 
 
-def _try_auto_match(bt_name, date):
+def _try_auto_match(bt_name, date, company=None):
 	"""Best-effort — never blocks the import if matching/PE-creation fails.
 
 	Builds the Payment Entry via ERPNext's own create_payment_entry_bts (proven
@@ -225,7 +237,9 @@ def _try_auto_match(bt_name, date):
 		if not amount:
 			return False
 
-		doc_name, party, party_type, ref_doctype = _find_confident_match(amount, receiving=bool(bt.deposit))
+		doc_name, party, party_type, ref_doctype = _find_confident_match(
+			amount, receiving=bool(bt.deposit), company=company
+		)
 		if not party:
 			return False
 
@@ -311,7 +325,7 @@ def import_statement(bank_account, csv_text, profile):
 			bt.insert(ignore_permissions=True)
 			bt.submit()
 			created += 1
-			if _try_auto_match(bt.name, r["date"]):
+			if _try_auto_match(bt.name, r["date"], company=company):
 				auto_matched += 1
 		except Exception as e:
 			errors.append({"row": r, "error": str(e)})

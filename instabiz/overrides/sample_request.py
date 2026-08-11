@@ -35,6 +35,8 @@ def record_feedback(name: str, feedback: str, outcome: str) -> None:
 def convert_to_order(name: str, sales_order: str) -> None:
 	frappe.get_doc("Sales Order", sales_order)
 	doc = frappe.get_doc("IB Sample Request", name)
+	if doc.status not in ("Sent", "Feedback Received"):
+		frappe.throw(_("Can only convert to order after sample is Sent."))
 	doc.related_sales_order = sales_order
 	doc.outcome = "Converted"
 	doc.status = "Converted"

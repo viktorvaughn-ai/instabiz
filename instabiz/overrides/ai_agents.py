@@ -228,7 +228,7 @@ def run_demand_forecast(trigger="schedule"):
 			WHERE si.docstatus = 1
 			  AND si.posting_date >= DATE_SUB(CURDATE(), INTERVAL 12 WEEK)
 			GROUP BY soi.item_code, i.item_name
-			ORDER BY qty_sold DESC
+			ORDER BY qty_sold DESC, soi.item_code ASC
 			LIMIT 30
 		""", as_dict=True)
 		forecast_rows = []
@@ -285,7 +285,7 @@ def run_smart_reorder(trigger="schedule"):
 			  AND ir.warehouse_reorder_level > 0
 			GROUP BY i.item_code, i.item_name, i.item_group
 			HAVING stock_qty <= reorder_level
-			ORDER BY (reorder_level - stock_qty) DESC
+			ORDER BY (reorder_level - stock_qty) DESC, i.item_code ASC
 			LIMIT 30
 		""", as_dict=True)
 		records = len(items)
@@ -345,7 +345,7 @@ def run_collections(trigger="schedule"):
 			  AND si.outstanding_amount > 0
 			  AND si.due_date < CURDATE()
 			  AND si.is_return = 0
-			ORDER BY si.due_date ASC
+			ORDER BY si.due_date ASC, si.name ASC
 			LIMIT 30
 		""", as_dict=True)
 		records = len(overdue)
@@ -408,7 +408,7 @@ def run_istix_enforcer(trigger="schedule"):
 			WHERE wo.status = 'In Progress'
 			  AND wo.started_at IS NOT NULL
 			  AND TIMESTAMPDIFF(HOUR, wo.started_at, NOW()) >= 8
-			ORDER BY hours_running DESC
+			ORDER BY hours_running DESC, wo.name ASC
 			LIMIT 20
 		""", as_dict=True)
 		records = len(stalled)
@@ -468,7 +468,7 @@ def run_buying_dna(trigger="schedule"):
 			HAVING order_count >= 3
 			   AND avg_cycle_days > 0
 			   AND days_since >= avg_cycle_days * 1.2
-			ORDER BY days_since DESC
+			ORDER BY days_since DESC, so.customer ASC
 			LIMIT 50
 		""", as_dict=True)
 		records = len(profiles)
@@ -525,7 +525,7 @@ def run_prod_advance(trigger="schedule"):
 			  AND wo.target_qty > 0
 			  AND wo.completed_qty / wo.target_qty >= 0.85
 			  AND TIMESTAMPDIFF(HOUR, wo.started_at, NOW()) >= 2
-			ORDER BY hours_running DESC
+			ORDER BY hours_running DESC, wo.name ASC
 			LIMIT 30
 		""", as_dict=True)
 		records = len(wos)
@@ -577,7 +577,7 @@ def run_prod_machine_assign(trigger="schedule"):
 			  AND (wo.machine IS NULL OR wo.machine = '')
 			  AND DATEDIFF(CURDATE(), DATE(wo.creation)) >= 1
 			ORDER BY FIELD(wo.priority, 'Urgent', 'High', 'Normal', 'Low'),
-			         os.delivery_date ASC
+			         os.delivery_date ASC, wo.name ASC
 			LIMIT 20
 		""", as_dict=True)
 		records = len(wos)
@@ -631,7 +631,7 @@ def run_prod_notify_ready(trigger="schedule"):
 			GROUP BY os.name, os.sales_order, os.customer_name,
 			         os.priority, os.delivery_date, so.custom_sales_person_user
 			HAVING total_items > 0 AND total_items = rtd_count
-			ORDER BY os.delivery_date ASC
+			ORDER BY os.delivery_date ASC, os.name ASC
 			LIMIT 30
 		""", as_dict=True)
 		records = len(os_rows)
@@ -678,7 +678,7 @@ def run_prod_auto_os(trigger="schedule"):
 			      SELECT 1 FROM `tabIB Order Sheet` os
 			      WHERE os.sales_order = so.name AND os.status != 'Cancelled'
 			  )
-			ORDER BY so.delivery_date ASC
+			ORDER BY so.delivery_date ASC, so.name ASC
 			LIMIT 10
 		""", as_dict=True)
 		records = len(sos)
@@ -723,7 +723,7 @@ def run_prod_job_bundle(trigger="schedule"):
 			  AND (wo.batch_group IS NULL OR wo.batch_group = '')
 			GROUP BY wo.item_code, wo.stage
 			HAVING wo_count >= 2
-			ORDER BY wo_count DESC
+			ORDER BY wo_count DESC, wo.item_code ASC, wo.stage ASC
 			LIMIT 10
 		""", as_dict=True)
 		records = len(groups)
@@ -773,7 +773,7 @@ def run_hr_leave_pending(trigger="schedule"):
 			WHERE la.docstatus = 0
 			  AND la.status = 'Open'
 			  AND DATEDIFF(CURDATE(), DATE(la.creation)) >= 2
-			ORDER BY days_waiting DESC
+			ORDER BY days_waiting DESC, la.name ASC
 			LIMIT 20
 		""", as_dict=True)
 		records = len(rows)
@@ -828,7 +828,7 @@ def run_hr_attendance_gap(trigger="schedule"):
 			  AND a.attendance_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
 			GROUP BY a.employee, e.employee_name, e.reports_to
 			HAVING absent_days >= 3
-			ORDER BY absent_days DESC
+			ORDER BY absent_days DESC, a.employee ASC
 			LIMIT 15
 		""", as_dict=True)
 		records = len(rows)
@@ -929,7 +929,7 @@ def run_hr_late_checkin(trigger="schedule"):
 			  AND MONTH(a.attendance_date) = %s
 			GROUP BY a.employee, e.employee_name
 			HAVING late_count >= 5
-			ORDER BY late_count DESC
+			ORDER BY late_count DESC, a.employee ASC
 			LIMIT 15
 		""", (today.year, today.month), as_dict=True)
 		records = len(rows)
@@ -969,7 +969,7 @@ def run_finance_payable_due(trigger="schedule"):
 			WHERE pi.docstatus = 1
 			  AND pi.outstanding_amount > 0
 			  AND pi.due_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 5 DAY)
-			ORDER BY pi.due_date ASC
+			ORDER BY pi.due_date ASC, pi.name ASC
 			LIMIT 20
 		""", as_dict=True)
 		records = len(rows)
@@ -1021,7 +1021,7 @@ def run_finance_expense_pending(trigger="schedule"):
 			WHERE ec.docstatus = 1
 			  AND ec.approval_status = 'Submitted'
 			  AND DATEDIFF(CURDATE(), DATE(ec.creation)) >= 3
-			ORDER BY days_pending DESC, ec.total_claimed_amount DESC
+			ORDER BY days_pending DESC, ec.total_claimed_amount DESC, ec.name ASC
 			LIMIT 15
 		""", as_dict=True)
 		records = len(rows)
@@ -1067,7 +1067,7 @@ def run_finance_bank_recon(trigger="schedule"):
 			WHERE bt.docstatus = 1
 			  AND bt.status = 'Unreconciled'
 			  AND DATEDIFF(CURDATE(), bt.date) >= 7
-			ORDER BY days_old DESC
+			ORDER BY days_old DESC, bt.name ASC
 			LIMIT 10
 		""", as_dict=True)
 		records = len(rows)
@@ -1118,7 +1118,7 @@ def run_ops_po_overdue(trigger="schedule"):
 			  AND po.status NOT IN ('Completed', 'Cancelled', 'Closed')
 			  AND poi.schedule_date < CURDATE()
 			  AND poi.received_qty < poi.qty
-			ORDER BY days_overdue DESC
+			ORDER BY days_overdue DESC, poi.name ASC
 			LIMIT 20
 		""", as_dict=True)
 		records = len(rows)
@@ -1173,7 +1173,7 @@ def run_ops_delivery_risk(trigger="schedule"):
 			WHERE so.docstatus = 1
 			  AND so.delivery_date < CURDATE()
 			  AND so.status NOT IN ('Completed', 'Closed', 'Cancelled')
-			ORDER BY days_overdue DESC
+			ORDER BY days_overdue DESC, so.name ASC
 			LIMIT 20
 		""", as_dict=True)
 		records = len(rows)
@@ -1225,7 +1225,7 @@ def run_ops_stock_aging(trigger="schedule"):
 			WHERE b.actual_qty > 0
 			  AND DATEDIFF(CURDATE(), DATE(b.modified)) >= 60
 			GROUP BY b.item_code, i.item_name, i.item_group
-			ORDER BY days_stale DESC
+			ORDER BY days_stale DESC, b.item_code ASC
 			LIMIT 15
 		""", as_dict=True)
 		records = len(rows)
@@ -1273,7 +1273,7 @@ def run_prod_wastage_flag(trigger="schedule"):
 			WHERE wo.status = 'Completed'
 			  AND TIMESTAMPDIFF(HOUR, COALESCE(wo.completed_at, wo.modified), NOW()) BETWEEN 0 AND 24
 			  AND wo.wastage_pct > COALESCE(m.wastage_norm_pct, 3)
-			ORDER BY wo.wastage_pct DESC
+			ORDER BY wo.wastage_pct DESC, wo.name ASC
 			LIMIT 15
 		""", as_dict=True)
 		records = len(wos)
@@ -1329,7 +1329,7 @@ def run_prod_priority_escalate(trigger="schedule"):
 			WHERE wo.status = 'Pending'
 			  AND wo.priority IN ('Urgent', 'High')
 			  AND TIMESTAMPDIFF(HOUR, wo.creation, NOW()) >= 6
-			ORDER BY FIELD(wo.priority, 'Urgent', 'High'), hours_pending DESC
+			ORDER BY FIELD(wo.priority, 'Urgent', 'High'), hours_pending DESC, wo.name ASC
 			LIMIT 15
 		""", as_dict=True)
 		records = len(wos)

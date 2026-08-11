@@ -159,13 +159,20 @@ def apply_leave(leave_type, from_date, to_date, reason="", half_day=0, half_day_
 		"status": "Open",
 		"follow_via_email": 0,
 	})
+	# Leave applications stay in Draft (docstatus=0) while Open — HRMS's own
+	# on_submit() unconditionally throws for status="Open" ("Only Leave
+	# Applications with status 'Approved' and 'Rejected' can be submitted"),
+	# so attempting doc.submit() here always fails. Previously this was wrapped
+	# in a try/except that swallowed the error and then unconditionally called
+	# frappe.db.commit() anyway — since Frappe's save() already writes
+	# docstatus=1 to the DB *before* on_submit() runs and throws, that commit
+	# persisted a corrupted record (docstatus=1 "submitted" but status="Open",
+	# a state HRMS itself refuses to create) with no leave ledger entry ever
+	# created. Reproduced live 2026-08-11 (HR-LAP-2026-00006), confirmed and
+	# cleaned up. HR approval (ib_hrms_dashboard.approve_leave/reject_leave)
+	# now does the actual submit, at which point status is genuinely
+	# Approved/Rejected and HRMS's submit-time validation passes for real.
 	doc.insert(ignore_permissions=True)
-	try:
-		doc.submit()
-	except Exception as e:
-		# Some leave types don't require submit — keep as draft if submit fails
-		frappe.log_error("IB My HR: leave submit", str(e))
-
 	frappe.db.commit()
 	return {"name": doc.name, "status": doc.status, "docstatus": doc.docstatus}
 

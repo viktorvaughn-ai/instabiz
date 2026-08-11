@@ -142,12 +142,26 @@ def _log_auto_approval(doc, action_type, agent, reason):
 # ── Material Request (MRP) ─────────────────────────────────────────────────
 
 def _mr_metrics(mr_doc):
+	"""`Item.valuation_rate` is a manual/vestigial field that this app's real
+	data never populates (confirmed live: 0 across all 528 Items) — the actual
+	weighted-average cost lives per-warehouse on `Bin.valuation_rate`, same
+	source the rest of the stock module treats as ground truth. Reading
+	Item.valuation_rate here would make `max_amount` a silent no-op (total
+	value always 0.00, so any positive cap always "passes") — falls back to
+	Item.valuation_rate only if the row's warehouse has no Bin yet (never
+	received stock there), same as the field's original intent for that edge
+	case.
+	"""
 	total_qty = 0.0
 	total_value = 0.0
 	for row in mr_doc.items:
 		qty = flt(row.qty)
 		total_qty += qty
-		rate = flt(frappe.db.get_value("Item", row.item_code, "valuation_rate") or 0)
+		rate = flt(
+			frappe.db.get_value("Bin", {"item_code": row.item_code, "warehouse": row.warehouse}, "valuation_rate")
+			or frappe.db.get_value("Item", row.item_code, "valuation_rate")
+			or 0
+		)
 		total_value += qty * rate
 	return {"total_qty": total_qty, "total_value": total_value}
 
@@ -161,6 +175,14 @@ def maybe_auto_submit_mr(mr_doc):
 	break MRP's own run.
 	"""
 	try:
+		if mr_doc.docstatus != 0:
+			# Already submitted/cancelled by something else before this hook
+			# ran — never a real path today (called synchronously right after
+			# insert), but submit() on a non-draft doc would raise; treat as
+			# a clean no-op instead of letting the broad except below log a
+			# spurious error.
+			return False
+
 		setting = _get_enabled_setting(ACTION_TYPE_MRP_MR)
 		if not setting:
 			return False
@@ -241,6 +263,11 @@ def maybe_auto_submit_quotation(q_doc):
 	logic), never a token pass-through. Never raises.
 	"""
 	try:
+		if q_doc.docstatus != 0:
+			# Same defensive check as maybe_auto_submit_mr — never a real path
+			# today, but avoids a spurious logged error if it ever is.
+			return False
+
 		setting = _get_enabled_setting(ACTION_TYPE_CPQ_QUOTATION)
 		if not setting:
 			return False

@@ -113,6 +113,7 @@ class CustomSalesInvoice(IbStatusMixin, SalesInvoice):
             self.outstanding_amount     = flt(self.outstanding_amount) + total_extra
             if self.rounded_total is not None:
                 self.rounded_total = flt(self.grand_total, 2)
+                self.base_rounded_total = flt(self.rounded_total * flt(self.conversion_rate or 1), 2)
             # super().validate() already computed in_words/base_in_words off the
             # pre-transport grand_total/rounded_total (ERPNext's
             # AccountsController.validate() calls set_total_in_words() before this

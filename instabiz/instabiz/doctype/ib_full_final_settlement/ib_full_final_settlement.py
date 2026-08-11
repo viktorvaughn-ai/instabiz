@@ -2,6 +2,17 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import date_diff, flt, getdate, today
 
+_LOCKED_STATUSES = {"Paid", "Cancelled"}
+# Fields that actually affect the settlement amount or its underlying facts —
+# not `notes` (harmless to keep editable) and not the auto-computed fields
+# (years_of_service/gratuity_amount/total_payable), which only ever change
+# as a downstream effect of one of these.
+_GUARDED_FIELDS = (
+	"employee", "last_working_day", "resignation_date", "status",
+	"date_of_joining", "basic_salary_monthly", "notice_period_days",
+	"notice_period_served", "pending_leaves", "leave_encashment", "pending_expenses",
+)
+
 
 class IBFullFinalSettlement(Document):
 	def validate(self):
@@ -11,6 +22,32 @@ class IBFullFinalSettlement(Document):
 		self._compute_gratuity()
 		self._compute_leave_encashment()
 		self._compute_total()
+		self._guard_locked_edit()
+
+	def _guard_locked_edit(self):
+		# This doctype is not submittable (is_submittable=0), so nothing
+		# previously stopped HR Manager/HR User from continuing to edit
+		# settlement amounts (basic salary, pending leaves/expenses, leave
+		# encashment override) on a record already marked Paid — i.e. after
+		# the money has actually gone out the door — or Cancelled. Same
+		# terminal-state class of bug already guarded against on IB Overtime
+		# Request's status field (_guard_approval_change).
+		if self.is_new():
+			return
+		before = self.get_doc_before_save()
+		if not before or before.status not in _LOCKED_STATUSES:
+			return
+		if "System Manager" in frappe.get_roles(frappe.session.user):
+			return
+		if all(self.get(f) == before.get(f) for f in _GUARDED_FIELDS):
+			return  # no-op resave (e.g. opening and saving with nothing changed)
+		frappe.throw(
+			frappe._(
+				"This settlement is already {0} and its amounts can no longer be "
+				"edited. Contact a System Manager if a genuine correction is needed."
+			).format(before.status),
+			frappe.PermissionError,
+		)
 
 	def _compute_years_of_service(self):
 		if self.date_of_joining and self.last_working_day:

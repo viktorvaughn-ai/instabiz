@@ -3824,14 +3824,22 @@ class IBProductionStages {
 	// Completed order shows the same "nothing to print" alert as before,
 	// instead of opening a print view with an empty table.
 	_print_job_orders_for_os(os_name) {
+		// Was checking get_order_sheet_wo_names() — the "one currently-
+		// actionable WO per item" list, which is empty by design once every
+		// item is fully Completed (nothing left to hand a floor worker) — so
+		// printing the summary for a 100%-done order was silently blocked
+		// with "no active Work Orders", even though the actual print format
+		// (IB Job Order Summary) is driven by get_order_sheet_stage_workflow()
+		// and renders a full historical stage x machine x operator grid
+		// regardless of completion status. Check the real data source instead.
 		frappe.call({
-			method: "instabiz.overrides.production.get_order_sheet_wo_names",
+			method: "instabiz.overrides.production.get_order_sheet_stage_workflow",
 			args: { order_sheet: os_name },
 			callback: (r) => {
-				const names = r.message || [];
-				if (!names.length) {
+				const rows = (r.message && r.message.rows) || [];
+				if (!rows.length) {
 					frappe.show_alert({
-						message: "No active Work Orders to print for this order.",
+						message: "No items to print for this order.",
 						indicator: "orange",
 					});
 					return;

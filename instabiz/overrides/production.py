@@ -4,7 +4,7 @@ import json
 import frappe
 from frappe import _
 from frappe.model.workflow import apply_workflow
-from frappe.utils import today, now, flt, add_days, getdate, nowdate, date_diff
+from frappe.utils import today, now, flt, add_days, getdate, nowdate, date_diff, get_fullname
 
 _PRODUCTION_ROLES = {"Factory Management", "Factory Production", "System Manager"}
 
@@ -976,7 +976,7 @@ def get_order_sheet_stage_workflow(order_sheet):
 				"order_sheet_item": item.name,
 				"status": ["!=", "Cancelled"],
 			},
-			fields=["name", "stage", "status", "machine", "pcs_to_make", "logs_to_make",
+			fields=["name", "stage", "status", "machine", "operator", "pcs_to_make", "logs_to_make",
 			        "target_qty", "target_uom"],
 		)
 		wo_by_stage = {wo.stage: wo for wo in wos}
@@ -1003,6 +1003,10 @@ def get_order_sheet_stage_workflow(order_sheet):
 				"stage": stage,
 				"in_route": True,
 				"machine": wo.machine if wo else None,
+				# get_fullname caches per-request (frappe.local.fullnames) so
+				# resolving this per-stage/per-item doesn't turn into N+1 —
+				# printed sheets should show a real name, not a raw user email.
+				"operator": get_fullname(wo.operator) if (wo and wo.operator) else None,
 				"status": wo.status if wo else None,
 				"is_current": stage == current_stage,
 			})
@@ -1043,7 +1047,6 @@ def get_order_sheet_stage_workflow(order_sheet):
 # 6. Work Order operations
 # ---------------------------------------------------------------------------
 
-@frappe.whitelist()
 @frappe.whitelist()
 def get_order_dn_readiness(order_sheet):
 	"""Whether every item in this Order Sheet has reached Completed at every

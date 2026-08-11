@@ -36,6 +36,15 @@ def _auto_reconcile(doc):
 		return
 
 	remaining = flt(doc.paid_amount)
+	# FOR UPDATE: without this, two Payment Entries submitted close together
+	# against the same customer (two reps recording receipts, a double-click,
+	# etc.) can both read the same invoice's outstanding_amount under MariaDB's
+	# default REPEATABLE READ before either has committed — each independently
+	# allocates the full outstanding amount, over-allocating the invoice once
+	# both submits land. Same race, same fix, as _compute_so_advance_total()'s
+	# own FOR UPDATE in this file: the row lock forces the second PE's read to
+	# block until the first PE's whole submit transaction actually commits (or
+	# rolls back), so it then sees the real, already-reduced outstanding_amount.
 	open_invoices = frappe.db.sql(
 		"""
 		SELECT name, outstanding_amount
@@ -44,6 +53,7 @@ def _auto_reconcile(doc):
 		  AND docstatus = 1
 		  AND outstanding_amount > 0
 		ORDER BY posting_date ASC, name ASC
+		FOR UPDATE
 		""",
 		doc.party,
 		as_dict=True,

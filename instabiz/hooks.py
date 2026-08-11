@@ -168,6 +168,19 @@ fixtures = [
                     ["role", "in", ["Sales Manager", "Accounts User", "Accounts Manager"]]]
     },
     {
+        # Sales User's if_owner flag on Quotation/Sales Order — was 1, which
+        # hard-blocked the row-level "owner OR custom_sales_person_user"
+        # reassignment logic in instabiz.overrides.permissions from ever
+        # granting access to a reassigned doc's real assignee (Frappe's base
+        # DocPerm can only deny beyond what a controller has_permission hook
+        # decides, never grant past a stricter base). Fixed live 2026-08-11;
+        # exported here so it survives a fresh site setup instead of being a
+        # DB-only change with no fixture trail.
+        "dt": "Custom DocPerm",
+        "filters": [["parent", "in", ["Quotation", "Sales Order"]],
+                    ["role", "=", "Sales User"]]
+    },
+    {
         "dt": "Purchase Taxes and Charges Template",
         "filters": [["company", "=", "Instabiz Solutions India Pvt Ltd"]]
     },
