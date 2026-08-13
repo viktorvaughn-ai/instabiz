@@ -9,7 +9,10 @@ frappe.listview_settings["Customer"] = {
 
 	formatters: {
 		mobile_no(value, df, doc) {
-			return value || doc.custom_primary_contact_person || "";
+			// custom_primary_contact_person (Address tab) is the number sales
+			// actually maintain — Contact-linked mobile_no is unused/unreliable,
+			// so it's only a fallback, not the primary source.
+			return doc.custom_primary_contact_person || value || "";
 		},
 	},
 

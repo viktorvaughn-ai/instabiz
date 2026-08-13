@@ -33,6 +33,7 @@ def _columns():
 		{"fieldname": "operator", "label": "Operator", "fieldtype": "Link", "options": "User", "width": 130},
 		{"fieldname": "order_sheet", "label": "Order Sheet", "fieldtype": "Link", "options": "IB Order Sheet", "width": 135},
 		{"fieldname": "sales_order", "label": "Sales Order", "fieldtype": "Link", "options": "Sales Order", "width": 135},
+		{"fieldname": "customer_name", "label": "Customer", "fieldtype": "Data", "width": 150},
 		{"fieldname": "output_qty", "label": "Output Qty", "fieldtype": "Float", "width": 90},
 		{"fieldname": "hours", "label": "Hours", "fieldtype": "Float", "width": 75},
 	]

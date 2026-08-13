@@ -393,8 +393,8 @@ class IBHrmsDashboard {
 						<td>${r.total_leave_days || ""}</td>
 						<td>${status_badge(r.status || "")}</td>
 						${is_mgr && r.status === "Open" ? `<td>
-							<button class="btn btn-xs btn-success ib-hr-approve-btn" data-id="${frappe.utils.escape_html(r.name)}">Approve</button>
-							<button class="btn btn-xs btn-danger ib-hr-reject-btn" data-id="${frappe.utils.escape_html(r.name)}" style="margin-left:4px">Reject</button>
+							<button class="btn btn-xs btn-success ib-hr-approve-btn" data-id="${frappe.utils.escape_html(r.name)}" data-employee="${frappe.utils.escape_html(r.employee_name || r.name)}">Approve</button>
+							<button class="btn btn-xs btn-danger ib-hr-reject-btn" data-id="${frappe.utils.escape_html(r.name)}" data-employee="${frappe.utils.escape_html(r.employee_name || r.name)}" style="margin-left:4px">Reject</button>
 						</td>` : `<td></td>`}
 					</tr>
 				`).join("")}</tbody>
@@ -410,7 +410,8 @@ class IBHrmsDashboard {
 		if (is_mgr) {
 			this.$wrap.find(".ib-hr-approve-btn").on("click", (e) => {
 				const id = $(e.currentTarget).data("id");
-				frappe.confirm(`Approve leave ${id}?`, () => {
+				const employee = $(e.currentTarget).data("employee");
+				frappe.confirm(`Approve leave for <b>${frappe.utils.escape_html(employee)}</b> (${id})?`, () => {
 					frappe.call({
 						method: "instabiz.instabiz.page.ib_hrms_dashboard.ib_hrms_dashboard.approve_leave",
 						args: { leave_id: id },
@@ -426,7 +427,8 @@ class IBHrmsDashboard {
 			});
 			this.$wrap.find(".ib-hr-reject-btn").on("click", (e) => {
 				const id = $(e.currentTarget).data("id");
-				frappe.confirm(`Reject leave ${id}?`, () => {
+				const employee = $(e.currentTarget).data("employee");
+				frappe.confirm(`Reject leave for <b>${frappe.utils.escape_html(employee)}</b> (${id})?`, () => {
 					frappe.call({
 						method: "instabiz.instabiz.page.ib_hrms_dashboard.ib_hrms_dashboard.reject_leave",
 						args: { leave_id: id },

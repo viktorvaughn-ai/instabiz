@@ -60,6 +60,19 @@ def _auto_correct_gst_template(doc):
 	customer_gstin = (doc.billing_address_gstin or "")[:2]
 	if not customer_gstin and doc.get("customer_address"):
 		customer_gstin = (frappe.db.get_value("Address", doc.customer_address, "gstin") or "")[:2]
+	if not customer_gstin:
+		# billing_address_gstin/customer_address are usually filled by client-side
+		# get_party_details JS on customer selection — on a freshly-saved doc that
+		# can still be blank server-side. Customer.gstin is the same value's real
+		# source and doesn't depend on that timing, so fall back to it directly
+		# rather than silently skipping the in/out-state correction (which leaves
+		# whatever template was already on the doc — wrong, if it's stale/default —
+		# and lets india_compliance's own later, stricter check throw instead).
+		customer_name = doc.get("customer") or (
+			doc.get("party_name") if doc.get("quotation_to") == "Customer" else None
+		)
+		if customer_name:
+			customer_gstin = (frappe.db.get_value("Customer", customer_name, "gstin") or "")[:2]
 	if not company_gstin or not customer_gstin:
 		return
 	is_instate = company_gstin == customer_gstin

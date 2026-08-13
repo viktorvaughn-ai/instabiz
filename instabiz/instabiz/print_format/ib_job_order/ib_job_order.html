@@ -42,6 +42,9 @@
 </div>
 
 <table class="jo-meta">
+  {% if so_name %}
+  <tr><td class="label">Sales Order</td><td class="value">{{ so_name }}</td></tr>
+  {% endif %}
   <tr><td class="label">Item Code</td><td class="value">{{ doc.item_code }}</td></tr>
   <tr><td class="label">Item Name</td><td class="value">{{ doc.item_name or "" }}</td></tr>
   <tr><td class="label">Stage</td><td class="value">{{ doc.stage }}</td></tr>

@@ -81,6 +81,15 @@
     {% set _ = ns.dn_list.append(item.delivery_note) %}
   {% endif %}
 {% endfor %}
+
+{# ── Sales Orders (Reference No. fallback when no customer PO was given) ───────── #}
+{% set ns_so = namespace(v=[]) %}
+{% for item in doc.items %}
+  {% if item.sales_order and item.sales_order not in ns_so.v %}
+    {% set _ = ns_so.v.append(item.sales_order) %}
+  {% endif %}
+{% endfor %}
+
 {% set first_dn = frappe.db.get_value("Delivery Note", ns.dn_list[0],
     ["name","posting_date","lr_no","custom_lr_number","vehicle_no","transporter_name"], as_dict=True)
     if ns.dn_list else None %}
@@ -108,7 +117,14 @@
 {% set transporter = doc.transporter_name
     or (first_dn.transporter_name if first_dn else "")
     or (ewb.transporterName if ewb else "") or "" %}
-{% set destination = (ewb.toPlace if ewb else "") or "" %}
+{# Destination previously depended ENTIRELY on e-way bill data (ewb.toPlace) —
+   blank on every invoice until an e-way bill actually exists, unlike vehicle_no/
+   transporter/lr_no above which all fall back through DN fields first. Falls
+   back to the ship-to address' own city/state, same address block already
+   resolved above for the Consignee section. #}
+{% set destination = (ewb.toPlace if ewb else "")
+    or (ship_addr.city ~ (", " ~ ship_addr.state if ship_addr.state else "") if ship_addr and ship_addr.city else "")
+    or (ship_addr.state if ship_addr else "") or "" %}
 {% set lr_no = doc.lr_no
     or (first_dn.lr_no if first_dn else "")
     or (first_dn.custom_lr_number if first_dn else "") or "" %}
@@ -276,6 +292,9 @@
           </td>
           <td style="border-bottom:1px solid #aaa; padding:3px 5px">
             <div class="lbl small">Other References</div>
+            {% if ns_so.v %}
+            <div>{{ ns_so.v | join(", ") }}</div>
+            {% endif %}
           </td>
         </tr>
 
@@ -291,6 +310,9 @@
         <tr>
           <td colspan="2" style="border-bottom:1px solid #aaa; border-right:1px solid #aaa; padding:3px 5px; height:28px">
             <div class="lbl small">Dispatch Doc No.</div>
+            {% if ns.dn_list %}
+            <div><strong>{{ ns.dn_list | join(", ") }}</strong></div>
+            {% endif %}
           </td>
           <td style="border-bottom:1px solid #aaa; padding:3px 5px">
             <div class="lbl small">Delivery Note Date</div>
@@ -396,8 +418,10 @@
   </thead>
   <tbody>
     {% set ns_doc = namespace(doc_gst=0) %}
+    {% set ns_tax_accts = namespace(v=[]) %}
     {% for t in doc.taxes %}
       {% set ns_doc.doc_gst = ns_doc.doc_gst + (t.rate or 0) %}
+      {% set _ = ns_tax_accts.v.append(t.account_head) %}
     {% endfor %}
 
     {# Consolidate rows by item_code — same SKU → single line, sub-lines per roll #}
@@ -406,10 +430,23 @@
     {% if row.item_code not in ns_ci.seen %}
       {% set _ = ns_ci.seen.append(row.item_code) %}
       {% set ns_ci.sl = ns_ci.sl + 1 %}
+      {# item_tax_rate is the Item Tax Template's FULL account-rate map — every
+         GST scenario the item could ever be taxed under (Output AND Input,
+         normal AND RCM, AND Refund variants), not just the one actually
+         applicable to this invoice. Summing every key in it (the previous
+         code) double/triple-counted unrelated scenarios — confirmed live:
+         a genuine 18% item showed 36% because SGST(9)+CGST(9)+IGST(18) were
+         all being added together even though only one of those pairs is ever
+         real for a single transaction, before RCM/Refund/Input entries even
+         enter the sum. Only sum rates for accounts that are actually part of
+         *this* invoice's own computed tax lines (doc.taxes) — that's the
+         real, applicable rate, nothing else. #}
       {% set ns_t = namespace(gst=0) %}
       {% if row.item_tax_rate %}
         {% for _acct, _r in json.loads(row.item_tax_rate).items() %}
-          {% set ns_t.gst = ns_t.gst + _r %}
+          {% if _acct in ns_tax_accts.v %}
+            {% set ns_t.gst = ns_t.gst + _r %}
+          {% endif %}
         {% endfor %}
       {% endif %}
       {% if ns_t.gst == 0 %}{% set ns_t.gst = ns_doc.doc_gst %}{% endif %}

@@ -143,6 +143,7 @@ class IBCustomerBoardShell {
 
 	_cleanup() {
 		this._teardown_active();
+		this._active_tab = null;
 	}
 }
 
@@ -1087,7 +1088,7 @@ class IBCustomerBoard {
 	_show_log_activity_dialog(customer, customer_name, assignment_id) {
 		const self = this;
 		const d = new frappe.ui.Dialog({
-			title: `Log Activity — ${customer_name || customer}`,
+			title: `Log Activity — ${frappe.utils.escape_html(customer_name || customer)}`,
 			fields: [
 				{
 					fieldname: "activity_type",
@@ -1156,7 +1157,8 @@ class IBCustomerBoard {
 	_skip_with_undo(assignment_id, customer_name, $card) {
 		const self = this;
 		const customer_id = $card.data("customer");
-		frappe.confirm(`Skip ${customer_name} for today?`, () => {
+		const safe_name = frappe.utils.escape_html(customer_name);
+		frappe.confirm(`Skip ${safe_name} for today?`, () => {
 			// Optimistic: visually mark skipped
 			$card.addClass("ib-cb-card--done ib-cb-card--outcome-skipped");
 			$card.find(".ib-cb-skip-btn").remove();
@@ -1169,7 +1171,7 @@ class IBCustomerBoard {
 			}
 
 			self._show_timed_toast(
-				`${customer_name} skipped`,
+				`${safe_name} skipped`,
 				() => {
 					frappe.call({
 						method: "instabiz.overrides.customer_assignment.skip_assignment",
@@ -1187,7 +1189,7 @@ class IBCustomerBoard {
 					});
 				},
 				() => {
-					frappe.show_alert({ message: `${customer_name} restored`, indicator: "blue" });
+					frappe.show_alert({ message: `${safe_name} restored`, indicator: "blue" });
 					self.refresh();
 				}
 			);
@@ -1256,7 +1258,7 @@ class IBCustomerBoard {
 						const available = all_users.filter((u) => !shared_with_set.has(u.name) && u.name !== owner);
 
 						const d = new frappe.ui.Dialog({
-							title: `Share — ${customer_name}`,
+							title: `Share — ${frappe.utils.escape_html(customer_name)}`,
 							fields: [
 								{
 									fieldname: "current_shares_html",

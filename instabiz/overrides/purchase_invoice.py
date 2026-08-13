@@ -6,6 +6,7 @@ from erpnext.accounts.doctype.purchase_invoice.purchase_invoice import PurchaseI
 from instabiz.overrides.purchase_order import (
 	_auto_correct_purchase_gst_template,
 	_apply_purchase_cost_center,
+	_apply_purchase_location_gstin,
 	_set_location_from_warehouse,
 	_first_warehouse,
 )
@@ -20,7 +21,18 @@ class CustomPurchaseInvoice(PurchaseInvoice):
 		autoname_purchase_invoice(self)
 
 	def validate(self):
+		# Debit notes go through IB Debit Note only, as of 2026-08-12 — same
+		# reasoning as the Sales Invoice side: native is_return posts its own
+		# full GL/AR impact, same as IB Debit Note, running both risked
+		# double-crediting. Only blocks NEW return invoices — existing
+		# historical is_return PIs are untouched.
+		if self.is_return and self.is_new():
+			frappe.throw(_(
+				"Don't create a return here — use <b>IB Debit Note</b> instead "
+				"(Workspace → IB Debit Note → New)."
+			))
 		_set_location_from_warehouse(self)
+		_apply_purchase_location_gstin(self)
 		_auto_correct_purchase_gst_template(self)
 		_apply_purchase_cost_center(self)
 		recalculate_purchase_items(self)

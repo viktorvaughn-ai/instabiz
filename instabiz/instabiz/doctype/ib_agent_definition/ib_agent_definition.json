@@ -221,7 +221,7 @@
   }
  ],
  "links": [],
- "modified": "2026-06-30 00:00:00",
+ "modified": "2026-08-12 00:00:00",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "IB Agent Definition",
@@ -258,7 +258,7 @@
   },
   {
    "read": 1,
-   "role": "Manufacturing Manager"
+   "role": "Factory Management"
   }
  ],
  "sort_field": "creation",

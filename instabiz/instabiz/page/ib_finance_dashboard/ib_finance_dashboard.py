@@ -188,6 +188,11 @@ def get_finance_data():
 	return {
 		"sales_dt": sales_dt,
 		"purch_dt": purch_dt,
+		# Frontend needs this to know Sales Order (dev mode) has no
+		# outstanding_amount column — a route_options filter built for Sales
+		# Invoice's own field would silently 500/return nothing on that
+		# doctype's list view.
+		"dev_mode": dev_mode,
 		"sales_date_field": sales_date,
 		"purch_date_field": purch_date,
 		"rev_mtd": rev_mtd,

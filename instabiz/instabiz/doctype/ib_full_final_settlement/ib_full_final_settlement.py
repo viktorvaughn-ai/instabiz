@@ -64,8 +64,16 @@ class IBFullFinalSettlement(Document):
 			self.gratuity_amount = 0
 
 	def _compute_leave_encashment(self):
-		# Leave encashment = (basic/26) * pending_leaves — if not manually set
-		if not self.leave_encashment and self.pending_leaves and self.basic_salary_monthly:
+		# Leave encashment = (basic/26) * pending_leaves — auto-filled as a
+		# default only on creation, same "derive once, then respect
+		# whatever's actually saved" pattern used elsewhere in this app (see
+		# ib_transport.py's GSTIN->state sync). `not self.leave_encashment`
+		# used to gate this on every save, not just creation — since a
+		# Currency field's "not yet touched" and "deliberately set to 0"
+		# states are indistinguishable, that silently overwrote a genuine ₹0
+		# (e.g. leaves already encashed elsewhere) back to the formula value
+		# on every subsequent save, with no way to make ₹0 stick.
+		if self.is_new() and not self.leave_encashment and self.pending_leaves and self.basic_salary_monthly:
 			self.leave_encashment = flt((flt(self.basic_salary_monthly) / 26) * flt(self.pending_leaves), 2)
 
 	def _compute_total(self):

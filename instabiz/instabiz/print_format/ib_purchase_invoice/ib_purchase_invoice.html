@@ -1,8 +1,11 @@
 {# ── Company ──────────────────────────────────────────────────────────────────── #}
 {% set co = frappe.get_doc("Company", doc.company) %}
-{% set co_addr = frappe.db.get_value("Address", doc.company_address,
+{# Purchase Invoice has no `company_address` field — its own-company address
+   field is `billing_address` (same split as Purchase Order/Purchase Receipt).
+   The old lookup below always resolved to None. #}
+{% set co_addr = frappe.db.get_value("Address", doc.billing_address,
     ["address_line1","address_line2","city","state","pincode"], as_dict=True)
-    if doc.company_address else None %}
+    if doc.billing_address else None %}
 {% set sup_name = frappe.db.get_value("Supplier", doc.supplier, "supplier_name") or doc.supplier %}
 {% set sup_addr = frappe.db.get_value("Address", doc.supplier_address,
     ["address_line1","address_line2","city","state","pincode","gstin"], as_dict=True)

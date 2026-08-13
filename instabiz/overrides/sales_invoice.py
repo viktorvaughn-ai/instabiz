@@ -41,6 +41,16 @@ class CustomSalesInvoice(IbStatusMixin, SalesInvoice):
         set_sales_person(self)
 
     def validate(self):
+        # Credit notes go through IB Credit Note only, as of 2026-08-12 — it's a
+        # full independent GL/AR/stock posting, same as native is_return; running
+        # both live risked double-crediting Accounts Receivable for the same
+        # return. Only blocks NEW return invoices — existing historical is_return
+        # SIs are untouched and still cancel/report normally.
+        if self.is_return and self.is_new():
+            frappe.throw(frappe._(
+                "Don't create a return here — use <b>IB Credit Note</b> instead "
+                "(Workspace → IB Credit Note → New)."
+            ))
         if not self.custom_location or self.custom_location == "Select":
             frappe.throw(frappe._("Please select a Location before saving."))
         set_sales_person(self)

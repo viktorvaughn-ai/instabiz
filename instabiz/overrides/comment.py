@@ -40,18 +40,22 @@ def notify_owner_on_comment(doc, method=None):
 
 
 def _notify_sales_owner(doc, commenter, commenter_name):
-	owner_user = frappe.db.get_value(
+	owner_user, customer_name = frappe.db.get_value(
 		doc.reference_doctype,
 		doc.reference_name,
-		"custom_sales_person_user",
-	)
+		["custom_sales_person_user", "customer_name"],
+	) or (None, None)
 
 	if not owner_user:
 		return
 	if commenter == owner_user:
 		return
 
-	subject = f"New comment on {doc.reference_doctype} {doc.reference_name}"
+	# subject is what Frappe's bell dropdown actually renders (via .html(), see
+	# notifications.js) — customer_name is free-text a Sales User controls, so
+	# it must be escaped before going in here, same fix as dispatch_notification.py.
+	customer_bit = f" — {frappe.utils.escape_html(customer_name)}" if customer_name else ""
+	subject = f"New comment on {doc.reference_doctype} {doc.reference_name}{customer_bit}"
 	message = (
 		f"<b>{commenter_name}</b> commented on "
 		f"<b>{doc.reference_doctype} {doc.reference_name}</b>:<br><br>"
@@ -96,7 +100,9 @@ def _notify_factory_roles(doc, commenter, commenter_name):
 	if not users:
 		return
 
-	subject = f"New comment on Sales Order {doc.reference_name}"
+	customer_name = frappe.db.get_value("Sales Order", doc.reference_name, "customer_name")
+	customer_bit = f" — {frappe.utils.escape_html(customer_name)}" if customer_name else ""
+	subject = f"New comment on Sales Order {doc.reference_name}{customer_bit}"
 	message = (
 		f"<b>{commenter_name}</b> commented on "
 		f"<b>Sales Order {doc.reference_name}</b> (in production):<br><br>"

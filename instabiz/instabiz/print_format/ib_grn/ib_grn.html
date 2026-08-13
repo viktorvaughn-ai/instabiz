@@ -1,8 +1,11 @@
 {# ── Company ──────────────────────────────────────────────────────────────────── #}
 {% set co = frappe.get_doc("Company", doc.company) %}
-{% set co_addr = frappe.db.get_value("Address", doc.company_address,
+{# Purchase Receipt has no `company_address` field — its own-company address
+   field is `billing_address` (same split as Purchase Order/Purchase Invoice).
+   The old lookup below always resolved to None. #}
+{% set co_addr = frappe.db.get_value("Address", doc.billing_address,
     ["address_line1","address_line2","city","state","pincode"], as_dict=True)
-    if doc.company_address else None %}
+    if doc.billing_address else None %}
 {% set sup_name = frappe.db.get_value("Supplier", doc.supplier, "supplier_name") or doc.supplier %}
 {% set sup_addr = frappe.db.get_value("Address", doc.supplier_address,
     ["address_line1","address_line2","city","state","pincode","gstin"], as_dict=True)
@@ -28,11 +31,23 @@
 {# ── Helpers ───────────────────────────────────────────────────────────────────── #}
 {% macro fd(d) %}{% if d %}{{ frappe.utils.formatdate(d, "dd-MMM-yy") }}{% endif %}{% endmacro %}
 {% macro fm(v) %}{{ frappe.utils.fmt_money(v|float, precision=2, currency=doc.currency) }}{% endmacro %}
+{% macro fq(v) %}{{ frappe.utils.fmt_money(v|float, precision=2) }}{% endmacro %}
 
 <style>
-  body   { font-family: Arial, sans-serif; font-size: 11px; color: #000; margin: 0; }
+  body, table, th, td { font-family: Arial, sans-serif; }
+  body   { font-size: 11px; color: #000; margin: 0; }
   table  { width: 100%; border-collapse: collapse; }
   td, th { padding: 4px 6px; vertical-align: top; }
+  {# table-layout:fixed forces columns to obey their declared width % —
+     without it, a long unbreakable string (item code, HSN) makes the
+     browser/PDF engine widen that column past its % and the whole table
+     overflows the page. Blanket break-word on every cell was tried first
+     and made short header words like "Ordered"/"SQMT" fragment mid-word
+     ("Ordere-d") in the narrow qty columns — .wrap-anywhere targets only
+     the cells that actually carry long unbreakable tokens. #}
+  .items-tbl { table-layout: fixed; }
+  .items-tbl td, .items-tbl th { text-align: center; padding: 3px 4px; word-break: normal; }
+  .items-tbl .wrap-anywhere { overflow-wrap: anywhere; }
   strong { font-weight: bold; }
   .box   { border: 1.5px solid #000; margin-bottom: 2px; }
   .b     { border: 1px solid #000; }
@@ -110,7 +125,7 @@
           </tr>
           <tr>
             <td class="bb br">{{ doc.supplier_delivery_note }}</td>
-            <td class="bb">{{ fd(doc.supplier_delivery_note_date) if doc.supplier_delivery_note_date else "—" }}</td>
+            <td class="bb">{{ fd(doc.custom_supplier_delivery_note_date) if doc.custom_supplier_delivery_note_date else "—" }}</td>
           </tr>
           {% endif %}
           {% if doc.transporter or doc.vehicle_no %}
@@ -163,76 +178,84 @@
     </tr>
   </table>
 
-  {# ── Items table ── #}
-  <table>
+  {# ── Items table ──
+     Matches IB Purchase Order's items table: same borders/font/centered
+     cells, same description-of-goods rendering (name + italic sub-line),
+     Rate/SQMT + per + Disc% columns, fq() for quantities (no currency
+     symbol), fm() for money. Ordered/Accepted/Rejected Qty replaces PO's
+     single Qty column since a GRN genuinely tracks all three — dropped
+     the old "GST Rate" column instead: it approximated a per-row rate from
+     row.igst_rate/cgst_rate/sgst_rate (often blank/unreliable), redundant
+     now that the real tax lines below already show actual applied tax. #}
+  <table class="items-tbl">
     <thead>
       <tr>
-        <th class="b ta-c" style="width:4%">Sl<br>No.</th>
-        <th class="b" style="width:30%">Description of Goods</th>
-        <th class="b ta-c" style="width:8%">HSN/<br>SAC</th>
-        <th class="b ta-c" style="width:6%">GST<br>Rate</th>
-        <th class="b ta-r" style="width:8%">Ordered<br>Qty</th>
-        <th class="b ta-r" style="width:8%">Accepted<br>Qty</th>
-        <th class="b ta-r" style="width:8%">Rejected<br>Qty</th>
-        <th class="b ta-c" style="width:5%">UOM</th>
-        <th class="b ta-r" style="width:9%">Rate</th>
-        <th class="b ta-r" style="width:10%">Amount</th>
+        <th class="b" style="width:3%">Sl<br>No.</th>
+        <th class="b" style="width:22%">Description of Goods</th>
+        <th class="b" style="width:7%">HSN/<br>SAC</th>
+        <th class="b" style="width:7%">Ordered<br>Qty</th>
+        <th class="b" style="width:7%">Accepted<br>Qty</th>
+        <th class="b" style="width:7%">Rejected<br>Qty</th>
+        <th class="b" style="width:5%">UOM</th>
+        <th class="b" style="width:8%">Rate/<br>SQMT</th>
+        <th class="b" style="width:8%">Rate</th>
+        <th class="b" style="width:4%">per</th>
+        <th class="b" style="width:6%">Disc<br>%</th>
+        <th class="b" style="width:9%">Amount</th>
       </tr>
     </thead>
     <tbody>
       {% for row in doc.items %}
-      {# Per-row GST rate #}
-      {% set ns_gst = namespace(rate=0) %}
-      {% set _igst = (row.igst_rate or 0)|float %}
-      {% set _cgst = (row.cgst_rate or 0)|float %}
-      {% set _sgst = (row.sgst_rate or 0)|float %}
-      {% set ns_gst.rate = _igst + _cgst + _sgst %}
-      {% if ns_gst.rate == 0 %}{% set ns_gst.rate = ns_doc.doc_gst %}{% endif %}
+      {# ROLL/SQMT check — same as Purchase Order #}
+      {% set is_roll = (row.uom or "")|upper == "ROLL" and (row.stock_uom or "")|upper == "SQMT" and (row.conversion_factor or 0)|float > 0 %}
       <tr>
-        <td class="b ta-c">{{ loop.index }}</td>
-        <td class="b">
+        <td class="b">{{ loop.index }}</td>
+        <td class="b wrap-anywhere">
           <strong>{{ row.item_name or row.item_code }}</strong>
           {% if row.description and row.description != row.item_name %}
           <br><span class="italic lbl">{{ row.description | striptags | trim }}</span>
           {% endif %}
         </td>
-        <td class="b ta-c">{{ row.gst_hsn_code or "" }}</td>
-        <td class="b ta-c">{% if ns_gst.rate %}{{ "%g" | format(ns_gst.rate) }}%{% endif %}</td>
-        <td class="b ta-r">{{ fm(row.received_qty or row.qty) }}</td>
-        <td class="b ta-r">{{ fm(row.qty) }}</td>
-        <td class="b ta-r {% if row.rejected_qty %}rej{% endif %}">{{ fm(row.rejected_qty or 0) }}</td>
-        <td class="b ta-c">{{ row.uom }}</td>
-        <td class="b ta-r">{{ fm(row.rate) }}</td>
-        <td class="b ta-r">{{ fm(row.amount) }}</td>
+        <td class="b wrap-anywhere">{{ row.gst_hsn_code or "" }}</td>
+        <td class="b">{{ fq(row.received_qty or row.qty) }}</td>
+        <td class="b">{{ fq(row.qty) }}</td>
+        <td class="b {% if row.rejected_qty %}rej{% endif %}">{{ fq(row.rejected_qty or 0) }}</td>
+        <td class="b">{{ row.uom }}</td>
+        <td class="b">{% if is_roll and row.custom_sqmt_rate %}{{ fm(row.custom_sqmt_rate) }}{% endif %}</td>
+        <td class="b">{{ fm(row.rate) }}</td>
+        <td class="b">{{ row.uom }}</td>
+        <td class="b">{% if row.discount_percentage %}{{ "%.2f"|format(row.discount_percentage) }}{% endif %}</td>
+        <td class="b">{{ fm(row.amount) }}</td>
       </tr>
       {% endfor %}
 
-      {# Net Total #}
+      {# Sub Total — 12 columns total: 11 + Amount #}
       <tr>
-        <td class="b" colspan="9" style="text-align:right"></td>
-        <td class="b ta-r">{{ fm(doc.net_total) }}</td>
+        <td class="b" colspan="11">Sub Total</td>
+        <td class="b">{{ fm(doc.net_total) }}</td>
       </tr>
 
-      {# Tax rows #}
+      {# Tax rows — real applied tax, shown when this GRN actually has taxes #}
       {% for tax in doc.taxes %}
       {% if tax.tax_amount %}
       <tr class="italic">
-        <td class="b" colspan="8" style="text-align:right">{{ tax.description }} {{ "%g" | format(tax.rate) }} %</td>
-        <td class="b ta-c">%</td>
-        <td class="b ta-r">{{ fm(tax.tax_amount) }}</td>
+        <td class="b" colspan="10">{{ tax.description }} {{ "%g" | format(tax.rate) }} %</td>
+        <td class="b">%</td>
+        <td class="b">{{ fm(tax.tax_amount) }}</td>
       </tr>
       {% endif %}
       {% endfor %}
 
       {# Spacers #}
       {% for _i in range(4) %}
-      <tr style="height:16px"><td class="b" colspan="10"></td></tr>
+      <tr style="height:16px"><td class="b" colspan="12"></td></tr>
       {% endfor %}
 
-      {# Grand Total #}
+      {# Grand Total — fm() already prefixes the currency symbol; a manual
+         &#8377; here duplicated it, same bug already fixed on the PO format. #}
       <tr>
-        <td class="b ta-r" colspan="9"><strong>Grand Total</strong></td>
-        <td class="b ta-r"><strong>&#8377;&nbsp;{{ fm(doc.grand_total) }}</strong></td>
+        <td class="b" colspan="11"><strong>Grand Total</strong></td>
+        <td class="b"><strong>{{ fm(doc.grand_total) }}</strong></td>
       </tr>
     </tbody>
   </table>

@@ -79,7 +79,7 @@ AGENT_MODULES = {
 
 _ALL_MANAGER_ROLES = [
 	"System Manager", "Sales Manager", "Accounts Manager",
-	"HR Manager", "Purchase Manager", "Manufacturing Manager",
+	"HR Manager", "Purchase Manager", "Factory Management",
 ]
 
 
@@ -403,8 +403,10 @@ def run_istix_enforcer(trigger="schedule"):
 			SELECT wo.name, wo.order_sheet, wo.item_code,
 			       wo.stage, wo.operator, wo.machine,
 			       wo.started_at, wo.priority,
-			       TIMESTAMPDIFF(HOUR, wo.started_at, NOW()) AS hours_running
+			       TIMESTAMPDIFF(HOUR, wo.started_at, NOW()) AS hours_running,
+			       os.sales_order, os.customer_name
 			FROM `tabIB Work Order` wo
+			JOIN `tabIB Order Sheet` os ON os.name = wo.order_sheet
 			WHERE wo.status = 'In Progress'
 			  AND wo.started_at IS NOT NULL
 			  AND TIMESTAMPDIFF(HOUR, wo.started_at, NOW()) >= 8
@@ -414,19 +416,23 @@ def run_istix_enforcer(trigger="schedule"):
 		records = len(stalled)
 		for wo in stalled:
 			hours = flt(wo.hours_running)
+			so_bit = f" Sales Order: {wo.sales_order}" + (f" ({wo.customer_name})" if wo.customer_name else "") + "." if wo.sales_order else ""
 			summary = (
 				f"Work Order {wo.name} (Stage: {wo.stage}) has been running for "
 				f"{hours:.0f}h without completion. Item: {wo.item_code}. "
-				f"Machine: {wo.machine or 'unassigned'}."
+				f"Machine: {wo.machine or 'unassigned'}.{so_bit}"
 			)
 			msg = llm.complete(
 				"You are a production supervisor. Be concise. One sentence.",
 				f"Write an escalation note: Work order {wo.name} stage {wo.stage} "
-				f"stalled {hours:.0f} hours. Item: {wo.item_code}.",
+				f"stalled {hours:.0f} hours. Item: {wo.item_code}."
+				+ (f" Sales Order {wo.sales_order} for {wo.customer_name}." if wo.sales_order else ""),
 			)
 			draft = {
 				"work_order": wo.name,
 				"order_sheet": wo.order_sheet,
+				"sales_order": wo.sales_order,
+				"customer_name": wo.customer_name,
 				"item_code": wo.item_code,
 				"stage": wo.stage,
 				"hours_running": hours,
@@ -435,8 +441,15 @@ def run_istix_enforcer(trigger="schedule"):
 				"priority": wo.priority,
 				"message": msg or summary,
 			}
+			# Title carries the SO/customer, same as the sibling prod_* agents
+			# above — a manager scanning the AI Inbox card list previously saw
+			# only "Stalled WO: IB-WO-2026-25291 (10h)" with no way to tell
+			# whose order it was without clicking through.
+			title = f"Stalled WO: {wo.name} ({hours:.0f}h)"
+			if wo.sales_order:
+				title += f" — {wo.sales_order}" + (f" ({wo.customer_name})" if wo.customer_name else "")
 			if _queue("istix_enforcer", "escalate_work_order",
-					  f"Stalled WO: {wo.name} ({hours:.0f}h)", msg or summary, draft,
+					  title, msg or summary, draft,
 					  "IB Work Order", wo.name, bool(msg)):
 				made += 1
 		_finish_log(log, "success", records, made)
@@ -613,7 +626,19 @@ def run_prod_machine_assign(trigger="schedule"):
 # ── production agent 3: prod_notify_ready ─────────────────────────────────────
 
 def run_prod_notify_ready(trigger="schedule"):
-	"""Order Sheets where all items are Ready to Deliver → notify sales user."""
+	"""Order Sheets that are fully ready to deliver → notify sales user.
+
+	RTD/Delivered were collapsed out of the stage model entirely (2026-08-13,
+	see production.py's STAGES) — Packing is the real last Work Order stage
+	now, and IB Order Sheet.status flips to "Completed" once every item's
+	real last stage is done (_update_order_sheet_progress). This used to
+	independently re-derive "all items RTD" from a per-WO stage query as a
+	staleness check against os.status possibly not having caught up yet —
+	but there's no RTD WO stage left to check for, so that query now
+	permanently matches zero rows. os.status == "Completed" is the same
+	signal get_order_dn_readiness()/get_so_list_badges() already treat as
+	authoritative; reusing it here too instead of re-deriving it.
+	"""
 	log = _run_log("prod_notify_ready", trigger)
 	made = 0
 	records = 0
@@ -621,16 +646,10 @@ def run_prod_notify_ready(trigger="schedule"):
 		os_rows = frappe.db.sql("""
 			SELECT os.name, os.sales_order, os.customer_name,
 			       os.priority, os.delivery_date,
-			       so.custom_sales_person_user,
-			       COUNT(DISTINCT wo.item_code) AS total_items,
-			       SUM(wo.stage = 'Ready to Deliver' AND wo.status = 'Completed') AS rtd_count
+			       so.custom_sales_person_user
 			FROM `tabIB Order Sheet` os
-			JOIN `tabIB Work Order` wo ON wo.order_sheet = os.name
 			LEFT JOIN `tabSales Order` so ON so.name = os.sales_order
-			WHERE os.status NOT IN ('Completed', 'Cancelled')
-			GROUP BY os.name, os.sales_order, os.customer_name,
-			         os.priority, os.delivery_date, so.custom_sales_person_user
-			HAVING total_items > 0 AND total_items = rtd_count
+			WHERE os.status = 'Completed'
 			ORDER BY os.delivery_date ASC, os.name ASC
 			LIMIT 30
 		""", as_dict=True)

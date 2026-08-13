@@ -147,9 +147,13 @@ class IBCollectionsDashboard {
 			this.load();
 		});
 		this.$wrap.find("#ib-col-refresh").on("click", () => this.load());
-		this.$wrap.find("#ib-col-si").on("click", () =>
-			frappe.set_route("List", this._doctype || "Sales Invoice", { outstanding_amount: [">", 0], docstatus: 1 })
-		);
+		this.$wrap.find("#ib-col-si").on("click", () => {
+			// Sales Order (dev billing mode) has no outstanding_amount column —
+			// a filter built for Sales Invoice's own field breaks the list view
+			// on that doctype.
+			const filters = this._dev_mode ? { docstatus: 1 } : { outstanding_amount: [">", 0], docstatus: 1 };
+			frappe.set_route("List", this._doctype || "Sales Invoice", filters);
+		});
 
 		let _min_od_t;
 		this.$wrap.find("#ib-col-min-overdue").on("input", (e) => {
@@ -205,6 +209,7 @@ class IBCollectionsDashboard {
 				if (!r.message) return;
 				const d = r.message;
 				this._doctype = d.doctype;
+				this._dev_mode = d.dev_mode;
 				this._invoices = d.invoices || [];
 				this._privileged = d.privileged;
 				this._customer_total = d.customer_total || 0;
@@ -420,7 +425,7 @@ class IBCollectionsDashboard {
 		}
 
 		const d = new frappe.ui.Dialog({
-			title: `Log Payment — ${customer_name}`,
+			title: `Log Payment — ${frappe.utils.escape_html(customer_name)}`,
 			fields,
 			primary_action_label: "Open Payment Entry",
 			primary_action(vals) {

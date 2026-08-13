@@ -137,7 +137,10 @@ class IBFinanceDashboard {
 		</div>`);
 
 		this.$wrap.find("#ib-fin-btn-si").on("click", () => {
-			frappe.route_options = { docstatus: 1, outstanding_amount: [">", 0] };
+			// Sales Order (dev billing mode) has no outstanding_amount column —
+			// a filter built for Sales Invoice's own field would break the list
+			// view. See _ar_route_options() for the shared fix.
+			frappe.route_options = this._ar_route_options();
 			frappe.set_route("List", this.sales_dt || "Sales Invoice");
 		});
 		this.$wrap.find("#ib-fin-btn-pi").on("click", () => frappe.set_route("List", this.purch_dt || "Purchase Invoice"));
@@ -166,9 +169,22 @@ class IBFinanceDashboard {
 		return "₹" + Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 	}
 
+	// Sales Invoice has a real outstanding_amount column; Sales Order (dev
+	// billing mode, the app's current default) doesn't — billing_mode.py's
+	// own sales_outstanding_expr() comment says so explicitly. A list-view
+	// route_options filter can only match a real column, so dev mode drops
+	// the outstanding-only filter (shows all confirmed orders) rather than
+	// building a filter against a field that isn't there.
+	_ar_route_options() {
+		return this.dev_mode
+			? { docstatus: 1 }
+			: { docstatus: 1, outstanding_amount: [">", 0] };
+	}
+
 	_render(d) {
 		this.sales_dt = d.sales_dt;
 		this.purch_dt = d.purch_dt;
+		this.dev_mode = d.dev_mode;
 		this._render_kpis(d);
 		this._render_pl_chart(d.pl_trend);
 		this._render_vendors(d.top_vendors);
@@ -195,7 +211,7 @@ class IBFinanceDashboard {
 			{
 				label: "Outstanding AR", raw: d.ar, color: IB_FIN_COLOR_WARNING,
 				delta: `<span class="ib-delta neu">AP: ${this._fmt(d.ap)}</span>`,
-				click: () => { frappe.route_options = { docstatus: 1, outstanding_amount: [">", 0] }; frappe.set_route("List", d.sales_dt); },
+				click: () => { frappe.route_options = this._ar_route_options(); frappe.set_route("List", d.sales_dt); },
 			},
 			{
 				label: "Cash & Bank", raw: d.total_cash_bank, color: IB_FIN_COLOR_CASH,
@@ -313,8 +329,12 @@ class IBFinanceDashboard {
 				<td style="text-align:right;font-weight:600">${this._fmt(r.outstanding_amount)}</td>
 			</tr>`;
 		}).join(""));
-		$el.find("tr[data-name]").on("click", function () {
-			frappe.set_route("Form", "Sales Invoice", $(this).data("name"));
+		// r.name here is a doc of whatever sales_doctype() resolved to (Sales
+		// Order in dev billing mode) — hardcoding "Sales Invoice" opened a
+		// dead Form route for a name in the wrong doctype's naming series.
+		const sales_dt = this.sales_dt || "Sales Invoice";
+		$el.find("tr[data-name]").on("click", (e) => {
+			frappe.set_route("Form", sales_dt, $(e.currentTarget).data("name"));
 		});
 	}
 }

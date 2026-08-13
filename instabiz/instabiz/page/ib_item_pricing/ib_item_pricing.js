@@ -170,6 +170,7 @@ class IBItemPricingShell {
 
 	_cleanup() {
 		this._teardown_active();
+		this._active_tab = null;
 	}
 }
 

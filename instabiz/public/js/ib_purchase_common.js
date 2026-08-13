@@ -205,13 +205,50 @@ frappe.ui.form.on("Purchase Receipt Item", {
 });
 
 // ── Purchase Invoice ──────────────────────────────────────────────────────────
+function ib_pi_open_debit_note(frm) {
+    // IB Debit Note's own against_purchase_invoice field handler already fetches
+    // the PI, maps every item, and refreshes totals — reuse it via set_value
+    // (a real field-trigger) instead of duplicating that logic here. A raw
+    // Object.assign prefill bypasses field triggers entirely, which is exactly
+    // what left Total/Tax/Grand Total sitting at 0 until save.
+    frappe.model.with_doctype("IB Debit Note", () => {
+        const doc = frappe.model.get_new_doc("IB Debit Note");
+        frappe.set_route("Form", "IB Debit Note", doc.name).then(() => {
+            cur_frm.set_value("against_purchase_invoice", frm.doc.name);
+        });
+    });
+}
+
 frappe.ui.form.on("Purchase Invoice", {
+    refresh(frm) {
+        // Native is_return path is blocked server-side (see is_return handler
+        // below + instabiz.overrides.purchase_invoice) — the button stays, but
+        // now opens a prefilled IB Debit Note instead of the native return flow.
+        if (frm.doc.docstatus === 1) {
+            frm.page.remove_inner_button(__("Return / Debit Note"), __("Create"));
+            frm.add_custom_button(__("Return / Debit Note"), () => ib_pi_open_debit_note(frm), __("Create"));
+        }
+    },
     onload:           (frm) => ib_auto_purchase_tax(frm),
     supplier:         (frm) => ib_auto_purchase_tax(frm),
     supplier_address: (frm) => ib_auto_purchase_tax(frm),
     supplier_gstin:   (frm) => ib_auto_purchase_tax(frm),
     company_gstin:    (frm) => ib_auto_purchase_tax(frm),
     is_reverse_charge:(frm) => ib_auto_purchase_tax(frm),
+
+    // Server also blocks this on save (instabiz.overrides.purchase_invoice) —
+    // this just catches it the moment the box is checked instead of after the
+    // form is filled in. IB Debit Note is the only supported path since 2026-08-12.
+    is_return(frm) {
+        if (frm.doc.is_return && frm.is_new()) {
+            frm.set_value("is_return", 0);
+            frappe.msgprint({
+                title: __("Use IB Debit Note Instead"),
+                indicator: "orange",
+                message: __("Don't create a return here — use <b>IB Debit Note</b> instead (Workspace → IB Debit Note → New)."),
+            });
+        }
+    },
 });
 
 frappe.ui.form.on("Purchase Invoice Item", {

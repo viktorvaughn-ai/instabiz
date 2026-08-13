@@ -201,6 +201,7 @@ def get_collections_data(search=None, filter_sp=None, overdue_only=False, offset
 
 	return {
 		"doctype": doctype,
+		"dev_mode": dev_mode,
 		"customers": customers,
 		"customer_total": customer_total,
 		"invoices": invoices,

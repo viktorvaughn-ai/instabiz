@@ -68,15 +68,25 @@ def _data(filters):
 	po_names = [r.name for r in rows]
 	placeholders = ", ".join(["%s"] * len(po_names))
 
+	# pri.purchase_order is per-row on the child table while pr.grand_total is
+	# parent-level — a plain JOIN+SUM re-adds the same GRN's grand_total once
+	# per matching line item (a 4-item GRN sourced from one PO would 4x the
+	# "received" figure). Dedupe to one (purchase_order, pr.name) pair per GRN
+	# in a subquery first, then sum — matches grn_count's own COUNT(DISTINCT)
+	# semantics: a GRN's full value is attributed once to each PO it touches.
 	grn_rows = frappe.db.sql(
 		f"""
-		SELECT pri.purchase_order,
-		       COUNT(DISTINCT pr.name) AS grn_count,
-		       SUM(pr.grand_total) AS received_amount
-		FROM `tabPurchase Receipt` pr
-		INNER JOIN `tabPurchase Receipt Item` pri ON pri.parent = pr.name
-		WHERE pr.docstatus = 1 AND pri.purchase_order IN ({placeholders})
-		GROUP BY pri.purchase_order
+		SELECT sub.purchase_order,
+		       COUNT(DISTINCT sub.pr_name) AS grn_count,
+		       SUM(sub.pr_grand_total) AS received_amount
+		FROM (
+			SELECT DISTINCT pri.purchase_order AS purchase_order,
+			       pr.name AS pr_name, pr.grand_total AS pr_grand_total
+			FROM `tabPurchase Receipt` pr
+			INNER JOIN `tabPurchase Receipt Item` pri ON pri.parent = pr.name
+			WHERE pr.docstatus = 1 AND pri.purchase_order IN ({placeholders})
+		) sub
+		GROUP BY sub.purchase_order
 		""",
 		tuple(po_names),
 		as_dict=True,
@@ -90,16 +100,23 @@ def _data(filters):
 	if is_dev_billing_mode():
 		pi_map = {}
 	else:
+		# Same child-row fan-out as the GRN query above — dedupe to one
+		# (purchase_order, pi.name) pair per invoice before summing.
 		pi_rows = frappe.db.sql(
 			f"""
-			SELECT pii.purchase_order,
-			       COUNT(DISTINCT pi.name) AS pi_count,
-			       SUM(pi.grand_total) AS billed_amount,
-			       SUM(pi.outstanding_amount) AS outstanding
-			FROM `tabPurchase Invoice` pi
-			INNER JOIN `tabPurchase Invoice Item` pii ON pii.parent = pi.name
-			WHERE pi.docstatus = 1 AND pii.purchase_order IN ({placeholders})
-			GROUP BY pii.purchase_order
+			SELECT sub.purchase_order,
+			       COUNT(DISTINCT sub.pi_name) AS pi_count,
+			       SUM(sub.pi_grand_total) AS billed_amount,
+			       SUM(sub.pi_outstanding) AS outstanding
+			FROM (
+				SELECT DISTINCT pii.purchase_order AS purchase_order,
+				       pi.name AS pi_name, pi.grand_total AS pi_grand_total,
+				       pi.outstanding_amount AS pi_outstanding
+				FROM `tabPurchase Invoice` pi
+				INNER JOIN `tabPurchase Invoice Item` pii ON pii.parent = pi.name
+				WHERE pi.docstatus = 1 AND pii.purchase_order IN ({placeholders})
+			) sub
+			GROUP BY sub.purchase_order
 			""",
 			tuple(po_names),
 			as_dict=True,

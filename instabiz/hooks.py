@@ -44,9 +44,10 @@ scheduler_events = {
         "instabiz.overrides.payroll.run_monthly_payroll_draft",
         # Vendor Scorecard: trailing-90-day on-time/quality/fulfillment score per vendor
         "instabiz.overrides.vendor_scorecard.run_vendor_scorecard",
-        # MRP Phase 1: explode open SO demand through IB Production Recipe,
-        # auto-create draft Purchase Material Requests for raw-material shortfalls
-        "instabiz.overrides.mrp.run_mrp",
+        # MRP Phase 1 — disabled 2026-08-12 alongside the production data reset,
+        # at user's request. Re-enable by uncommenting if raw-material MRP
+        # drafting off open SO demand is wanted again.
+        # "instabiz.overrides.mrp.run_mrp",
         # Cross-module Correlation: merge open IB Insights across 2+ domains for
         # the same customer within 7 days into one consolidated Insight
         "instabiz.overrides.insight_correlation.run_insight_correlation",

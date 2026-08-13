@@ -135,8 +135,13 @@ def _log_auto_approval(doc, action_type, agent, reason):
 	})
 	# ignore_links: decided_by (Link->User) intentionally holds a label,
 	# not a real User docname — see AUTOMATION_ACTOR's own comment.
+	# No explicit commit here: mrp.py's run_mrp() calls this from inside a
+	# per-item frappe.db.savepoint() loop specifically so one bad item can't
+	# zero out the whole run — an eager COMMIT here would destroy that
+	# savepoint, breaking the isolation the surrounding loop depends on. Both
+	# callers (run_mrp's own end-of-loop commit, and normal request-end
+	# commit for the CPQ path) already persist this write correctly.
 	action.insert(ignore_permissions=True, ignore_links=True)
-	frappe.db.commit()
 
 
 # ── Material Request (MRP) ─────────────────────────────────────────────────

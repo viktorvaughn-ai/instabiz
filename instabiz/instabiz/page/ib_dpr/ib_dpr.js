@@ -184,7 +184,7 @@ class IBDPRPage {
 			const label = (st.stage || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 			const machine_rows = (st.machines || []).map(m => `
 				<tr class="ib-dpr-machine-row">
-					<td><span class="ib-dpr-machine-pill">${m.machine || "—"}</span></td>
+					<td><span class="ib-dpr-machine-pill">${frappe.utils.escape_html(m.machine || "—")}</span></td>
 					<td>${m.wo_completed ?? "—"}</td>
 					<td>${m.output_qty ?? "—"}</td>
 				</tr>

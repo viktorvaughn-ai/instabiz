@@ -96,6 +96,7 @@ def get_cpq_price(item_code, qty=1, customer=None, territory=None):
 	`IB CPQ Setting` exists at all for this item/item_group; caller should fall
 	back to a manual rate (Item Standard Selling Rate is included as a hint).
 	"""
+	frappe.only_for(["System Manager", "Sales Manager", "Sales User"])
 	qty = flt(qty) or 1
 	item = _item_context(item_code)
 	cust_ctx = _customer_context(customer)
@@ -190,6 +191,7 @@ def get_cpq_price(item_code, qty=1, customer=None, territory=None):
 def get_cpq_settings_for_item(item_code):
 	"""All active CPQ Setting headers (+ slab rows) touching this item/item_group —
 	powers a "why this price" transparency panel in the configurator."""
+	frappe.only_for(["System Manager", "Sales Manager", "Sales User"])
 	item = _item_context(item_code)
 	return _candidate_slabs(item_code, item.item_group)
 

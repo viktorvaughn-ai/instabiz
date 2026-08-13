@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\": \"hr-h0\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>DASHBOARDS</b></span>\", \"col\": 12}}, {\"id\": \"hr-dash\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"HR Dashboard\", \"col\": 3}}, {\"id\": \"hr-analytics-hub\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Analytics Hub\", \"col\": 3}}, {\"id\": \"hr-h1\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>HR MANAGEMENT</b></span>\", \"col\": 12}}, {\"id\": \"hr-emp\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Employees\", \"col\": 3}}, {\"id\": \"hr-att\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Attendance Terminal\", \"col\": 3}}, {\"id\": \"hr-bio\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Biometric Import\", \"col\": 3}}, {\"id\": \"H9Tz5LnWPQ\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Checkins\", \"col\": 3}}, {\"id\": \"hr-org\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Org Chart\", \"col\": 3}}, {\"id\": \"hr-lv\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Leave Applications\", \"col\": 3}}, {\"id\": \"hr-sal\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Salary Slips\", \"col\": 3}}, {\"id\": \"hr-ffs\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"F&F Settlement\", \"col\": 3}}, {\"id\": \"mty86_lBYn\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Employee Exit Handover\", \"col\": 3}}, {\"id\": \"hr-hik\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Hikvision Terminals\", \"col\": 3}}, {\"id\": \"hr-h2\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>TOOLS</b></span>\", \"col\": 12}}, {\"id\": \"hr-h3\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>REPORTS</b></span>\", \"col\": 12}}, {\"id\": \"hr-pay\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Payroll Summary\", \"col\": 3}}, {\"id\": \"hr-h4\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\", \"col\": 12}}, {\"id\": \"hr-kb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Knowledge Base\", \"col\": 3}}]",
+ "content": "[{\"id\":\"hr-h0\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>DASHBOARDS</b></span>\",\"col\":12}},{\"id\":\"hr-dash\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"HR Dashboard\",\"col\":3}},{\"id\":\"hr-analytics-hub\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Analytics Hub\",\"col\":3}},{\"id\":\"hr-h1\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>HR MANAGEMENT</b></span>\",\"col\":12}},{\"id\":\"hr-emp\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Employees\",\"col\":3}},{\"id\":\"hr-att\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Attendance Terminal\",\"col\":3}},{\"id\":\"hr-bio\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Biometric Import\",\"col\":3}},{\"id\":\"H9Tz5LnWPQ\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Checkins\",\"col\":3}},{\"id\":\"hr-org\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Org Chart\",\"col\":3}},{\"id\":\"hr-lv\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Leave Applications\",\"col\":3}},{\"id\":\"hr-sal\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Salary Slips\",\"col\":3}},{\"id\":\"hr-ffs\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"F&F Settlement\",\"col\":3}},{\"id\":\"mty86_lBYn\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Employee Exit Handover\",\"col\":3}},{\"id\":\"hr-hik\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Hikvision Terminals\",\"col\":3}},{\"id\":\"RjprtKIp11\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Employee Salary Structure\",\"col\":3}},{\"id\":\"hr-h2\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>TOOLS</b></span>\",\"col\":12}},{\"id\":\"hr-h3\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>REPORTS</b></span>\",\"col\":12}},{\"id\":\"hr-pay\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Payroll Summary\",\"col\":3}},{\"id\":\"hr-h4\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\",\"col\":12}},{\"id\":\"hr-kb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Knowledge Base\",\"col\":3}}]",
  "creation": "2026-07-29 01:54:12.399483",
  "custom_blocks": [],
  "docstatus": 0,
@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz HR",
  "links": [],
- "modified": "2026-07-31 10:15:19.322081",
+ "modified": "2026-08-12 15:02:48.239046",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz HR",
@@ -41,6 +41,14 @@
    "doc_view": "List",
    "label": "Employee Exit Handover",
    "link_to": "Employee Exit Handover",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Yellow",
+   "doc_view": "List",
+   "label": "Employee Salary Structure",
+   "link_to": "Salary Structure Assignment",
    "stats_filter": "[]",
    "type": "DocType"
   },

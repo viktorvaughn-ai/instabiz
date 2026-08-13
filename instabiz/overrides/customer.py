@@ -3,6 +3,7 @@ from frappe.utils import flt
 from erpnext.selling.doctype.customer.customer import Customer
 
 from instabiz.overrides.billing_mode import is_dev_billing_mode, sales_doctype, sales_outstanding_expr
+from instabiz.overrides.utils import territory_from_gstin as _utils_territory_from_gstin
 
 
 def compute_customer_outstanding(customer):
@@ -301,42 +302,21 @@ def _sync_territory_from_billing_state(doc):
 
 # Maps GSTIN 2-digit state code → Territory name as it exists in this system.
 # Codes without a matching Territory are absent from the dict (skip silently).
-_GSTIN_CODE_TO_TERRITORY = {
-	"02": "Himachal Pradesh",
-	"03": "Punjab",
-	"04": "Delhi",
-	"05": "Uttarakhand",
-	"06": "Haryana",
-	"07": "Delhi",
-	"08": "Rajasthan",
-	"09": "Uttar Pradesh",
-	"10": "Bihar",
-	"18": "Assam",
-	"19": "West Bengal",
-	"20": "Jharkhand",
-	"21": "Odisha",
-	"22": "Chhattisgarh",
-	"23": "Madhya Pradesh",
-	"24": "Gujarat",
-	"25": "Daman & Diu",
-	"26": "Dadra & Nagar",
-	"27": "Maharashtra",
-	"28": "Andhra Pradesh",
-	"29": "Karnataka",
-	"30": "Goa",
-	"32": "Kerala",
-	"33": "Tamil Nadu",
-	"36": "Telangana",
-	"37": "Andhra Pradesh",
-}
-
-
+# Was a second, independently-hand-maintained copy of the GSTIN-state-code
+# map (utils.py's GSTIN_STATE_MAP, used by lead.py/ib_transport.py) — the two
+# had drifted: this copy had "04": "Delhi" (wrong; 04 is Chandigarh per the
+# real CBIC state code list, and utils.py's copy already had it right),
+# duplicate/colliding "04"/"07" both mapping to Delhi, differently-spelled
+# state names for 25/26 that wouldn't match whichever spelling the real
+# Territory record uses, and was missing 12 codes utils.py's copy had (J&K,
+# Sikkim, Arunachal, Nagaland, Manipur, Mizoram, Tripura, Meghalaya,
+# Lakshadweep, Puducherry, A&N Islands, Ladakh) — meaning Customers from
+# those states never got GSTIN-based territory auto-derivation even though
+# Leads (via the same GSTIN, through lead.py) would. Now reuses utils.py's
+# single copy instead of maintaining a second one that can drift again.
 def _territory_from_gstin(gstin):
 	"""Return Territory name derived from GSTIN 2-digit state code, or None."""
-	if not gstin or len(gstin) < 2:
-		return None
-	code = gstin[:2].strip()
-	return _GSTIN_CODE_TO_TERRITORY.get(code)
+	return _utils_territory_from_gstin(gstin)
 
 
 def _sync_territory_from_gstin(doc):

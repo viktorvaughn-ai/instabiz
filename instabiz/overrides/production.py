@@ -30,54 +30,60 @@ def _check_so_production_access(sales_order):
 		return
 	frappe.throw(_("Not permitted to view production status for this Sales Order"), frappe.PermissionError)
 
+# Ready to Deliver / Delivered collapsed out of the stage model entirely
+# (2026-08-13, user's explicit decision). Packing (or an item's real last
+# production stage) is now the true last Work Order — nothing is
+# manufactured at RTD, it was a manual click with no physical work behind
+# it. "Ready to Deliver" is now just what a Completed-through-Packing item
+# IS (Create Delivery Note becomes available); "Delivered" is derived from
+# the Delivery Note being submitted (see mark_wos_delivered / _get_dispatch_info)
+# rather than a Work Order anyone starts/completes. Despatch-type IB Machines
+# (DS-01/DS-02) lose their only purpose in the stage-routing model as a
+# result — left as real master data, just unreferenced by production flow.
 STAGES = [
 	"Coating",
 	"Slitting",
 	"Rewinding",
 	"Cutting",
 	"Packing",
-	"Ready to Deliver",
-	"Delivered",
 ]
 
 _STAGE_MACHINE_TYPE = {
-	"Coating":          "Coating",
-	"Slitting":         "Slitting",
-	"Rewinding":        "Rewinding",
-	"Cutting":          "Cutting",
-	"Packing":          "Packing",
-	"Ready to Deliver": "Despatch",
-	"Delivered":        "Despatch",
+	"Coating":   "Coating",
+	"Slitting":  "Slitting",
+	"Rewinding": "Rewinding",
+	"Cutting":   "Cutting",
+	"Packing":   "Packing",
 }
 
 # Stage route per item group — determines which stages apply in order.
 # Items skip stages not in their route (e.g. PVC tapes don't need Coating).
 _ITEM_GROUP_STAGE_ROUTES = {
-	"PLASTIC":           ["Coating", "Slitting", "Rewinding", "Cutting", "Packing", "Ready to Deliver"],
-	"PAPER":             ["Coating", "Slitting", "Cutting", "Packing", "Ready to Deliver"],
-	"REFLECTIVE":        ["Coating", "Slitting", "Cutting", "Packing", "Ready to Deliver"],
-	"PVC":               ["Slitting", "Cutting", "Packing", "Ready to Deliver"],
-	"CLOTH":             ["Slitting", "Cutting", "Packing", "Ready to Deliver"],
-	"FOAM":              ["Slitting", "Cutting", "Packing", "Ready to Deliver"],
-	"FOAM - PE":         ["Slitting", "Cutting", "Packing", "Ready to Deliver"],
-	"FOIL":              ["Slitting", "Cutting", "Packing", "Ready to Deliver"],
-	"AEROSOL-PAINT":     ["Packing", "Ready to Deliver"],
-	"AEROSOL-CLEANER":   ["Packing", "Ready to Deliver"],
-	"AEROSOL-LUBRICANT": ["Packing", "Ready to Deliver"],
-	"AEROSOL-MULTI":     ["Packing", "Ready to Deliver"],
-	"AEROSOL-PU FOAM":   ["Packing", "Ready to Deliver"],
-	"SEALANT-ACRYLIC":   ["Packing", "Ready to Deliver"],
-	"SEALANT-SILICONE":  ["Packing", "Ready to Deliver"],
-	"ADHESIVE-HOTMELT":  ["Packing", "Ready to Deliver"],
+	"PLASTIC":           ["Coating", "Slitting", "Rewinding", "Cutting", "Packing"],
+	"PAPER":             ["Coating", "Slitting", "Cutting", "Packing"],
+	"REFLECTIVE":        ["Coating", "Slitting", "Cutting", "Packing"],
+	"PVC":               ["Slitting", "Cutting", "Packing"],
+	"CLOTH":             ["Slitting", "Cutting", "Packing"],
+	"FOAM":              ["Slitting", "Cutting", "Packing"],
+	"FOAM - PE":         ["Slitting", "Cutting", "Packing"],
+	"FOIL":              ["Slitting", "Cutting", "Packing"],
+	"AEROSOL-PAINT":     ["Packing"],
+	"AEROSOL-CLEANER":   ["Packing"],
+	"AEROSOL-LUBRICANT": ["Packing"],
+	"AEROSOL-MULTI":     ["Packing"],
+	"AEROSOL-PU FOAM":   ["Packing"],
+	"SEALANT-ACRYLIC":   ["Packing"],
+	"SEALANT-SILICONE":  ["Packing"],
+	"ADHESIVE-HOTMELT":  ["Packing"],
 }
-_DEFAULT_STAGE_ROUTE = ["Cutting", "Packing", "Ready to Deliver"]
+_DEFAULT_STAGE_ROUTE = ["Cutting", "Packing"]
 
 # Gujarat is the only factory location (Coating/Slitting/Rewinding/Cutting
 # machines all live there). Maharashtra and Chennai are warehouse-only — an
-# order routed to either always gets Packing -> Ready to Deliver regardless
-# of item group, since there's no factory capability physically there.
+# order routed to either always gets just Packing regardless of item group,
+# since there's no factory capability physically there.
 _WAREHOUSE_ONLY_LOCATIONS = {"maharashtra", "chennai"}
-_WAREHOUSE_STAGE_ROUTE = ["Packing", "Ready to Deliver"]
+_WAREHOUSE_STAGE_ROUTE = ["Packing"]
 
 
 def _get_stage_route(item_code, location=None):
@@ -237,7 +243,7 @@ def get_production_dashboard(location=None):
 	# Warehouse-only locations never run Coating/Slitting/Rewinding/Cutting — don't
 	# even show those as empty cards when a warehouse location is selected.
 	visible_stages = (
-		["Packing", "Ready to Deliver", "Delivered"]
+		_WAREHOUSE_STAGE_ROUTE
 		if (location or "").lower() in _WAREHOUSE_ONLY_LOCATIONS
 		else STAGES
 	)
@@ -612,9 +618,15 @@ def create_order_sheet(sales_order, priority="Normal", notes=None):
 		doc.insert(ignore_permissions=True)
 		frappe.db.commit()
 
-		# Auto-create WOs for ALL applicable stages per item (route-aware)
-		auto_create_all_stage_wos(doc.name)
-
+		# JIT stage model (2026-08-13, user's explicit decision): no Work Orders
+		# are pre-created here anymore. auto_create_all_stage_wos() used to build
+		# the whole route's WO chain upfront the moment an Order Sheet existed —
+		# left in place, unused, same "dormant not deleted" precedent as the
+		# Seat Map/Live Floor/Link Jumbo Roll removals (see production.py
+		# history). Every item now starts with zero Work Orders; the first one
+		# is created on demand by start_item_stage() when a production user
+		# actually begins work on it and picks a stage. Order Sheet stays
+		# "Draft" until then — start_item_stage() flips it to "In Progress".
 		return doc.name
 	finally:
 		frappe.db.sql("SELECT RELEASE_LOCK(%s)", lock_name)
@@ -652,12 +664,12 @@ def get_stage_pipeline(location=None):
 	WO volume doesn't justify N+1 fetches every time the picker changes tabs.
 	"""
 	_require_production_role()
-	# Completed WOs are otherwise excluded (a Completed Coating/Slitting/...
-	# WO isn't "current" once the item has moved past it) — Delivered is the
-	# one deliberate exception: it's a terminal Completed WO (see
-	# mark_wos_delivered) with nothing after it in the route, so it IS the
-	# item's current stage once reached, not stale history.
-	conditions = ["(wo.status IN ('Pending', 'In Progress', 'On Hold') OR (wo.stage = 'Delivered' AND wo.status = 'Completed'))"]
+	# Completed WOs excluded — a Completed Coating/Slitting/.../Packing WO
+	# isn't "current" once the item has moved past it. Packing is always the
+	# last real stage now (RTD/Delivered collapsed out of the stage model,
+	# 2026-08-13 — see STAGES/mark_wos_delivered) so there's no terminal
+	# Completed-but-still-current exception to carve out anymore.
+	conditions = ["wo.status IN ('Pending', 'In Progress', 'On Hold')"]
 	params = {}
 	if location:
 		conditions.append("so.custom_location = %(location)s")
@@ -698,12 +710,6 @@ def get_stage_pipeline(location=None):
 		current = next((r for r in wos if r.status in ("In Progress", "On Hold")), None)
 		if not current:
 			current = next((r for r in wos if r.status == "Pending"), None)
-		if not current:
-			# Delivered rows only ever reach `wos` via the query's own
-			# stage='Delivered' carve-out above — every other Completed
-			# stage was already filtered out before grouping, so this can't
-			# resurface a stale mid-route WO.
-			current = next((r for r in wos if r.stage == "Delivered"), None)
 		if not current:
 			continue
 		row = current
@@ -764,6 +770,9 @@ def get_order_sheet_detail(order_sheet):
 			"operator",
 			"status",
 			"target_qty",
+			"target_uom",
+			"pcs_to_make",
+			"logs_to_make",
 			"completed_qty",
 			"wastage_qty",
 			"wastage_pct",
@@ -776,6 +785,11 @@ def get_order_sheet_detail(order_sheet):
 		],
 		order_by="creation asc",
 	)
+	# Stamp the order's own customer_name onto every WO — the WO panel (and
+	# any other surface that only has a bare WO to hand) needs this to show
+	# which SO/customer a WO belongs to without a second round-trip.
+	for wo in work_orders:
+		wo["customer_name"] = doc.customer_name
 
 	# Order-wise view: items with their WOs listed per item. Grouping by plain
 	# item_code (wo_by_item, still used below for product_wise_view) conflates
@@ -797,11 +811,25 @@ def get_order_sheet_detail(order_sheet):
 		else:
 			wo_by_item_legacy.setdefault(wo.item_code, []).append(wo)
 
+	# Needed for next_stage_suggestion below — same route-aware default the
+	# Active Production Plan's Start Production picker already uses (see
+	# get_production_plan()). Order-wise's own table had no "start" action at
+	# all under the JIT stage model (2026-08-13) — an item with zero Work
+	# Orders (the normal starting state now) just rendered "No Work Orders"
+	# with nothing clickable, a dead end reported live.
+	location = _get_os_location(order_sheet)
+
 	for item in items:
 		row_wos = wo_by_osi.get(item["name"], []) + wo_by_item_legacy.get(item["item_code"], [])
+		next_stage_suggestion = None
+		if not any(wo.status in ("Pending", "In Progress", "On Hold") for wo in row_wos):
+			stage_route = _get_stage_route(item["item_code"], location)
+			completed_stages = {wo.stage for wo in row_wos if wo.status == "Completed"}
+			next_stage_suggestion = next((s for s in stage_route if s not in completed_stages), None)
 		order_wise_view.append({
 			**item,
 			"work_orders": row_wos,
+			"next_stage_suggestion": next_stage_suggestion,
 		})
 
 	# Product-wise view: per item → {stage: {status, wo_name, completed_qty, target_qty}}
@@ -912,7 +940,7 @@ def get_order_sheet_wo_names(order_sheet):
 	return names
 
 
-_SUMMARY_STAGES = ["Coating", "Slitting", "Rewinding", "Cutting", "Packing", "Ready to Deliver"]
+_SUMMARY_STAGES = STAGES
 
 
 @frappe.whitelist()
@@ -924,12 +952,11 @@ def get_order_sheet_stage_workflow(order_sheet):
 	helper get_order_sheet_wo_names()/auto_create_all_stage_wos() already use).
 
 	Unlike get_order_sheet_wo_names() (which returns only the ONE currently-
-	actionable WO per item), this returns the FULL chain so the printed sheet
-	can show completed / current / not-yet-reached / not-in-route honestly —
-	all stage WOs for an item are created upfront by auto_create_all_stage_wos(),
-	but only the first stage gets a machine at creation time; later stages sit
-	as Pending with no machine until advance_to_next_stage() activates them.
-	That is real, expected data — not a gap to hide.
+	actionable WO per item), this returns the FULL route so the printed sheet
+	can show completed / current / not-yet-reached / not-in-route honestly.
+	JIT stage model (2026-08-13): a stage with no Work Order yet (never
+	started) renders here with status=None/machine=None, same as any other
+	not-yet-reached stage — real, expected data, not a gap to hide.
 
 	Keyed by order_sheet_item (child row name), not bare item_code, so an item
 	appearing on multiple rows of the same order sheet doesn't collide.
@@ -1230,9 +1257,8 @@ def create_work_orders_for_item(order_sheet, item_code, stages):
 
 	# Requested stage must be part of THIS item's actual route (route-aware — item
 	# group / warehouse-only location can both drop stages). Without this check, the
-	# manual "+" picker (which lists all 7 canonical stages regardless of route)
-	# could silently create an orphan Work Order for a stage the item never needs —
-	# same bug class already fixed in move_work_order_stage() (see its comment).
+	# manual "+" picker (which lists all canonical stages regardless of route)
+	# could silently create an orphan Work Order for a stage the item never needs.
 	location = _get_os_location(order_sheet)
 	stage_route = _get_stage_route(osi.item_code, location)
 
@@ -1429,16 +1455,19 @@ def _update_order_sheet_item(order_sheet, item_code, completed_qty, order_sheet_
 	updating all rows when the same item_code appears multiple times in one OS.
 	Falls back to item_code scan for legacy WOs.
 
-	Status is "Completed" only once every one of this item's Work Orders (across
-	every stage in its route) is itself Completed. Previously this compared
-	completed_qty >= qty — but qty_done always equals the item's full target_qty
-	at every single stage (IB Production Entry, which would track real partial
-	per-stage output, is unused by design — see complete_work_order), so that
-	check was true after the very first stage of any multi-stage route, marking
-	items (and via _update_order_sheet_progress, whole Order Sheets) "Completed"
-	while most of the route was still outstanding. Confirmed live: 8/17
-	Completed items and 2/7 Completed Order Sheets were wrongly flagged before
-	this fix; corrected via a one-off bench execute, see production.py history.
+	Status is "Completed" only once a Completed Work Order exists for EVERY
+	stage in this item's actual route (_get_stage_route) — not merely once
+	every Work Order that currently *exists* is Completed. Those were
+	equivalent back when auto_create_all_stage_wos() pre-created the whole
+	route's Work Orders upfront (every stage always had a row, so "all
+	existing WOs done" and "all route stages done" meant the same thing).
+	Under the JIT stage model (2026-08-13) most stages have no Work Order at
+	all until a user explicitly starts them — "all existing WOs Completed"
+	would go true after stage 1 of N every single time, the exact bug this
+	function was already fixed for once before (see git history: 8/17
+	Completed items and 2/7 Completed Order Sheets were wrongly flagged
+	before that first fix) — route-awareness is what actually has to hold,
+	not just "no WO is left incomplete".
 	"""
 	if order_sheet_item:
 		row = frappe.db.get_value("IB Order Sheet Item", order_sheet_item, ["name", "qty"], as_dict=True)
@@ -1451,14 +1480,17 @@ def _update_order_sheet_item(order_sheet, item_code, completed_qty, order_sheet_
 		)
 	if not rows:
 		return
+	location = _get_os_location(order_sheet)
+	stage_route = set(_get_stage_route(item_code, location))
 	for row in rows:
 		wo_filters = {"order_sheet": order_sheet, "status": ["not in", ["Cancelled"]]}
 		if order_sheet_item:
 			wo_filters["order_sheet_item"] = row.name
 		else:
 			wo_filters["item_code"] = item_code
-		wo_statuses = frappe.db.get_all("IB Work Order", filters=wo_filters, pluck="status")
-		all_done = bool(wo_statuses) and all(s == "Completed" for s in wo_statuses)
+		wo_rows = frappe.db.get_all("IB Work Order", filters=wo_filters, fields=["stage", "status"])
+		completed_stages = {w.stage for w in wo_rows if w.status == "Completed"}
+		all_done = bool(stage_route) and stage_route.issubset(completed_stages)
 		new_status = "Completed" if all_done else "In Progress"
 		frappe.db.set_value(
 			"IB Order Sheet Item",
@@ -1476,11 +1508,11 @@ def _update_order_sheet_progress(order_sheet_name):
 	Symmetric: also reopens a previously-Completed OS back to "In Progress" if
 	it no longer has every item Completed. Originally one-directional (Completed
 	only ever got set, never unset) — harmless as long as an item's status only
-	ever moves forward, but move_work_order_stage's rework path can legitimately
-	un-complete an item (moving a later stage back to an earlier, already-
-	Completed one for rework — see its own comment). Without this, an Order
-	Sheet reopened that way would stay stuck showing "Completed" indefinitely,
-	since nothing else ever re-evaluates it downward.
+	ever moves forward, but start_item_stage()'s rework path (reactivating an
+	already-Completed stage's WO for rework) can legitimately un-complete an
+	item. Without this, an Order Sheet reopened that way would stay stuck
+	showing "Completed" indefinitely, since nothing else ever re-evaluates it
+	downward.
 	"""
 	items = frappe.db.get_all(
 		"IB Order Sheet Item",
@@ -1499,12 +1531,20 @@ def _update_order_sheet_progress(order_sheet_name):
 
 @frappe.whitelist()
 def advance_to_next_stage(work_order):
-	"""Complete current WO and auto-create + auto-assign the next stage WO.
+	"""Complete the current Work Order's stage.
 
-	This is the primary production automation entry point. The production
-	manager clicks 'Next Stage' once physical work is done — the system handles
-	the rest: completing the current WO, determining the next stage, creating
-	the new WO, and auto-assigning a machine.
+	JIT stage model (2026-08-13, user's explicit decision): this used to also
+	auto-create/activate the next stage's Work Order, since
+	auto_create_all_stage_wos() had already pre-built the whole route's chain
+	upfront at Order Sheet creation. That pre-creation is gone — completing a
+	stage now just completes it. Getting the item moving again means calling
+	start_item_stage() and picking a stage (the frontend defaults that pick to
+	next_stage below, but it's freely overridable to any stage this order's
+	location can reach). Kept as its own endpoint — not folded into
+	complete_work_order(), which does identical completion work — only so
+	existing call sites (the Active Production Plan's "Next Stage →"/"Finish"
+	button, the WO panel) keep working without an unrelated rename; the one
+	real behavioral difference is the next_stage suggestion returned here.
 	"""
 	_require_production_role()
 	lock_name = f"IB-WO-{work_order}"
@@ -1514,29 +1554,27 @@ def advance_to_next_stage(work_order):
 	try:
 		doc = frappe.get_doc("IB Work Order", work_order)
 		location = _get_os_location(doc.order_sheet)
+		stage_route = _get_stage_route(doc.item_code, location)
 
-		# Idempotency: already completed — find the next-stage WO that was activated and return it
-		if doc.status == "Completed":
-			stage_route = _get_stage_route(doc.item_code, location)
+		def _next_default_stage(current_stage):
 			try:
-				route_idx = stage_route.index(doc.stage)
+				idx = stage_route.index(current_stage)
 			except ValueError:
-				return {"status": "ok", "next_stage": None, "message": "Already completed"}
-			if route_idx >= len(stage_route) - 1:
-				return {"status": "ok", "next_stage": None, "message": "Production complete — item delivered"}
-			next_stage = stage_route[route_idx + 1]
-			lf = {"order_sheet": doc.order_sheet, "stage": next_stage, "status": ["not in", ["Cancelled"]]}
-			if doc.order_sheet_item:
-				lf["order_sheet_item"] = doc.order_sheet_item
-			else:
-				lf["item_code"] = doc.item_code
-			existing_name = frappe.db.get_value("IB Work Order", lf, "name")
-			return {"status": "ok", "next_stage": next_stage, "new_work_order": existing_name or ""}
+				return None
+			return stage_route[idx + 1] if idx < len(stage_route) - 1 else None
+
+		if doc.status == "Completed":
+			# Idempotency — nothing to complete again, just repeat the suggestion.
+			next_stage = _next_default_stage(doc.stage)
+			return {
+				"status": "ok",
+				"next_stage": next_stage,
+				"message": "Already completed" if next_stage else "Production complete — item delivered",
+			}
 
 		if doc.status != "In Progress":
 			frappe.throw(_("Work Order {0} must be In Progress to advance. Current status: {1}").format(work_order, doc.status))
 
-		# Complete current stage
 		completed_at = now()
 		# completed_qty is never populated (IB Production Entry is unused by design) — fall back
 		# to target_qty so the WO/Order Sheet Item actually reach "Completed" status.
@@ -1553,134 +1591,139 @@ def advance_to_next_stage(work_order):
 		frappe.db.set_value("IB Work Order", doc.name, {"completed_at": completed_at, "completed_qty": qty_done})
 		_update_order_sheet_item(doc.order_sheet, doc.item_code, qty_done,
 								 order_sheet_item=doc.order_sheet_item or None)
-
-		# Determine next stage from item's route (route-aware, skips inapplicable stages)
-		stage_route = _get_stage_route(doc.item_code, location)
-		try:
-			route_idx = stage_route.index(doc.stage)
-		except ValueError:
-			frappe.db.commit()
-			_notify_floor_update()
-			return {"status": "ok", "next_stage": None, "message": "Unknown stage"}
-
-		if route_idx >= len(stage_route) - 1:
-			_update_order_sheet_progress(doc.order_sheet)
-			frappe.db.commit()
-			_notify_floor_update()
-			return {"status": "ok", "next_stage": None, "message": "Production complete — item delivered"}
-
-		next_stage = stage_route[route_idx + 1]
-
-		location = _get_os_location(doc.order_sheet)
-
-		# Check if WO for next stage was pre-created (by auto_create_all_stage_wos)
-		# Prefer per-row key (order_sheet_item) — falls back to item_code for legacy WOs
-		lookup_filters = {"order_sheet": doc.order_sheet, "stage": next_stage, "status": ["not in", ["Cancelled"]]}
-		if doc.order_sheet_item:
-			lookup_filters["order_sheet_item"] = doc.order_sheet_item
-		else:
-			lookup_filters["item_code"] = doc.item_code
-		existing = frappe.db.get_value(
-			"IB Work Order",
-			lookup_filters,
-			["name", "machine"],
-			as_dict=True,
-		)
-		if existing:
-			# Pre-created WO found — assign machine now if not already assigned.
-			# Locked separately from the source WO's lock above: this mutates a
-			# *different* Work Order (the next-stage one), and every sibling
-			# status-transition function (start/complete/hold) locks whatever WO
-			# it writes to. Without this, a concurrent start_work_order/
-			# move_work_order_stage call on the same next-stage WO could race
-			# with this unlocked write (lost machine assignment or target_qty).
-			next_lock_name = f"IB-WO-{existing.name}"
-			next_locked = frappe.db.sql("SELECT GET_LOCK(%s, 5)", next_lock_name)[0][0]
-			if not next_locked:
-				frappe.throw(_("Could not acquire lock for Work Order {0}. Please try again.").format(existing.name))
-			try:
-				if not existing.machine:
-					machine = _assign_machine_load_balanced(next_stage, location) or ""
-					if machine:
-						frappe.db.set_value("IB Work Order", existing.name, "machine", machine)
-				# Update target_qty to actual output of completed stage
-				output_qty = flt(doc.completed_qty) or flt(doc.target_qty)
-				frappe.db.set_value("IB Work Order", existing.name, "target_qty", output_qty)
-			finally:
-				frappe.db.sql("SELECT RELEASE_LOCK(%s)", next_lock_name)
-			_update_order_sheet_progress(doc.order_sheet)
-			frappe.db.commit()
-			_notify_floor_update()
-			return {
-				"status": "ok",
-				"next_stage": next_stage,
-				"new_work_order": existing.name,
-				"machine_assigned": bool(existing.machine or machine if not existing.machine else existing.machine),
-				"message": f"Advanced to {next_stage} — WO {existing.name} activated",
-			}
-
-		# WO doesn't exist yet — create it now (fallback for Order Sheets created before this feature)
-		new_wo = frappe.new_doc("IB Work Order")
-		new_wo.order_sheet      = doc.order_sheet
-		new_wo.order_sheet_item = doc.order_sheet_item or ""
-		new_wo.sales_order      = doc.sales_order or ""
-		new_wo.item_code        = doc.item_code
-		new_wo.item_name        = doc.item_name
-		new_wo.stage            = next_stage
-		new_wo.priority         = doc.priority
-		new_wo.target_qty       = flt(doc.completed_qty) or flt(doc.target_qty)
-		new_wo.target_uom       = doc.target_uom
-		new_wo.status           = "Pending"
-		new_wo.machine          = _assign_machine_load_balanced(next_stage, location) or ""
-		new_wo.insert(ignore_permissions=True)
-
 		_update_order_sheet_progress(doc.order_sheet)
+
+		next_stage = _next_default_stage(doc.stage)
 		frappe.db.commit()
 		_notify_floor_update()
-
 		return {
 			"status": "ok",
 			"next_stage": next_stage,
-			"new_work_order": new_wo.name,
-			"machine_assigned": bool(new_wo.machine),
-			"message": f"Advanced to {next_stage} — WO {new_wo.name} created",
+			"message": (
+				f"{doc.stage} complete — start {next_stage} when ready"
+				if next_stage else "Production complete — item delivered"
+			),
 		}
 	finally:
 		frappe.db.sql("SELECT RELEASE_LOCK(%s)", lock_name)
 
 
 @frappe.whitelist()
-def bulk_wo_action(work_orders, action):
-	"""Mass Start / Next Stage across a checkbox selection of Work Orders, from
-	any Production Dashboard tab (Order-wise, Item-wise, Stage-wise,
-	Machine-wise, Job Bundles).
-
-	Deliberately a thin orchestration loop, not new business logic — each WO
-	goes through the exact same `start_work_order()` / `advance_to_next_stage()`
-	a single-row click already uses (same locking, same workflow transitions,
-	same Order Sheet Item / floor-update side effects), just called once per
-	selected row. One bad/ineligible row (wrong status, already advanced by
-	someone else, etc.) is caught and reported, not allowed to abort the rest
-	of the batch — same isolation pattern as this app's other bulk operations
-	(see e.g. instabiz.overrides.mrp.run_mrp).
+def start_item_stage(order_sheet_item, stage):
+	"""JIT stage entry point (2026-08-13): create exactly one Work Order for
+	the picked stage and put it straight to work — In Progress, machine
+	auto-assigned. Replaces auto_create_all_stage_wos()'s old "pre-create the
+	whole route upfront" model — an Order Sheet Item now has zero Work Orders
+	until a production user explicitly starts it and picks a stage, every
+	time (the frontend's picker defaults to _get_stage_route()'s next
+	uncompleted stage, but any canonical stage this order's location can
+	physically reach is a valid pick — location-only restriction, not the
+	stricter item-group route check, since a route is a default suggestion
+	here, not a hard ceiling). This is now the ONLY way to start or move a
+	Work Order to a stage — the separate manual "shuffle" stage-move feature
+	(move_work_order_stage) was removed 2026-08-13, same user decision as
+	this JIT model itself.
 	"""
 	_require_production_role()
-	if isinstance(work_orders, str):
-		work_orders = json.loads(work_orders)
-	if action not in ("start", "next_stage"):
-		frappe.throw(_("Unknown bulk action: {0}").format(action))
-	fn = start_work_order if action == "start" else advance_to_next_stage
+	osi = frappe.db.get_value(
+		"IB Order Sheet Item",
+		order_sheet_item,
+		["name", "parent", "item_code", "item_name", "qty", "uom"],
+		as_dict=True,
+	)
+	if not osi:
+		frappe.throw(_("Order Sheet Item {0} not found").format(order_sheet_item))
 
-	succeeded = []
-	failed = []
-	for wo in work_orders:
-		try:
-			result = fn(wo)
-			succeeded.append({"work_order": wo, "result": result})
-		except Exception as e:
-			failed.append({"work_order": wo, "error": str(e)})
+	location = _get_os_location(osi.parent)
+	allowed_stages = (
+		_WAREHOUSE_STAGE_ROUTE
+		if (location or "").lower() in _WAREHOUSE_ONLY_LOCATIONS
+		else list(STAGES)
+	)
+	if stage not in allowed_stages:
+		frappe.throw(
+			_("{0} is not available at this order's location ({1}).").format(
+				stage, ", ".join(allowed_stages)
+			)
+		)
 
-	return {"succeeded": succeeded, "failed": failed}
+	# One lock per (item row, stage) — serializes this endpoint's own
+	# existence-check-then-create/reactivate race for this exact target.
+	# Sufficient here because this endpoint is the only path that creates a
+	# Work Order for a not-yet-existing order_sheet_item+stage combination;
+	# once the row exists, the transition below reuses the same doc within
+	# this same locked section.
+	lock_name = f"IB-OSI-{order_sheet_item}-{stage}"
+	locked = frappe.db.sql("SELECT GET_LOCK(%s, 5)", lock_name)[0][0]
+	if not locked:
+		frappe.throw(_("Could not acquire lock. Please try again."))
+	try:
+		existing = frappe.db.get_value(
+			"IB Work Order",
+			{"order_sheet_item": order_sheet_item, "stage": stage, "status": ["!=", "Cancelled"]},
+			["name", "status"],
+			as_dict=True,
+		)
+		sales_order = frappe.db.get_value("IB Order Sheet", osi.parent, "sales_order")
+
+		if existing and existing.status == "Completed":
+			# Rework — "Completed" has no apply_workflow transition back out
+			# (IB Work Order Workflow), so reactivate via a direct db write.
+			frappe.db.set_value(
+				"IB Work Order", existing.name,
+				{"status": "Pending", "started_at": None, "completed_at": None, "completed_qty": 0},
+			)
+			wo_name = existing.name
+		elif existing and existing.status in ("Pending", "On Hold"):
+			wo_name = existing.name
+		elif existing:
+			frappe.throw(_("Work Order {0} for this stage is already {1}.").format(existing.name, existing.status))
+		else:
+			wo = frappe.new_doc("IB Work Order")
+			wo.order_sheet = osi.parent
+			wo.order_sheet_item = osi.name
+			wo.sales_order = sales_order or ""
+			wo.item_code = osi.item_code
+			wo.item_name = osi.item_name
+			wo.stage = stage
+			wo.priority = frappe.db.get_value("IB Order Sheet", osi.parent, "priority") or "Normal"
+			wo.target_qty = flt(osi.qty)
+			wo.target_uom = osi.uom
+			wo.status = "Pending"
+			wo.insert(ignore_permissions=True)
+			wo_name = wo.name
+
+		if not frappe.db.get_value("IB Work Order", wo_name, "machine"):
+			machine = _assign_machine_load_balanced(stage, location) or ""
+			if machine:
+				frappe.db.set_value("IB Work Order", wo_name, "machine", machine)
+		else:
+			machine = frappe.db.get_value("IB Work Order", wo_name, "machine")
+
+		doc = frappe.get_doc("IB Work Order", wo_name)
+		started_at = now()
+		doc.started_at = started_at
+		apply_workflow(doc, "Resume" if doc.status == "On Hold" else "Start")
+		# Same apply_workflow load_from_db discard as start_work_order()/
+		# complete_work_order() — persist explicitly or it silently stays NULL.
+		frappe.db.set_value("IB Work Order", wo_name, "started_at", started_at)
+
+		if frappe.db.get_value("IB Order Sheet", osi.parent, "status") == "Draft":
+			frappe.db.set_value("IB Order Sheet", osi.parent, "status", "In Progress")
+
+		frappe.db.commit()
+		_notify_floor_update()
+		return {"status": "ok", "work_order": wo_name, "stage": stage, "machine": machine}
+	finally:
+		frappe.db.sql("SELECT RELEASE_LOCK(%s)", lock_name)
+
+
+# bulk_wo_action() (mass Start/Next Stage across a checkbox selection)
+# removed 2026-08-13 along with its frontend UI — the mass-select bulk
+# feature was dropped as part of making the JIT stage picker (start_item_stage)
+# the single way to start/move a Work Order (user's explicit decision, same
+# session as the RTD/Delivered stage-model collapse). No other caller ever
+# existed for it.
 
 
 @frappe.whitelist()
@@ -1751,23 +1794,35 @@ def get_production_plan(limit=None, start=0, location=None, search=None, priorit
 	       Dashboard passes limit=25 per page for infinite scroll.
 	start: offset for the order_wise page (infinite scroll).
 	location: optional Sales Order custom_location filter (maharashtra/gujarat/chennai).
-	search: optional match against Sales Order name or customer name.
+	search: optional match against Sales Order name, customer name, or an item
+	        code/name on any of the order's items — the last of these matters
+	        when the same customer has two different Sales Orders carrying the
+	        same item: searching by SO/customer alone can't tell you which one
+	        you're looking at, but searching the item code surfaces both so
+	        their (already-distinct) SO number/creation date/qty on screen do.
 	priority: optional Order Sheet priority filter (Urgent/High/Normal/Low).
 	"""
 	_require_production_role()
 	limit = int(limit) if limit and str(limit).isdigit() else None
 	start = int(start) if str(start).isdigit() else 0
 	limit_clause = f"LIMIT {limit} OFFSET {start}" if limit else ""
-	loc_join = "JOIN `tabSales Order` so ON so.name = os.sales_order" if location else ""
+	# Always joined now (used to be conditional on the location filter being
+	# set) — custom_location is needed per order sheet regardless of filter
+	# state to compute each item's route-aware next_stage_suggestion below.
+	loc_join = "JOIN `tabSales Order` so ON so.name = os.sales_order"
 	loc_where = "AND so.custom_location = %(location)s" if location else ""
-	search_where = "AND (os.sales_order LIKE %(search)s OR os.customer_name LIKE %(search)s)" if search else ""
+	search_where = (
+		"AND (os.sales_order LIKE %(search)s OR os.customer_name LIKE %(search)s "
+		"OR EXISTS (SELECT 1 FROM `tabIB Order Sheet Item` osi "
+		"WHERE osi.parent = os.name AND (osi.item_code LIKE %(search)s OR osi.item_name LIKE %(search)s)))"
+	) if search else ""
 	priority_where = "AND os.priority = %(priority)s" if priority else ""
 
 	# ── Order-wise: active order sheets with item stage status ──────────────
 	order_sheets = frappe.db.sql(
 		f"""
 		SELECT os.name, os.sales_order, os.customer_name, os.priority, os.status,
-		       os.delivery_date, os.order_date, os.creation
+		       os.delivery_date, os.order_date, os.creation, so.custom_location AS location
 		FROM `tabIB Order Sheet` os
 		{loc_join}
 		WHERE os.status IN ('Draft', 'In Progress')
@@ -1813,7 +1868,7 @@ def get_production_plan(limit=None, start=0, location=None, search=None, priorit
 			"IB Work Order",
 			filters={"order_sheet": ["in", os_names], "status": ["not in", ["Cancelled"]]},
 			fields=["name", "order_sheet", "order_sheet_item", "item_code", "stage", "status",
-			        "completed_qty", "target_qty", "machine"],
+			        "completed_qty", "target_qty", "target_uom", "pcs_to_make", "logs_to_make", "machine"],
 		)
 		for wo in all_wos:
 			key = (wo.order_sheet, wo.order_sheet_item) if wo.order_sheet_item \
@@ -1822,6 +1877,7 @@ def get_production_plan(limit=None, start=0, location=None, search=None, priorit
 
 	for os in order_sheets:
 		items = items_by_os.get(os.name, [])
+		item_route_cache = {}
 		# Per item: dict of stage → WO info
 		for item in items:
 			wos = wos_by_key.get((os.name, item.name)) or wos_by_key.get((os.name, f"ic:{item.item_code}"), [])
@@ -1831,12 +1887,33 @@ def get_production_plan(limit=None, start=0, location=None, search=None, priorit
 				"wo_name": stage_map[s].name if s in stage_map else None,
 				"completed_qty": stage_map[s].completed_qty if s in stage_map else 0,
 				"target_qty": stage_map[s].target_qty if s in stage_map else 0,
+				"target_uom": stage_map[s].target_uom if s in stage_map else None,
+				"pcs_to_make": stage_map[s].pcs_to_make if s in stage_map else 0,
+				"logs_to_make": stage_map[s].logs_to_make if s in stage_map else 0,
 				"machine": stage_map[s].machine if s in stage_map else None,
 			} for s in STAGES}
+			# On Hold counts as "current" alongside In Progress — an item
+			# paused mid-stage is still sitting there, not back to nothing
+			# (matches get_stage_pipeline()'s own On Hold inclusion).
 			item["current_stage"] = next(
-				(s for s in STAGES if s in stage_map and stage_map[s].status == "In Progress"),
+				(s for s in STAGES if s in stage_map and stage_map[s].status in ("In Progress", "On Hold")),
 				next((s for s in STAGES if s in stage_map and stage_map[s].status == "Pending"), None)
 			)
+			# JIT stage model (2026-08-13): once current_stage is empty — the
+			# item has nothing active/pending right now, either because it's
+			# never been started or because its last-started stage just
+			# completed — the frontend needs to know which stage to default
+			# the Start dialog to. Route-aware: the first stage in the item's
+			# own route with no Completed WO yet (not just "first uncompleted
+			# WO", since under JIT most stages have no WO at all).
+			if not item["current_stage"]:
+				if item.item_code not in item_route_cache:
+					item_route_cache[item.item_code] = _get_stage_route(item.item_code, os.get("location"))
+				route = item_route_cache[item.item_code]
+				completed = {s for s in route if s in stage_map and stage_map[s].status == "Completed"}
+				item["next_stage_suggestion"] = next((s for s in route if s not in completed), None)
+			else:
+				item["next_stage_suggestion"] = None
 		os["items"] = items
 
 	# Comment count per underlying Sales Order — one grouped query for the
@@ -1897,7 +1974,7 @@ def get_item_wise_view(from_date=None, to_date=None, item_code=None):
 		filters=filters,
 		fields=[
 			"name", "item_code", "item_name", "stage", "status",
-			"machine", "jumbo_roll", "target_qty", "completed_qty",
+			"machine", "jumbo_roll", "target_qty", "target_uom", "completed_qty",
 			"wastage_qty", "wastage_pct", "order_sheet", "order_sheet_item",
 			"sales_order", "started_at", "completed_at", "creation",
 		],
@@ -1906,21 +1983,25 @@ def get_item_wise_view(from_date=None, to_date=None, item_code=None):
 
 	# WOs here are grouped by item_code across ALL order sheets — no single
 	# shared parent ETD like the single-Order-Sheet item detail view has — so
-	# fetch each WO's own Order Sheet delivery_date to show alongside its
-	# own creation date.
+	# fetch each WO's own Order Sheet delivery_date + customer_name to show
+	# alongside its own creation date — customer_name in particular so this
+	# view (like every other WO listing on this page) can show which SO/
+	# customer a WO belongs to, not just its item code.
 	os_names = list({wo.order_sheet for wo in wos if wo.order_sheet})
-	etd_map = {}
+	os_map = {}
 	if os_names:
-		etd_map = {
-			d.name: d.delivery_date
+		os_map = {
+			d.name: d
 			for d in frappe.get_all(
 				"IB Order Sheet",
 				filters={"name": ["in", os_names]},
-				fields=["name", "delivery_date"],
+				fields=["name", "delivery_date", "customer_name"],
 			)
 		}
 	for wo in wos:
-		wo["delivery_date"] = etd_map.get(wo.order_sheet)
+		os_row = os_map.get(wo.order_sheet)
+		wo["delivery_date"] = os_row.delivery_date if os_row else None
+		wo["customer_name"] = os_row.customer_name if os_row else None
 
 	# Group by item_code
 	item_map = {}
@@ -2222,13 +2303,17 @@ def get_machine_wise_dashboard(location=None):
 				for d in frappe.get_all(
 					"IB Order Sheet",
 					filters={"name": ["in", os_names]},
-					fields=["name", "delivery_date", "customer", "customer_name"],
+					fields=["name", "delivery_date", "customer", "customer_name", "sales_order"],
 				)
 			}
 		for wo in current_wos:
 			os_row = os_map.get(wo.order_sheet)
 			wo["delivery_date"] = os_row.delivery_date if os_row else None
 			wo["customer_name"] = (os_row.customer_name or os_row.customer) if os_row else None
+			# sales_order wasn't selected on the WO itself here (unlike every
+			# other WO-listing view on this page) — needed so the WO panel can
+			# show which SO this machine's queued/running WO belongs to.
+			wo["sales_order"] = os_row.sales_order if os_row else None
 
 		# Today's stats from IB Work Order directly — NOT tabIB Production Entry,
 		# which has zero rows ever (same fallback pattern already used by
@@ -2437,199 +2522,60 @@ def get_so_production_status(sales_order):
 
 
 def mark_wos_delivered(doc, method=None):
-	"""Delivery Note on_submit doc_event: advance each delivered item's Work
-	Order from Ready to Deliver -> Delivered.
+	"""Delivery Note on_submit doc_event: notify the sales person once the
+	whole Sales Order's dispatch status reaches "Delivered".
 
-	Delivered is a real stage in the stage model (IB_STAGES on the frontend,
-	_VALID_STAGES here) but — unlike every other stage — no item-group/
-	location route ever auto-creates a WO there, and until now nothing ever
-	moved a WO into it either: it existed only as an unused color in the
-	stage picker (see PROD-1/PROD-2 in the Knowledge Base). This is what
-	actually populates it, driven by the real, unambiguous signal that an
-	item shipped — a Delivery Note being submitted for it — rather than
-	relying on a floor user to remember to hit the manual stage-picker.
-
-	Only ever touches WOs already Completed at Ready to Deliver — never a
-	WO still mid-route — so this can't accidentally short-circuit real
-	production work; a DN can't be created for an item before it reaches
-	Ready to Deliver in the first place (see get_order_dn_readiness /
-	custom_make_delivery_note's own item scoping). Matches DN Item rows back
-	to their Work Order via so_detail (the Sales Order Item row name) ->
-	IB Order Sheet Item.sales_order_item, the same row-exact key
-	custom_make_delivery_note itself uses — never falls back to item_code
-	alone, so a Sales Order with the same item on two separate lines can't
-	cross-wire one line's shipment onto the other's still-in-production WO.
-	Never throws — this must not block a real Delivery Note submission if
-	something here is unexpected; failures are logged and skipped per row.
+	RTD/Delivered collapsed out of the stage model entirely (2026-08-13,
+	user's explicit decision) — Packing is the real last Work Order stage
+	now (nothing is physically manufactured at "Ready to Deliver", it was a
+	manual click with no work behind it), and there is no more WO to
+	transition here. "Delivered" is now purely a derived status read from
+	the Delivery Note itself via _get_dispatch_info() (the same function
+	already powering the SO form panel and list badges — single source of
+	truth, not reimplemented here) — reflects the WHOLE order, not just this
+	one DN, since a Sales Order can ship across more than one DN and isn't
+	really "Delivered" until every item has gone out. Fires once per Sales
+	Order via a marker (same dedup pattern as the progress-milestone
+	notifier) so re-submitting/cancel-amend cycles on later DNs against an
+	already-delivered order don't repeat it. Never throws — must not block a
+	real Delivery Note submission if something here is unexpected.
 	"""
-	for item in doc.items:
-		if not item.so_detail:
-			continue
-		try:
-			order_sheet_item = frappe.db.get_value(
-				"IB Order Sheet Item", {"sales_order_item": item.so_detail}, "name"
-			)
-			if not order_sheet_item:
+	try:
+		sales_orders = {row.against_sales_order for row in doc.items if row.against_sales_order}
+		for so_name in sales_orders:
+			dispatch = _get_dispatch_info(so_name)
+			if dispatch.get("status") != "Delivered":
 				continue
-			wo_name = frappe.db.get_value(
-				"IB Work Order",
-				{
-					"order_sheet_item": order_sheet_item,
-					"stage": "Ready to Deliver",
-					"status": "Completed",
-				},
-				"name",
-			)
-			if not wo_name:
+
+			sales_person_user = frappe.db.get_value("Sales Order", so_name, "custom_sales_person_user")
+			if not sales_person_user:
 				continue
-			frappe.db.set_value("IB Work Order", wo_name, "stage", "Delivered")
-		except Exception:
-			frappe.log_error(
-				title=f"mark_wos_delivered: {doc.name}",
-				message=frappe.get_traceback(),
-			)
-	frappe.db.commit()
-	_notify_floor_update()
 
+			marker = f"[ib-delivered-{so_name}]"
+			if frappe.db.exists("Notification Log", {"for_user": sales_person_user, "subject": ["like", f"%{marker}%"]}):
+				continue
 
-# ── Drag-and-drop stage move (Pipeline view) ──────────────────────────────────
-
-_VALID_STAGES = {"Coating", "Slitting", "Rewinding", "Cutting", "Packing", "Ready to Deliver", "Delivered"}
-
-
-@frappe.whitelist()
-def move_work_order_stage(work_order, new_stage):
-	"""Manually move an item to a chosen stage (stage-picker in Active Production
-	Plan / WO side panel) — activates that stage's own Work Order and cancels
-	the one being bypassed, and auto-assigns the least-loaded available machine
-	for the target stage.
-
-	Every stage in an item's route already has its own pre-created Work Order
-	(auto_create_all_stage_wos creates the full chain upfront at Order Sheet
-	creation) — a previous version of this function mutated `doc.stage` on the
-	WO being moved instead, which silently deleted the source stage's record
-	(e.g. moving a Slitting WO to Ready to Deliver renamed it *to* Ready to
-	Deliver, leaving zero Slitting WOs and two conflicting Ready to Deliver
-	ones — confirmed live: "if that item had 3 stages then it is deleting
-	one"). Fixed to activate the pre-existing target-stage WO and cancel the
-	source instead, preserving one real record per stage.
-	"""
-	_require_production_role()
-	if new_stage not in _VALID_STAGES:
-		frappe.throw(frappe._("Invalid stage: {0}").format(new_stage))
-	doc = frappe.get_doc("IB Work Order", work_order)
-	if doc.status == "Completed":
-		frappe.throw(frappe._("Cannot move completed Work Order {0} to a different stage.").format(work_order))
-	if doc.status == "Cancelled":
-		frappe.throw(frappe._("Cannot move cancelled Work Order {0} to a different stage.").format(work_order))
-	old_stage = doc.stage
-	if old_stage == new_stage:
-		return {"ok": True, "changed": False}
-
-	location = _get_os_location(doc.order_sheet)
-
-	# new_stage must be physically possible at THIS order's location — not
-	# restricted to the item's own item-group route. Production users move
-	# items stage-to-stage as routine work (not just out-of-sequence
-	# correction), and an item-group route can be wrong or incomplete for a
-	# one-off real-world need (e.g. a PVC item that unexpectedly needs
-	# Coating this one time) — the item-group table is a default routing
-	# hint, not a hard ceiling on what a production user is allowed to do.
-	# Location is still enforced: Maharashtra/Chennai have no factory
-	# machines at all (Coating/Slitting/Rewinding/Cutting), so a move there
-	# is blocked the same way it always was — only Gujarat can reach those
-	# stages. See git history for the earlier, stricter item-route check
-	# this replaced (blocked here 2026-07-31, reopened 2026-08-05 at user's
-	# explicit request).
-	allowed_stages = (
-		_WAREHOUSE_STAGE_ROUTE
-		if (location or "").lower() in _WAREHOUSE_ONLY_LOCATIONS
-		else list(_VALID_STAGES)
-	)
-	if new_stage not in allowed_stages:
-		frappe.throw(
-			frappe._("{0} is not available at this order's location ({1}).").format(
-				new_stage, ", ".join(allowed_stages)
-			)
+			customer = frappe.db.get_value("Sales Order", so_name, "customer_name") or ""
+			frappe.get_doc({
+				"doctype": "Notification Log",
+				"subject": f"Order Delivered: {so_name} {marker}"[:140],
+				"email_content": (
+					f"<p>Sales Order <strong>{so_name}</strong> for <strong>{customer}</strong> "
+					f"has been <strong>Delivered</strong>.</p>"
+				),
+				"for_user": sales_person_user,
+				"type": "Alert",
+				"document_type": "Sales Order",
+				"document_name": so_name,
+				"from_user": "Administrator",
+			}).insert(ignore_permissions=True)
+		frappe.db.commit()
+	except Exception:
+		frappe.log_error(
+			title=f"mark_wos_delivered: {doc.name}",
+			message=frappe.get_traceback(),
 		)
 
-	machine = _assign_machine_load_balanced(new_stage, location) or ""
-
-	target_filters = {"order_sheet": doc.order_sheet, "stage": new_stage, "status": ["not in", ["Cancelled"]]}
-	if doc.order_sheet_item:
-		target_filters["order_sheet_item"] = doc.order_sheet_item
-	else:
-		target_filters["item_code"] = doc.item_code
-	target_row = frappe.db.get_value("IB Work Order", target_filters, ["name", "status"], as_dict=True)
-	target_name = target_row.name if target_row else None
-
-	if target_name:
-		if machine:
-			frappe.db.set_value("IB Work Order", target_name, "machine", machine)
-		# Reactivating a target WO that's already Completed (moving a later stage
-		# back to an earlier one for rework — e.g. a quality issue found at RTD
-		# sends the item back to Packing). "Completed" is a terminal state in the
-		# IB Work Order Workflow (fixtures/workflow.json — no transition leads
-		# out of it), so there is no apply_workflow() path back to Pending here.
-		# Bypass via a direct db write instead, same precedent already used
-		# elsewhere in this file to work around apply_workflow's own data-loss
-		# bug (see complete_work_order/advance_to_next_stage comments). Without
-		# this, the target stays permanently stuck "Completed" — and since
-		# _update_order_sheet_item's all-done check only counts non-Cancelled
-		# WOs, cancelling the source stage below would then make every
-		# remaining WO for the item look Completed, wrongly flipping the whole
-		# item (and possibly the whole Order Sheet) to Completed despite the
-		# rework never having happened.
-		if target_row.status == "Completed":
-			frappe.db.set_value(
-				"IB Work Order", target_name,
-				{"status": "Pending", "started_at": None, "completed_at": None, "completed_qty": 0},
-			)
-	else:
-		# No pre-created WO for this stage (legacy data) — create one, same
-		# shape as advance_to_next_stage's own fallback branch.
-		new_wo = frappe.new_doc("IB Work Order")
-		new_wo.order_sheet = doc.order_sheet
-		new_wo.order_sheet_item = doc.order_sheet_item or ""
-		new_wo.sales_order = doc.sales_order or ""
-		new_wo.item_code = doc.item_code
-		new_wo.item_name = doc.item_name
-		new_wo.stage = new_stage
-		new_wo.priority = doc.priority
-		new_wo.target_qty = doc.target_qty
-		new_wo.target_uom = doc.target_uom
-		new_wo.status = "Pending"
-		new_wo.machine = machine
-		new_wo.insert(ignore_permissions=True)
-		target_name = new_wo.name
-
-	# Cancel the source WO via the workflow (not a raw db.set_value) — Cancel is
-	# a valid transition from Pending, In Progress, and On Hold, so this covers
-	# every state the WO being moved-away-from could realistically be in.
-	apply_workflow(doc, "Cancel")
-
-	# Recompute this item's (and the Order Sheet's) status immediately —
-	# previously this function never touched either, so a status set before the
-	# move (e.g. "Completed") could survive stale until some unrelated future
-	# complete/advance call happened to touch this same item again. Preserve the
-	# item's existing completed_qty (this call isn't completing anything, just
-	# refreshing status) rather than guessing a new value.
-	current_qty = None
-	if doc.order_sheet_item:
-		current_qty = frappe.db.get_value("IB Order Sheet Item", doc.order_sheet_item, "completed_qty")
-	_update_order_sheet_item(
-		doc.order_sheet, doc.item_code,
-		flt(current_qty) if current_qty is not None else flt(doc.completed_qty) or flt(doc.target_qty),
-		order_sheet_item=doc.order_sheet_item or None,
-	)
-	_update_order_sheet_progress(doc.order_sheet)
-
-	frappe.db.commit()
-	_notify_floor_update()
-	return {
-		"ok": True, "changed": True, "old_stage": old_stage, "new_stage": new_stage,
-		"machine": machine, "target_work_order": target_name,
-	}
 
 
 # ── Sales Order production panel ──────────────────────────────────────────────
@@ -2642,18 +2588,24 @@ def get_so_production_panel(sales_order):
 
 	if result.get("has_order_sheet"):
 		items = result.get("items", [])
-		rtd_done = bool(items) and all(
-			any(s["status"] == "Completed" and s["stage"] == "Ready to Deliver"
-				for s in item.get("stages", []))
-			for item in items
-		)
-		result["ready_to_deliver"] = rtd_done
 
 		# Overall order-level pct/stage/risk — same numbers the Production
 		# Tracker page shows, so the SO form and the tracker never disagree.
 		overall_pct, overall_stage = _order_progress_summary(result["order_sheet"], items)
 		result["overall_pct"] = overall_pct
 		result["overall_current_stage"] = overall_stage
+		# "Ready to Deliver" is derived from production being 100% done
+		# (RTD/Delivered collapsed out of the stage model, 2026-08-13 —
+		# Packing is the real last stage now), not a per-item WO stage
+		# string that no longer exists. Matches get_order_dn_readiness's
+		# own OS-status-Completed gate. "Delivered" overrides it once a real
+		# Delivery Note has actually been submitted — _order_progress_summary
+		# itself has no DN visibility (called from the hot milestone-notify
+		# path too, kept cheap/pure-production), so the more authoritative
+		# dispatch signal already fetched above takes precedence here.
+		result["ready_to_deliver"] = overall_pct >= 100
+		if result["dispatch"]["status"] == "Delivered":
+			result["overall_current_stage"] = "Delivered"
 		if result.get("delivery_date"):
 			days_left = date_diff(getdate(result["delivery_date"]), getdate(today()))
 			result["days_left"] = days_left
@@ -2862,21 +2814,20 @@ def get_so_list_badges(sales_orders):
 		if r.so not in dn_map:
 			dn_map[r.so] = r
 
-	rtd_rows = frappe.db.sql(f"""
-		SELECT os.sales_order, COUNT(*) AS cnt
-		FROM `tabIB Work Order` wo
-		JOIN `tabIB Order Sheet` os ON os.name = wo.order_sheet
-		WHERE os.sales_order IN ({ph})
-		  AND wo.stage = 'Ready to Deliver' AND wo.status = 'Completed'
-		GROUP BY os.sales_order
-	""", t, as_dict=True)
-	rtd_map = {r.sales_order: r.cnt for r in rtd_rows}
+	# "Ready to Deliver" is derived from IB Order Sheet.status == "Completed"
+	# (set once every item's real last stage — Packing — is Completed, see
+	# _update_order_sheet_progress) — not a WO stage query. Used to check for
+	# a WO with stage='Ready to Deliver', but RTD/Delivered were collapsed
+	# out of the stage model entirely 2026-08-13; that query now permanently
+	# returns zero rows, which would have silently frozen every SO's badge
+	# at "In Production" forever once production actually finished. Caught
+	# before it shipped broken, not after — same os_map already fetched
+	# above already carries the exact signal needed.
 
 	result = {}
 	for so in sales_orders:
 		os = os_map.get(so)
 		dn = dn_map.get(so)
-		rtd = rtd_map.get(so, 0)
 
 		if dn:
 			lr = dn.custom_lr_number or dn.lr_no or ""
@@ -2886,7 +2837,7 @@ def get_so_list_badges(sales_orders):
 				badge, color = "In Transit", "#0891b2"
 			else:
 				badge, color = "Dispatched", "#2563eb"
-		elif rtd > 0:
+		elif os and os.status == "Completed":
 			badge, color = "Ready to Deliver", "#ea580c"
 		elif os:
 			badge, color = "In Production", "#7c3aed"
@@ -2899,94 +2850,19 @@ def get_so_list_badges(sales_orders):
 
 
 # ── Job bundles ───────────────────────────────────────────────────────────────
-
-@frappe.whitelist()
-def get_job_bundles(location=None, search=None):
-	"""Group Pending, not-yet-machine-assigned WOs by item_code+stage across order
-	sheets for efficient batch assignment.
-
-	Excludes WOs that already have a machine — without this, a bundle you just
-	ran "Batch Assign" on reappeared identically on refresh (same Pending status,
-	same item+stage grouping key), since only the machine field had changed.
-
-	Also excludes any WO that isn't yet its item's CURRENT stage. Same root
-	cause as the Stage-wise view bug fixed 2026-08-05 (see get_stage_pipeline()):
-	auto_create_all_stage_wos() only assigns a machine to an item's first
-	stage — every later stage in its route sits Pending with no machine until
-	advance_to_next_stage() reaches it — so a plain "Pending + no machine"
-	filter matched every future stage of an item still sitting at stage 1,
-	offering them up for batch assignment before the item had even finished
-	its current stage. Fixed the same way: fetch every non-Cancelled WO per
-	item (order_sheet_item, falling back to order_sheet+item_code) to find
-	its true current stage (first non-Completed stage in route order), then
-	only bundle a WO if it IS that current stage.
-	"""
-	_require_production_role()
-	loc_where = "AND so.custom_location = %(location)s" if location else ""
-	search_where = "AND (wo.item_code LIKE %(search)s OR os.sales_order LIKE %(search)s OR os.customer_name LIKE %(search)s)" if search else ""
-	rows = frappe.db.sql(f"""
-		SELECT wo.name, wo.item_code, wo.item_name, wo.stage, wo.status, wo.target_qty,
-		       wo.target_uom, wo.machine, wo.batch_group, wo.order_sheet, wo.order_sheet_item,
-		       wo.creation, os.priority, os.sales_order, os.customer_name, os.delivery_date
-		FROM `tabIB Work Order` wo
-		JOIN `tabIB Order Sheet` os ON os.name = wo.order_sheet
-		JOIN `tabSales Order` so ON so.name = os.sales_order
-		WHERE wo.status != 'Cancelled'
-		{loc_where}
-		{search_where}
-		ORDER BY wo.item_code, wo.stage,
-		         FIELD(os.priority, 'Urgent', 'High', 'Normal', 'Low')
-	""", {"location": location, "search": f"%{search}%" if search else None}, as_dict=True)
-
-	stage_rank = {s: i for i, s in enumerate(STAGES)}
-	groups = {}
-	for row in rows:
-		key = row.order_sheet_item or f"{row.order_sheet}::{row.item_code}"
-		groups.setdefault(key, []).append(row)
-
-	current_rows = []
-	for wos in groups.values():
-		wos.sort(key=lambda r: stage_rank.get(r.stage, 999))
-		current = next((r for r in wos if r.status != "Completed"), None)
-		if current and current.status == "Pending" and not current.machine:
-			current_rows.append(current)
-
-	bundle_map = {}
-	for wo in current_rows:
-		key = f"{wo.item_code}|||{wo.stage}"
-		if key not in bundle_map:
-			bundle_map[key] = {
-				"item_code": wo.item_code,
-				"item_name": wo.item_name or wo.item_code,
-				"stage": wo.stage,
-				"wos": [],
-				"total_qty": 0.0,
-				"uom": wo.target_uom or "",
-				"existing_batch_group": None,
-			}
-		b = bundle_map[key]
-		b["wos"].append({
-			"name": wo.name,
-			"order_sheet": wo.order_sheet,
-			"sales_order": wo.sales_order,
-			"customer_name": wo.customer_name,
-			"priority": wo.priority,
-			"target_qty": flt(wo.target_qty),
-			"delivery_date": str(wo.delivery_date) if wo.delivery_date else None,
-			"creation": wo.creation,
-			"machine": wo.machine or "",
-			"batch_group": wo.batch_group or "",
-		})
-		b["total_qty"] += flt(wo.target_qty)
-		if wo.batch_group and not b["existing_batch_group"]:
-			b["existing_batch_group"] = wo.batch_group
-
-	bundles = [v for v in bundle_map.values() if len(v["wos"]) >= 2]
-	for bundle in bundles:
-		bundle["suggested_machine"] = _assign_machine_load_balanced(bundle["stage"]) or ""
-	bundles.sort(key=lambda b: -len(b["wos"]))
-	return bundles
-
+# get_job_bundles() (UI tab's own bundle-discovery RPC) removed 2026-08-13 —
+# the Job Bundles tab was already pulled from the toolbar; confirmed live it
+# was now permanently dead weight, not just less useful: its candidate pool
+# is Pending Work Orders with no machine, and start_item_stage() (the JIT
+# stage-picker's backend, see item history) always auto-assigns a machine
+# and starts a WO in the same call — nothing can land in that state anymore
+# (verified: 0 system-wide). batch_assign_machine() below is kept — it's
+# still reachable via the "Bundle Jobs" AI agent's approval flow
+# (ai_agents.py prod_job_bundle → batch_assign_machine), which runs its own
+# independent query rather than calling get_job_bundles(). That agent hits
+# the same "nothing ever sits Pending+unassigned" wall and will just find
+# zero candidates going forward — flagged, not touched here (separate
+# feature, its own scheduler wiring, needs its own decision).
 
 @frappe.whitelist()
 def batch_assign_machine(work_orders, machine, batch_group=None):

@@ -1,6 +1,11 @@
 frappe.ui.form.on("Sales Invoice", {
 	async refresh(frm) {
 		if (frm.doc.docstatus === 1) {
+			// Native is_return path is blocked server-side (see is_return handler
+			// below + instabiz.overrides.sales_invoice) — the button stays, but now
+			// opens a prefilled IB Credit Note instead of the native return flow.
+			frm.page.remove_inner_button(__("Return / Credit Note"), __("Create"));
+			frm.add_custom_button(__("Return / Credit Note"), () => ib_si_open_credit_note(frm), __("Create"));
 			ib_watch_ewaybill_dialog(frm);
 			let gstin = frm.doc.billing_address_gstin || frm.doc.shipping_address_gstin || "";
 			if (!gstin && frm.doc.customer_address) {
@@ -16,7 +21,35 @@ frappe.ui.form.on("Sales Invoice", {
 			ib_si_setup_row_buttons(frm);
 		}
 	},
+
+	// Server also blocks this on save (instabiz.overrides.sales_invoice) — this
+	// just catches it the moment the box is checked instead of after the form
+	// is filled in. IB Credit Note is the only supported path since 2026-08-12.
+	is_return(frm) {
+		if (frm.doc.is_return && frm.is_new()) {
+			frm.set_value("is_return", 0);
+			frappe.msgprint({
+				title: __("Use IB Credit Note Instead"),
+				indicator: "orange",
+				message: __("Don't create a return here — use <b>IB Credit Note</b> instead (Workspace → IB Credit Note → New)."),
+			});
+		}
+	},
 });
+
+function ib_si_open_credit_note(frm) {
+	// IB Credit Note's own against_sales_invoice field handler already fetches
+	// the SI, maps every item, and refreshes totals — reuse it via set_value
+	// (a real field-trigger) instead of duplicating that logic here. A raw
+	// Object.assign prefill bypasses field triggers entirely, which is exactly
+	// what left Total/Tax/Grand Total sitting at 0 until save.
+	frappe.model.with_doctype("IB Credit Note", () => {
+		const doc = frappe.model.get_new_doc("IB Credit Note");
+		frappe.set_route("Form", "IB Credit Note", doc.name).then(() => {
+			cur_frm.set_value("against_sales_invoice", frm.doc.name);
+		});
+	});
+}
 
 function ib_si_setup_row_buttons(frm) {
 	const grid = frm.fields_dict.items && frm.fields_dict.items.grid;

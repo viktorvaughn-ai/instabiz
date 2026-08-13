@@ -1,8 +1,12 @@
 {# ── Company ──────────────────────────────────────────────────────────────────── #}
 {% set co = frappe.get_doc("Company", doc.company) %}
-{% set co_addr = frappe.db.get_value("Address", doc.company_address,
+{# Purchase Order's own-company address field is `billing_address` — there is
+   no `company_address` field on this doctype (checked doctype meta), so the
+   old lookup below always resolved to None and the company block never
+   showed an address at all. #}
+{% set co_addr = frappe.db.get_value("Address", doc.billing_address,
     ["address_line1","address_line2","city","state","pincode"], as_dict=True)
-    if doc.company_address else None %}
+    if doc.billing_address else None %}
 {% set sup_name = frappe.db.get_value("Supplier", doc.supplier, "supplier_name") or doc.supplier %}
 {% set sup_addr = frappe.db.get_value("Address", doc.supplier_address,
     ["address_line1","address_line2","city","state","pincode","gstin"], as_dict=True)
@@ -20,11 +24,23 @@
 {# ── Helpers ───────────────────────────────────────────────────────────────────── #}
 {% macro fd(d) %}{% if d %}{{ frappe.utils.formatdate(d, "dd-MMM-yy") }}{% endif %}{% endmacro %}
 {% macro fm(v) %}{{ frappe.utils.fmt_money(v|float, precision=2, currency=doc.currency) }}{% endmacro %}
+{% macro fq(v) %}{{ frappe.utils.fmt_money(v|float, precision=2) }}{% endmacro %}
 
 <style>
-  body   { font-family: Arial, sans-serif; font-size: 11px; color: #000; margin: 0; }
+  body, table, th, td { font-family: Arial, sans-serif; }
+  body   { font-size: 11px; color: #000; margin: 0; }
   table  { width: 100%; border-collapse: collapse; }
   td, th { padding: 4px 6px; vertical-align: top; }
+  {# table-layout:fixed forces columns to obey their declared width % —
+     without it, a long unbreakable string (item code, HSN) makes the
+     browser/PDF engine widen that column past its % and the whole table
+     overflows the page. Blanket break-word on every cell was tried first
+     and made short header words like "Required"/"SQMT" fragment mid-word
+     — .wrap-anywhere targets only the cells that actually carry long
+     unbreakable tokens (item code, HSN). #}
+  .items-tbl { table-layout: fixed; }
+  .items-tbl td, .items-tbl th { text-align: center; padding: 3px 4px; word-break: normal; }
+  .items-tbl .wrap-anywhere { overflow-wrap: anywhere; }
   strong { font-weight: bold; }
   .box   { border: 1.5px solid #000; margin-bottom: 2px; }
   .b     { border: 1px solid #000; }
@@ -52,14 +68,39 @@
 
 <div class="box">
 
-  {# ── Letter Head (wide banner, ~9:1 aspect — full width, not floated) ── #}
-  <div class="bb" style="padding:0">
-    <img src="/files/Instabiz_LH_v2.png" style="display:block; width:100%; height:auto; object-fit:contain; margin:0">
-  </div>
-
-  {# ── Title ── #}
-  <div style="text-align:center; padding:5px 6px; border-bottom:1px solid #000; font-size:13px; letter-spacing:1px">
-    <strong>Purchase Order</strong>
+  {# ── Header: circular logo (left) + centered title + GST/Branch (right) ──
+     Reference layout (user-supplied PO sample, 2026-08-13): logo top-left
+     instead of a full-width banner, title large and centered in the same
+     row, company GST/location info top-right. Swapped from the wide
+     Instabiz_LH_v2.png banner (still used elsewhere — GRN, other PO-family
+     formats — untouched) to the circular /files/logo.jpeg per user's
+     explicit request, same file already used as the app's real logo. #}
+  {# Title centered via an absolute overlay spanning the full row width,
+     independent of the flanking cells — the left logo (18%) and right
+     GST block (30%) are different widths, so centering the title inside
+     its own 52% middle cell put its center off the row's true center. #}
+  <div style="position:relative">
+    <table class="bb">
+      <tr>
+        <td style="width:18%; padding:6px">
+          <img src="/files/logo.jpeg" style="display:block; width:100%; height:auto; object-fit:contain">
+        </td>
+        <td style="width:52%">&nbsp;</td>
+        <td style="width:30%; text-align:right; vertical-align:middle; font-size:11px">
+          {% if doc.custom_location %}Location: <strong>{{ doc.custom_location }}</strong><br>{% endif %}
+          GSTIN: <strong>{{ doc.company_gstin or "—" }}</strong>
+        </td>
+      </tr>
+    </table>
+    {# display:table/table-cell, not flex — the print PDF is rendered by
+       wkhtmltopdf's old WebKit engine, which silently drops `display:flex`
+       (confirmed via its own CSS-parse warnings on render). Table-cell
+       centering is CSS2.1 and renders correctly there. #}
+    <div style="position:absolute; top:0; left:0; width:100%; height:100%; display:table">
+      <div style="display:table-cell; vertical-align:middle; text-align:center">
+        <div style="font-size:20px; font-weight:bold; letter-spacing:1px">PURCHASE ORDER</div>
+      </div>
+    </div>
   </div>
 
   {# ── Company header (left) + PO meta grid (right) ── #}
@@ -104,11 +145,11 @@
           </tr>
           <tr>
             <td class="bb br lbl">Location</td>
-            <td class="bb lbl">Tax Template</td>
+            <td class="bb lbl">&nbsp;</td>
           </tr>
           <tr>
             <td class="bb br">{{ doc.custom_location or "—" }}</td>
-            <td class="bb">{{ doc.taxes_and_charges or "—" }}</td>
+            <td class="bb">&nbsp;</td>
           </tr>
           <tr>
             <td colspan="2" style="min-height:14px; padding:4px 6px;">&nbsp;</td>
@@ -135,83 +176,111 @@
         <div class="lbl">Ship To / Deliver At</div>
         <strong>{{ doc.set_warehouse or doc.company }}</strong><br>
         {% if doc.custom_location %}Location: <strong>{{ doc.custom_location }}</strong><br>{% endif %}
-        {{ doc.company }}
+        {# Full ship-to address — previously just the warehouse/company name
+           with no actual address, unlike the Supplier block beside it. Falls
+           back to the company's own billing address (already resolved above
+           as co_addr) when no explicit Shipping Address is set on the PO —
+           matches this doctype's own real-world default (goods usually ship
+           to the company itself). #}
+        {% if doc.shipping_address_display %}
+          {# shipping_address_display is generated by ERPNext's render_address()
+             and already contains real <br> tags between lines (confirmed:
+             "Chennai Branch<br>\nChennai<br>...") — it is not raw user text.
+             The previous `| e` escape here double-encoded those tags into
+             literal "<br>" showing on the printed page instead of line
+             breaks. No extra escaping needed — every other address block on
+             this print format (Supplier, Ship To's co_addr fallback) renders
+             its Address fields unescaped the same way. #}
+          {{ doc.shipping_address_display | safe }}
+        {% elif co_addr %}
+          {{ co_addr.address_line1 or "" }}{% if co_addr.address_line2 %}, {{ co_addr.address_line2 }}{% endif %}<br>
+          {% if co_addr.city %}{{ co_addr.city }}{% endif %}{% if co_addr.state %}, {{ co_addr.state }}{% endif %}{% if co_addr.pincode %} {{ co_addr.pincode }}{% endif %}
+        {% else %}
+          {{ doc.company }}
+        {% endif %}
       </td>
     </tr>
   </table>
 
   {# ── Items table ── #}
-  <table>
+  {# Discount % and per-row Required By added 2026-08-13 per user's reference
+     PO sample — Discount % surfaces Purchase Order Item.discount_percentage
+     (a real field, previously not shown anywhere on this format); Required
+     By uses the row's own schedule_date (distinct from the header-level
+     doc.schedule_date above — different items on one PO can genuinely need
+     different delivery dates). Column order (Rate → Discount % → Amount →
+     Required By) matches the reference layout. #}
+  <table class="items-tbl">
     <thead>
       <tr>
-        <th class="b ta-c" style="width:4%">Sl<br>No.</th>
-        <th class="b" style="width:32%">Description of Goods</th>
-        <th class="b ta-c" style="width:8%">HSN/<br>SAC</th>
-        <th class="b ta-c" style="width:6%">GST<br>Rate</th>
-        <th class="b ta-r" style="width:8%">Qty</th>
-        <th class="b ta-c" style="width:5%">UOM</th>
-        <th class="b ta-r" style="width:9%">Rate/<br>SQMT</th>
-        <th class="b ta-r" style="width:9%">Rate</th>
-        <th class="b ta-c" style="width:5%">per</th>
-        <th class="b ta-r" style="width:10%">Amount</th>
+        <th class="b" style="width:3%">Sl<br>No.</th>
+        <th class="b" style="width:27%">Description of Goods</th>
+        <th class="b" style="width:7%">HSN/<br>SAC</th>
+        <th class="b" style="width:7%">Qty</th>
+        <th class="b" style="width:5%">UOM</th>
+        <th class="b" style="width:8%">Rate/<br>SQMT</th>
+        <th class="b" style="width:8%">Rate</th>
+        <th class="b" style="width:4%">per</th>
+        <th class="b" style="width:6%">Disc<br>%</th>
+        <th class="b" style="width:10%">Amount</th>
+        <th class="b" style="width:8%">Required<br>By</th>
       </tr>
     </thead>
     <tbody>
       {% for row in doc.items %}
-      {# Per-row GST rate #}
-      {% set ns_gst = namespace(rate=0) %}
-      {% set _igst = (row.igst_rate or 0)|float %}
-      {% set _cgst = (row.cgst_rate or 0)|float %}
-      {% set _sgst = (row.sgst_rate or 0)|float %}
-      {% set ns_gst.rate = _igst + _cgst + _sgst %}
-      {% if ns_gst.rate == 0 %}{% set ns_gst.rate = ns_doc.doc_gst %}{% endif %}
       {# ROLL/SQMT check #}
       {% set is_roll = (row.uom or "")|upper == "ROLL" and (row.stock_uom or "")|upper == "SQMT" and (row.conversion_factor or 0)|float > 0 %}
       <tr>
-        <td class="b ta-c">{{ loop.index }}</td>
-        <td class="b">
+        <td class="b">{{ loop.index }}</td>
+        <td class="b wrap-anywhere">
           <strong>{{ row.item_name or row.item_code }}</strong>
           {% if row.description and row.description != row.item_name %}
           <br><span class="italic lbl">{{ row.description | striptags | trim }}</span>
           {% endif %}
         </td>
-        <td class="b ta-c">{{ row.gst_hsn_code or "" }}</td>
-        <td class="b ta-c">{% if ns_gst.rate %}{{ "%g" | format(ns_gst.rate) }}%{% endif %}</td>
-        <td class="b ta-r">{{ fm(row.qty) }}</td>
-        <td class="b ta-c">{{ row.uom }}</td>
-        <td class="b ta-r">{% if is_roll and row.custom_sqmt_rate %}{{ fm(row.custom_sqmt_rate) }}{% endif %}</td>
-        <td class="b ta-r">{{ fm(row.rate) }}</td>
-        <td class="b ta-c">{{ row.uom }}</td>
-        <td class="b ta-r">{{ fm(row.amount) }}</td>
+        <td class="b wrap-anywhere">{{ row.gst_hsn_code or "" }}</td>
+        <td class="b">{{ fq(row.qty) }}</td>
+        <td class="b">{{ row.uom }}</td>
+        <td class="b">{% if is_roll and row.custom_sqmt_rate %}{{ fm(row.custom_sqmt_rate) }}{% endif %}</td>
+        <td class="b">{{ fm(row.rate) }}</td>
+        <td class="b">{{ row.uom }}</td>
+        <td class="b">{% if row.discount_percentage %}{{ "%.2f"|format(row.discount_percentage) }}{% endif %}</td>
+        <td class="b">{{ fm(row.amount) }}</td>
+        <td class="b">{{ fd(row.schedule_date) if row.schedule_date else "—" }}</td>
       </tr>
       {% endfor %}
 
-      {# Net Total #}
       <tr>
-        <td class="b" colspan="9" style="text-align:right"></td>
-        <td class="b ta-r">{{ fm(doc.net_total) }}</td>
+        <td class="b" colspan="9">Sub Total</td>
+        <td class="b">{{ fm(doc.net_total) }}</td>
+        <td class="b"></td>
       </tr>
 
-      {# Tax rows #}
+      {# Tax rows — this format had no per-tax breakdown at all; only
+         net_total → grand_total, so GST actually charged never showed. #}
       {% for tax in doc.taxes %}
       {% if tax.tax_amount %}
       <tr class="italic">
-        <td class="b" colspan="8" style="text-align:right">{{ tax.description }} {{ "%g" | format(tax.rate) }} %</td>
-        <td class="b ta-c">%</td>
-        <td class="b ta-r">{{ fm(tax.tax_amount) }}</td>
+        <td class="b" colspan="8">{{ tax.description }} {{ "%g" | format(tax.rate) }} %</td>
+        <td class="b">%</td>
+        <td class="b">{{ fm(tax.tax_amount) }}</td>
+        <td class="b"></td>
       </tr>
       {% endif %}
       {% endfor %}
 
       {# Spacers #}
       {% for _i in range(4) %}
-      <tr style="height:16px"><td class="b" colspan="10"></td></tr>
+      <tr style="height:16px"><td class="b" colspan="11"></td></tr>
       {% endfor %}
 
-      {# Grand Total #}
+      {# Grand Total — fm() already prefixes the currency symbol via
+         fmt_money(currency=...); a manual &#8377; here duplicated it
+         (rendered as "₹ ₹ 1,25,000.00"), fixed by dropping the manual entity. #}
       <tr>
-        <td class="b ta-r" colspan="9"><strong>Grand Total</strong></td>
-        <td class="b ta-r"><strong>&#8377;&nbsp;{{ fm(doc.grand_total) }}</strong></td>
+        <td class="b" colspan="9"><strong>Grand Total</strong></td>
+        <td class="b"><strong>{{ fm(doc.grand_total) }}</strong></td>
+        <td class="b"></td>
       </tr>
     </tbody>
   </table>
@@ -238,6 +307,22 @@
     </tr>
   </table>
   {% endif %}
+
+  {# ── Freight / Payment Terms / Despatch Through ──
+     Freight/Despatch Through used to be hand-fillable blank lines — no
+     field existed for either. Added custom_freight (Currency) and
+     custom_transport (Link → IB Transport, same field the app already uses
+     for this on SO/SI/DN) so they're real, fillable, and now populate here.
+     Payment Terms reuses the real payment_terms_template field already
+     shown in the header meta grid — repeated here since this is the
+     footer block a supplier actually reads before dispatching. #}
+  <table class="bt">
+    <tr>
+      <td style="width:34%">Freight&nbsp;:&nbsp;<strong>{% if doc.custom_freight %}{{ fm(doc.custom_freight) }}{% endif %}</strong></td>
+      <td style="width:33%">Payment Terms&nbsp;:&nbsp;<strong>{{ doc.payment_terms_template or "" }}</strong></td>
+      <td>Despatch Through&nbsp;:&nbsp;<strong>{{ doc.custom_transport or "" }}</strong></td>
+    </tr>
+  </table>
 
   {# ── Signature ── #}
   <table class="bt">

@@ -17,6 +17,21 @@ def _is_einvoice_configured():
 	return is_api_enabled(settings) and settings.get("enable_e_invoice")
 
 
+def _is_auto_generate_enabled():
+	"""GST Settings.auto_generate_e_invoice — the actual "generate automatically
+	on submit" switch, distinct from enable_e_invoice (which only turns the
+	*capability* on, so the manual "Create e-Invoice" desk button/RPC works).
+	Only the UI-submit path used to respect this (deferred to india_compliance's
+	own client JS); the API/script-submit path below enqueued generation
+	whenever enable_e_invoice was on, with no regard for this flag at all — so
+	turning enable_e_invoice on to unlock manual generation would have silently
+	made every non-UI submit (API, bulk import, integration) auto-generate
+	anyway. Checked explicitly here so "manual only" holds regardless of how
+	the Sales Invoice gets submitted."""
+	settings = frappe.get_cached_doc("GST Settings")
+	return bool(settings.get("auto_generate_e_invoice"))
+
+
 def _had_cancelled_irn(docname):
 	"""True if this SI previously had an IRN that was cancelled at NIC."""
 	try:
@@ -95,6 +110,8 @@ def run_einvoice_on_submit(doc, method=None):
 		return
 
 	if not _is_einvoice_configured():
+		return
+	if not _is_auto_generate_enabled():
 		return
 
 	# Enqueue after commit to avoid in-transaction DB state issues

@@ -19,9 +19,16 @@ def run_dispatch_notification(doc, method=None):
 
 	message = " | ".join(parts)
 
+	# Frappe's own bell dropdown renders Notification Log.subject via .html()
+	# (frappe/public/js/frappe/ui/notifications/notifications.js) — customer_name
+	# is a free-text Data field any Sales User can set once at Customer creation
+	# and never edit again, so it must be escaped before going into subject the
+	# same way this session already fixed for Dialog/frappe.confirm sinks
+	# elsewhere in this app.
+	customer_bit = f" ({frappe.utils.escape_html(doc.customer_name)})" if doc.customer_name else ""
 	frappe.get_doc({
 		"doctype":       "Notification Log",
-		"subject":       _("Order Dispatched: {0}").format(doc.name),
+		"subject":       _("Order Dispatched: {0}{1}").format(doc.name, customer_bit),
 		"email_content": message,
 		"for_user":      sales_user,
 		"from_user":     "Administrator",

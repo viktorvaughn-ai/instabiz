@@ -206,7 +206,7 @@ function _ib_render_clear_overdue_block_button(frm) {
 	frm.remove_custom_button("Clear Overdue Block", "Credit");
 	frm.add_custom_button("Clear Overdue Block", () => {
 		frappe.confirm(
-			`Manually clear the overdue block for <b>${frm.doc.customer_name}</b>?<br>`
+			`Manually clear the overdue block for <b>${frappe.utils.escape_html(frm.doc.customer_name)}</b>?<br>`
 			+ "This allows new Sales Orders to be submitted despite outstanding dues.",
 			() => {
 				frappe.call({
@@ -289,7 +289,7 @@ function _ib_show_share_dialog(customer, customer_name) {
 					const available = all_users.filter((u) => !shared_set.has(u.name));
 
 					const d = new frappe.ui.Dialog({
-						title: `Sharing — ${customer_name || customer}`,
+						title: `Sharing — ${frappe.utils.escape_html(customer_name || customer)}`,
 						fields: [
 							{ fieldname: "current_html", fieldtype: "HTML", options: shares_html },
 							{ fieldname: "add_sec", fieldtype: "Section Break", label: available.length ? "Share with another user" : "" },

@@ -6,6 +6,7 @@ from erpnext.stock.doctype.purchase_receipt.purchase_receipt import PurchaseRece
 from instabiz.overrides.purchase_order import (
 	_auto_correct_purchase_gst_template,
 	_apply_purchase_cost_center,
+	_apply_purchase_location_gstin,
 	_set_location_from_warehouse,
 )
 from instabiz.overrides.utils import recalculate_purchase_items
@@ -18,6 +19,7 @@ class CustomPurchaseReceipt(PurchaseReceipt):
 
 	def validate(self):
 		_set_location_from_warehouse(self)
+		_apply_purchase_location_gstin(self)
 		_auto_correct_purchase_gst_template(self)
 		_apply_purchase_cost_center(self)
 		recalculate_purchase_items(self)
