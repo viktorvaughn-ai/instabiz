@@ -79,6 +79,13 @@
       {% if data.any_length_mtr %}<th>Length (MTR)</th>{% endif %}
       {% if data.any_qty_pkg %}<th>Qty/Pkg</th>{% endif %}
       {% if data.any_total_pkg %}<th>Total Pkg</th>{% endif %}
+      <th>Brand</th>
+      <th>Core</th>
+      <th>CTN</th>
+      <th>Shrink Film</th>
+      <th>No. of Logs</th>
+      <th>Packing Type</th>
+      <th>Size</th>
       <th class="jos-stage-col">Coating</th>
       <th class="jos-stage-col">Slitting</th>
       <th class="jos-stage-col">Rewinding</th>
@@ -107,6 +114,13 @@
       {% if data.any_length_mtr %}<td>{{ item.length_mtr if item.length_mtr else "-" }}</td>{% endif %}
       {% if data.any_qty_pkg %}<td>{{ (item.qty_pkg | int) if item.qty_pkg else "-" }}</td>{% endif %}
       {% if data.any_total_pkg %}<td>{{ (item.total_pkg | int) if item.total_pkg else "-" }}</td>{% endif %}
+      <td>{{ item.brand or "-" }}</td>
+      <td>{{ item.core or "-" }}</td>
+      <td>{{ item.ctn or "-" }}</td>
+      <td>{{ item.shrink_film or "-" }}</td>
+      <td>{{ item.no_of_logs if item.no_of_logs else "-" }}</td>
+      <td>{{ item.packing_type or "-" }}</td>
+      <td>{{ item.size or "-" }}</td>
       {% for st in item.stages %}
         {%- if not st.in_route -%}
         <td class="jos-stage-cell jos-stage-na">&mdash;</td>

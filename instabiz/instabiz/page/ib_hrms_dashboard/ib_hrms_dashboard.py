@@ -3,7 +3,6 @@ from frappe.utils import nowdate, getdate, get_first_day, get_last_day, flt
 
 from instabiz.overrides.utils import build_multi_token_where_named
 
-
 def get_context(context):
 	context.no_cache = 1
 
@@ -27,29 +26,47 @@ def get_hrms_data(month=None, att_search=None, att_status=None, leave_search=Non
 	except Exception:
 		total_emp = 0
 
-	# ── Attendance today ──────────────────────────────────────────────────────
 	try:
-		present_today = flt(frappe.db.sql("""
-			SELECT COUNT(DISTINCT employee) FROM (
-				SELECT employee FROM `tabEmployee Checkin`
-				WHERE DATE(time) = %s AND log_type = 'IN'
-				UNION
-				SELECT employee FROM `tabAttendance`
-				WHERE attendance_date = %s AND status = 'Present' AND docstatus = 1
-			) _combined
-		""", (today, today))[0][0])
-		absent_today = flt(frappe.db.sql(
-			"SELECT COUNT(*) FROM `tabAttendance` WHERE attendance_date=%s AND status='Absent' AND docstatus=1",
+		from frappe.utils import today as get_today
+		today = get_today()
+		# 1. Active Employees Count
+		total_emp = frappe.db.count("Employee", filters={"status": "Active"})
+
+		# 2. Present Today (Check-ins + Submitted Attendance)
+		checkin_emps = frappe.db.sql_list(
+			"SELECT DISTINCT employee FROM `tabEmployee Checkin` WHERE DATE(time) = %s AND log_type = 'IN'",
 			(today,)
-		)[0][0])
-	except Exception:
-		present_today = absent_today = 0
+		)
+		attendance_present_emps = frappe.db.sql_list(
+			"SELECT DISTINCT employee FROM `tabAttendance` WHERE attendance_date = %s AND status = 'Present' AND docstatus = 1",
+			(today,)
+		)
+		present_set = set(checkin_emps + attendance_present_emps)
+		present_today = len(present_set)
+
+		# 3. Employees On Approved Leave Today
+		on_leave_emps = frappe.db.sql_list("""
+			SELECT DISTINCT employee 
+			FROM `tabLeave Application` 
+			WHERE %s BETWEEN from_date AND to_date 
+			AND status = 'Approved' 
+			AND docstatus = 1
+		""", (today,))
+		on_leave_today = len(set(on_leave_emps))
+
+		# 4. Absent Today (The Default State)
+		# Prevents negative counts if data has overlaps
+		absent_today = max(0, total_emp - (present_today + on_leave_today))
+
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Attendance Dashboard Error")
+		present_today = absent_today = total_emp = 0
 
 	# ── Pending leaves ────────────────────────────────────────────────────────
 	try:
-		pending_leaves = flt(frappe.db.sql(
-			"SELECT COUNT(*) FROM `tabLeave Application` WHERE status='Open' AND docstatus=1"
-		)[0][0])
+		pending_leaves = frappe.db.count("Leave Application", filters={
+    	"status": "Open",
+    	"docstatus": 0 })
 	except Exception:
 		pending_leaves = 0
 

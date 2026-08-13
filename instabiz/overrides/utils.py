@@ -74,7 +74,11 @@ LOCATION_COST_CENTER = {
 # ── Location → warehouse (for place of dispatch) ──────────────────────────────
 LOCATION_WAREHOUSE = {
     "maharashtra": "MAHARASHTRA - IB",
-    "gujarat":     "GUJARAT - IB",
+    # GUJARAT - IB became a group warehouse 2026-08-13 (3 floor sub-warehouses
+    # added for inter-floor stock transfer tracking) — a group warehouse can't
+    # hold stock or be transacted against, so every doc that used to default
+    # its set_warehouse here now defaults to the Ground Floor leaf instead.
+    "gujarat":     "Ground Floor - GUJARAT - IB",
     "chennai":     "CHENNAI - IB",
 }
 

@@ -46,6 +46,19 @@ frappe.listview_settings["Sales Invoice"] = {
 		]);
 		ib_setup_list_sales_user_filter(listview, "Sales Invoice");
 		ib_setup_list_date_filter(listview, "Sales Invoice", "posting_date", []);
+		// Filter row order = column order (2026-08-13): live columns are
+		// Title, Status, Grand Total, Is Return, ID — Title/ID stay in
+		// Frappe's own default first/second slot (title_field + ID search
+		// are always first), Status moves up to right after them. Customer/
+		// Company/Sales Person/Date aren't visible columns, so they trail
+		// after in their existing order.
+		ib_reorder_filter_row(listview, [
+			$(".ib-sales-invoice-status-multi-filter"),
+			listview.page.fields_dict.customer && listview.page.fields_dict.customer.$wrapper,
+			listview.page.fields_dict.company && listview.page.fields_dict.company.$wrapper,
+			$(".ib-sales-invoice-sales-user-filter"),
+			$(".ib-sales-invoice-date-range-filter"),
+		]);
 		const _orig_render_list = listview.render_list.bind(listview);
 		listview.render_list = function () {
 			_orig_render_list();

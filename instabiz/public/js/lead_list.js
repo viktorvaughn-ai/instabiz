@@ -39,6 +39,14 @@ frappe.listview_settings["Lead"] = Object.assign(
 		onload: function (listview) {
 			ib_setup_list_print(listview, "Lead");
 
+			// Title filter removed 2026-08-13 — redundant with the native
+			// Company Name filter (already in_standard_filter=1), which is
+			// what leads are actually searched by in practice.
+			const titleField = listview.page.fields_dict.title;
+			if (titleField && titleField.$wrapper) {
+				titleField.$wrapper.hide();
+			}
+
 			// Preserve ERPNext's own onload (Create Prospect action)
 			const _erpnext_onload = frappe.listview_settings["Lead"]._erpnext_onload;
 			if (_erpnext_onload) _erpnext_onload(listview);
@@ -97,8 +105,33 @@ frappe.listview_settings["Lead"] = Object.assign(
 			});
 
 			ib_hide_sidebar();
+			ib_setup_list_link_filter(listview, "Lead", "market_segment", "Market Segment", "Market Segment");
+			ib_setup_list_link_filter(listview, "Lead", "industry", "Industry", "Industry Type");
+			ib_setup_list_link_filter(listview, "Lead", "source", "Source", "Lead Source");
+			// Territory filter relabeled "State" here (list view only, not a
+			// global field rename) — Territory values are Indian states in
+			// this app's actual usage (see lead.py territory derivation).
+			ib_setup_list_link_filter(listview, "Lead", "territory", "State", "Territory");
 			ib_setup_lead_team_filter(listview);
 			ib_setup_custom_status_multiselect(listview);
+
+			// Filter row order = column order (2026-08-13): live columns are
+			// Status, Assigned To, Phone, Territory, ID (Title column's own
+			// filter was removed — redundant with Company Name). Assigned
+			// To/Phone have no filter control to move. Company Name/Status/
+			// State(Territory) reordered to match; everything else that
+			// isn't a visible column trails after.
+			ib_reorder_filter_row(listview, [
+				listview.page.fields_dict.company_name && listview.page.fields_dict.company_name.$wrapper,
+				$(".ib-lead-status-multi-filter"),
+				$(".ib-lead-territory-filter"),
+				listview.page.fields_dict.custom_lead_temperature && listview.page.fields_dict.custom_lead_temperature.$wrapper,
+				listview.page.fields_dict.custom_next_follow_up_date && listview.page.fields_dict.custom_next_follow_up_date.$wrapper,
+				$(".ib-lead-market-segment-filter"),
+				$(".ib-lead-industry-filter"),
+				$(".ib-lead-source-filter"),
+				$(".ib-lead-team-filter"),
+			]);
 
 			// Restore inline status picker behavior on list pills.
 			const _orig_render_list = listview.render_list.bind(listview);
@@ -236,12 +269,11 @@ function ib_setup_lead_team_filter(listview) {
 		return args;
 	};
 
-	// Build control — prepend so it appears beside Title (first filter slot)
 	const $wrapper = $(
 		'<div class="form-group frappe-control input-max-width ib-lead-team-filter"></div>'
 	);
 	$wrapper.css({ flex: "0 0 140px", maxWidth: "140px" });
-	$wrapper.prependTo(listview.page.page_form);
+	_ib_chain_anchor(listview, $wrapper);
 
 	const control = frappe.ui.form.make_control({
 		df: {
@@ -309,13 +341,7 @@ function ib_setup_custom_status_multiselect(listview) {
 	const $wrapper = $(
 		'<div class="form-group frappe-control input-max-width col-md-2 ib-lead-status-multi-filter" data-fieldtype="MultiSelectList" data-fieldname="custom_status_multi"></div>'
 	);
-	if (existingField && existingField.$wrapper && existingField.$wrapper.length) {
-		$wrapper.insertAfter(existingField.$wrapper);
-	} else if (listview.filter_area && listview.filter_area.standard_filters_wrapper) {
-		$wrapper.appendTo(listview.filter_area.standard_filters_wrapper);
-	} else {
-		$wrapper.appendTo(listview.page.page_form);
-	}
+	_ib_chain_anchor(listview, $wrapper, existingField && existingField.$wrapper);
 	$wrapper.css({
 		flex: "0 0 140px",
 		maxWidth: "140px",

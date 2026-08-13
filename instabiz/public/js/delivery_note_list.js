@@ -40,13 +40,28 @@ frappe.listview_settings["Delivery Note"] = {
 	onload(listview) {
 		ib_setup_list_print(listview, "Delivery Note");
 		ib_hide_sidebar();
-		const warehouseField = listview.page.fields_dict.set_warehouse;
+		// Fieldname was "set_warehouse" — doesn't exist on Delivery Note
+		// (real field is "set_target_warehouse"), so this never actually
+		// hid anything; fixed while touching this file's filter setup.
+		const warehouseField = listview.page.fields_dict.set_target_warehouse;
 		if (warehouseField?.$wrapper) warehouseField.$wrapper.hide();
 		ib_setup_status_multiselect(listview, "Delivery Note", [
 			"Draft", "Pending", "Confirmed", "Return Issued", "Cancelled",
 		]);
 		ib_setup_list_sales_user_filter(listview, "Delivery Note");
 		ib_setup_list_date_filter(listview, "Delivery Note", "creation", []);
+		// Filter row order = column order (2026-08-13): live columns are
+		// Title, Status, % Installed, ID — Title/ID stay in Frappe's own
+		// default first/second slot, Status moves up right after Title.
+		// Customer/Company/Sales Person/Date aren't visible columns, trail
+		// after (Set Target Warehouse is now hidden, not shown at all).
+		ib_reorder_filter_row(listview, [
+			$(".ib-delivery-note-status-multi-filter"),
+			listview.page.fields_dict.customer && listview.page.fields_dict.customer.$wrapper,
+			listview.page.fields_dict.company && listview.page.fields_dict.company.$wrapper,
+			$(".ib-delivery-note-sales-user-filter"),
+			$(".ib-delivery-note-date-range-filter"),
+		]);
 		const _orig_render_list = listview.render_list.bind(listview);
 		listview.render_list = function () {
 			_orig_render_list();

@@ -542,7 +542,7 @@ class IBMyHR {
 
 		const gen_btn = `
 			<div style="margin-bottom:12px">
-				<button class="btn btn-sm btn-default" id="ib-myhr-gen-slip">Generate Last Month's Slip</button>
+				<button class="btn btn-sm btn-default" id="ib-myhr-gen-slip">Generate Salary Slip</button>
 			</div>`;
 
 		if (!slips.length) {
@@ -572,23 +572,57 @@ class IBMyHR {
 	_bind_gen_slip($c) {
 		const self = this;
 		$c.find("#ib-myhr-gen-slip").on("click", function () {
-			const $btn = $(this);
-			$btn.prop("disabled", true).text("Generating…");
-			frappe.call({
-				method: "instabiz.instabiz.page.ib_my_hr.ib_my_hr.generate_my_salary_slip",
-				callback(r) {
-					const res = r.message || {};
-					if (res.status === "exists") {
-						frappe.show_alert({ message: __("Slip already generated for last month"), indicator: "orange" });
-					} else if (res.status === "created") {
-						frappe.show_alert({ message: __("Salary slip generated"), indicator: "green" });
-					}
-					self.refresh();
-				},
-				error() {
-					$btn.prop("disabled", false).text("Generate Last Month's Slip");
+			// Month picker (2026-08-13) — generate_my_salary_slip already
+			// accepted a month param server-side, the button just never sent
+			// one (always generated last month only). Offers the last 12
+			// completed months — current month is excluded since the
+			// backend throws if the month hasn't ended yet.
+			const month_map = {};
+			const options = [];
+			const now = new Date();
+			for (let i = 1; i <= 12; i++) {
+				const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+				const label = d.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+				const value = frappe.datetime.obj_to_str(d).slice(0, 10);
+				options.push(label);
+				month_map[label] = value;
+			}
+
+			const dialog = new frappe.ui.Dialog({
+				title: __("Generate Salary Slip"),
+				fields: [
+					{
+						fieldname: "month",
+						fieldtype: "Select",
+						label: __("Month"),
+						options: options.join("\n"),
+						default: options[0],
+						reqd: 1,
+					},
+				],
+				primary_action_label: __("Generate"),
+				primary_action(values) {
+					dialog.get_primary_btn().prop("disabled", true).text(__("Generating…"));
+					frappe.call({
+						method: "instabiz.instabiz.page.ib_my_hr.ib_my_hr.generate_my_salary_slip",
+						args: { month: month_map[values.month] },
+						callback(r) {
+							const res = r.message || {};
+							if (res.status === "exists") {
+								frappe.show_alert({ message: __("Slip already generated for {0}", [values.month]), indicator: "orange" });
+							} else if (res.status === "created") {
+								frappe.show_alert({ message: __("Salary slip generated for {0}", [values.month]), indicator: "green" });
+							}
+							dialog.hide();
+							self.refresh();
+						},
+						error() {
+							dialog.get_primary_btn().prop("disabled", false).text(__("Generate"));
+						},
+					});
 				},
 			});
+			dialog.show();
 		});
 	}
 }

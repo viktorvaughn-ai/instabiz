@@ -5,6 +5,9 @@ _WH_SHORT = {
 	"MAHARASHTRA - IB": "MH",
 	"CHENNAI - IB":     "CN",
 	"GUJARAT - IB":     "GJ",
+	"Ground Floor - GUJARAT - IB": "GJ-G",
+	"First Floor - GUJARAT - IB":  "GJ-1",
+	"Second Floor - GUJARAT - IB": "GJ-2",
 }
 
 # voucher_type → (table, party_field)  None = no party
@@ -49,8 +52,16 @@ def get_ledger(item_code=None, warehouse=None, from_date=None, to_date=None,
 		params["item_code"] = item_code
 
 	if warehouse:
-		conditions.append("sle.warehouse = %(warehouse)s")
-		params["warehouse"] = warehouse
+		# GUJARAT - IB became a group warehouse 2026-08-13 (3 floor sub-warehouses
+		# for inter-floor transfer tracking) — new Stock Ledger Entries post
+		# against the floor leaf warehouses, not the group itself, so an exact
+		# match here would silently return nothing for anyone filtering by it.
+		if warehouse == "GUJARAT - IB":
+			conditions.append("sle.warehouse IN %(warehouse_list)s")
+			params["warehouse_list"] = ("Ground Floor - GUJARAT - IB", "First Floor - GUJARAT - IB", "Second Floor - GUJARAT - IB")
+		else:
+			conditions.append("sle.warehouse = %(warehouse)s")
+			params["warehouse"] = warehouse
 
 	if voucher_type:
 		conditions.append("sle.voucher_type = %(voucher_type)s")

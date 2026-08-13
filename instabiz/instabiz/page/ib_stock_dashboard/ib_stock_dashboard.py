@@ -52,8 +52,12 @@ def get_stock_data(item_group=None, uom=None, warehouse=None, hide_zero_stock=1,
 			AND mh.warehouse = 'MAHARASHTRA - IB'
 		LEFT JOIN tabBin cn ON cn.item_code = i.item_code
 			AND cn.warehouse = 'CHENNAI - IB'
-		LEFT JOIN tabBin gj ON gj.item_code = i.item_code
-			AND gj.warehouse = 'GUJARAT - IB'
+		LEFT JOIN (
+			SELECT item_code, SUM(actual_qty) AS actual_qty, SUM(reserved_qty) AS reserved_qty
+			FROM tabBin
+			WHERE warehouse IN ('Ground Floor - GUJARAT - IB', 'First Floor - GUJARAT - IB', 'Second Floor - GUJARAT - IB')
+			GROUP BY item_code
+		) gj ON gj.item_code = i.item_code
 		LEFT JOIN `tabItem Reorder` ir_mh
 			ON ir_mh.parent = i.item_code AND ir_mh.warehouse = 'MAHARASHTRA - IB'
 		LEFT JOIN `tabItem Reorder` ir_cn

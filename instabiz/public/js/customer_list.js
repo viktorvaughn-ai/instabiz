@@ -21,6 +21,18 @@ frappe.listview_settings["Customer"] = {
 		ib_setup_party_ledger_print(listview, "Customer");
 		ib_setup_customer_handled_by_filter(listview);
 
+		// Filter row order = column order (2026-08-13): live columns are
+		// Company Name, Status, Location, Mobile No, Outstanding Amount,
+		// Handled By, ID. Status/Mobile No/Outstanding Amount have no
+		// filter to move. Customer Group isn't a visible column, trails
+		// after.
+		ib_reorder_filter_row(listview, [
+			listview.page.fields_dict.customer_name && listview.page.fields_dict.customer_name.$wrapper,
+			listview.page.fields_dict.territory && listview.page.fields_dict.territory.$wrapper,
+			$(".ib-customer-handled-by-filter"),
+			listview.page.fields_dict.customer_group && listview.page.fields_dict.customer_group.$wrapper,
+		]);
+
 		// Remove native Frappe actions we don't use — deferred so Frappe adds them first
 		const _REMOVE = ["Assign To", "Clear Assignment", "Apply Assignment Rule"];
 		setTimeout(() => {

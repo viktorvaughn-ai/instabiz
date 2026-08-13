@@ -38,6 +38,17 @@ frappe.listview_settings["Purchase Receipt"] = {
 			"Draft", "Return Issued", "Completed", "Cancelled",
 		]);
 		ib_setup_list_date_filter(listview, "Purchase Receipt", "posting_date", []);
+		// Filter row order = column order (2026-08-13): live columns are
+		// Title, Status, Date, Grand Total, % Returned, ID — Title/ID stay
+		// in Frappe's own default first/second slot, Status/Date move up
+		// right after them. Company/Location aren't visible columns, trail
+		// after.
+		ib_reorder_filter_row(listview, [
+			$(".ib-purchase-receipt-status-multi-filter"),
+			$(".ib-purchase-receipt-date-range-filter"),
+			listview.page.fields_dict.company && listview.page.fields_dict.company.$wrapper,
+			listview.page.fields_dict.custom_location && listview.page.fields_dict.custom_location.$wrapper,
+		]);
 		const _orig_render_list = listview.render_list.bind(listview);
 		listview.render_list = function () {
 			_orig_render_list();

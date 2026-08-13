@@ -97,7 +97,6 @@ class IBHrmsDashboard {
 .ib-hr-stat-val { font-weight: 600; color: var(--heading-color); }
 .ib-hr-top-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
 .ib-hr-ts { font-size: 11px; color: var(--text-muted); margin-left: auto; }
-.ib-hr-ts--hist { color: #b45309; font-weight: 600; }
 .ib-hr-filter-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
 .ib-hr-search { flex: 0 1 220px; padding: 5px 10px; border: 1px solid var(--border-color);
   border-radius: 6px; font-size: 12px; background: var(--input-bg, #fff); color: var(--text-color); }
@@ -142,38 +141,15 @@ class IBHrmsDashboard {
 	}
 
 	_bind_toolbar() {
-		this._month_field = this.page.add_field({
-			fieldname: "month",
-			fieldtype: "Date",
-			label: "Month",
-			default: this._month,
-			change: () => {
-				const val = this._month_field && this._month_field.get_value();
-				if (val) { this._month = val; this.refresh(); }
-			},
-		});
+		// Month picker removed 2026-08-13 — this dashboard always shows the
+		// current month now, no historical browsing. this._month stays fixed
+		// at whatever the constructor set it to (today's month).
 		this.page.add_button(__("Go to Employees"), () => frappe.set_route("List", "Employee"));
 		this.page.add_button(__("New Leave"), () => frappe.new_doc("Leave Application"));
 	}
 
-	// Selected month field is a full date (always day 1) — used both to query
-	// the month and to detect whether the user is looking at a past/future
-	// month vs. the live current one (the "Present/Absent Today" KPI cards
-	// always reflect real today regardless of this filter, which can read as
-	// contradictory when the rest of the page is showing an old month).
-	_is_historical_month() {
-		const cur_month = frappe.datetime.get_today().slice(0, 7) + "-01";
-		return this._month !== cur_month;
-	}
-
-	_month_label() {
-		return frappe.datetime.str_to_obj(this._month).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
-	}
-
 	_set_ts(text) {
-		const hist = this._is_historical_month();
-		const label = hist ? `Viewing historical data for ${this._month_label()} — ${text}` : text;
-		this.$wrap.find("#ib-hr-ts").text(label).toggleClass("ib-hr-ts--hist", hist);
+		this.$wrap.find("#ib-hr-ts").text(text);
 	}
 
 	refresh() {
@@ -229,7 +205,7 @@ class IBHrmsDashboard {
 			},
 			{
 				label: "Pending Leaves", val: d.pending_leaves, rawNum: d.pending_leaves, color: "#f59e0b",
-				click() { frappe.route_options = { status: "Open", docstatus: 1 }; frappe.set_route("List", "Leave Application"); },
+				click() { frappe.route_options = { status: "Open", docstatus: 0 }; frappe.set_route("List", "Leave Application"); },
 			},
 			{
 				label: payrollLabel, val: fmt(d.payroll_mtd), rawNum: d.payroll_mtd, isInr: true, color: "#d97757",
@@ -493,8 +469,8 @@ class IBHrmsDashboard {
 				<thead><tr><th>Employee</th><th>Name</th><th>Gross Pay</th><th>Deductions</th><th>Net Pay</th><th>Status</th></tr></thead>
 				<tbody>${page_rows.map(r => `
 					<tr>
-						<td><a href="#" class="ib-hr-slip-link" data-slip="${frappe.utils.escape_html(r.name)}">${frappe.utils.escape_html(r.employee || "")}</a></td>
-						<td>${frappe.utils.escape_html(r.employee_name || "")}</td>
+						<td><a href="#" class="ib-hr-emp-link" data-emp="${frappe.utils.escape_html(r.employee)}">${frappe.utils.escape_html(r.employee || "")}</a></td>
+						<td><a href="#" class="ib-hr-slip-link" data-slip="${frappe.utils.escape_html(r.name)}">${frappe.utils.escape_html(r.employee_name || "")}</a></td>
 						<td>${fmt(r.gross_pay)}</td>
 						<td style="color:#dc2626">${fmt(r.total_deduction)}</td>
 						<td style="font-weight:600;color:var(--ib-primary)">${fmt(r.net_pay)}</td>
@@ -507,6 +483,13 @@ class IBHrmsDashboard {
 		this.$wrap.find(".ib-hr-slip-link").on("click", function (e) {
 			e.preventDefault();
 			frappe.set_route("Form", "Salary Slip", $(this).data("slip"));
+		});
+		// Employee-ID column's own link — was only ever bound inside
+		// _render_attendance(), so the Payroll tab's emp-link anchors
+		// (added 2026-08-13) rendered but did nothing on click.
+		this.$wrap.find(".ib-hr-emp-link").on("click", function (e) {
+			e.preventDefault();
+			frappe.set_route("Form", "Employee", $(this).data("emp"));
 		});
 		this.$wrap.find(".ib-hr-view-all-slips").on("click", (e) => {
 			e.preventDefault();

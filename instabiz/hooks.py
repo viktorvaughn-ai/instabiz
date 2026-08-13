@@ -419,4 +419,5 @@ doctype_js = {
     "IB Credit Note":          "public/js/ib_credit_note.js",
     "IB Debit Note":           "public/js/ib_debit_note.js",
     "Payment Entry":           "public/js/payment_entry.js",
+    "Salary Structure Assignment": "public/js/salary_structure_assignment.js",
 }

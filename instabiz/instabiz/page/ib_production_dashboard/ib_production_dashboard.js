@@ -215,6 +215,47 @@ function _etd_badge(dateStr) {
 // lowercase IB_STAGES `key`) since it comes straight from the server's
 // next_stage_suggestion / next_stage fields; falls back to the first stage
 // if blank/unrecognized.
+// Pre-stage packing-details form (2026-08-13) — asked once per Order Sheet
+// Item, before its first stage picker, never again after (server tracks via
+// custom_packing_captured, checked fresh on every call so it holds no matter
+// which tab/entry-point triggered the stage picker — see
+// get_packing_capture_status's own docstring for why not client-cached).
+function _show_packing_details_dialog(order_sheet_item, item_code, onSaved) {
+	const d = new frappe.ui.Dialog({
+		title: `Packing Details — ${item_code || ""}`,
+		fields: [
+			{ fieldname: "brand", fieldtype: "Link", options: "Brand", label: "Brand" },
+			{ fieldname: "core", fieldtype: "Link", options: "Item", label: "Core",
+				get_query: () => ({ filters: { custom_is_internal_use: 1 } }) },
+			{ fieldname: "ctn", fieldtype: "Link", options: "Item", label: "CTN",
+				get_query: () => ({ filters: { custom_is_internal_use: 1 } }) },
+			{ fieldname: "shrink_film", fieldtype: "Link", options: "Item", label: "Shrink Film",
+				get_query: () => ({ filters: { custom_is_internal_use: 1 } }) },
+			{ fieldname: "no_of_logs", fieldtype: "Int", label: "No. of Logs" },
+			{ fieldname: "packing_type", fieldtype: "Data", label: "Packing Type" },
+			{ fieldname: "size", fieldtype: "Data", label: "Size" },
+		],
+		primary_action_label: "Save & Continue",
+		primary_action: (values) => {
+			d.get_primary_btn().prop("disabled", true).text("Saving…");
+			frappe.call({
+				method: "instabiz.overrides.production.save_packing_details",
+				args: { order_sheet_item, ...values },
+				callback: (r) => {
+					if (r.exc) {
+						frappe.show_alert({ message: "Failed to save packing details.", indicator: "red" });
+						d.get_primary_btn().prop("disabled", false).text("Save & Continue");
+						return;
+					}
+					d.hide();
+					if (onSaved) onSaved();
+				},
+			});
+		},
+	});
+	d.show();
+}
+
 function _show_start_stage_dialog(order_sheet_item, item_code, suggestion, onDone) {
 	const d = new frappe.ui.Dialog({
 		title: `Start Production — ${item_code || ""}`,
@@ -249,6 +290,26 @@ function _show_start_stage_dialog(order_sheet_item, item_code, suggestion, onDon
 		},
 	});
 	d.show();
+}
+
+// Entry point every "Start Production" trigger on this page now calls
+// instead of _show_start_stage_dialog directly — checks whether this item's
+// packing details were already captured, and only interposes the form when
+// they weren't.
+function _start_production_flow(order_sheet_item, item_code, suggestion, onDone) {
+	frappe.call({
+		method: "instabiz.overrides.production.get_packing_capture_status",
+		args: { order_sheet_item },
+		callback: (r) => {
+			if (r.message) {
+				_show_start_stage_dialog(order_sheet_item, item_code, suggestion, onDone);
+			} else {
+				_show_packing_details_dialog(order_sheet_item, item_code, () => {
+					_show_start_stage_dialog(order_sheet_item, item_code, suggestion, onDone);
+				});
+			}
+		},
+	});
 }
 
 const PLAN_PAGE_SIZE = 25;
@@ -1007,7 +1068,7 @@ class IBProductionDashboard {
 			e.stopPropagation();
 			const $btn = $(e.currentTarget);
 			this._plan_keep_open = $btn.closest("[data-os-body]").data("osBody") || null;
-			_show_start_stage_dialog(
+			_start_production_flow(
 				$btn.data("osi"), $btn.data("item"), $btn.data("suggestion"),
 				() => this.refresh(),
 			);
@@ -3030,7 +3091,7 @@ class IBProductionStages {
 		});
 		$body.off("click", ".ib-ps-owise-start").on("click", ".ib-ps-owise-start", (e) => {
 			const $btn = $(e.currentTarget);
-			_show_start_stage_dialog(
+			_start_production_flow(
 				$btn.data("osi"), $btn.data("item"), $btn.data("suggestion"),
 				() => this._load_os_detail(this.current_os),
 			);
@@ -3427,7 +3488,6 @@ class IBProductionStages {
 		const can_adjust_qty = wo.status !== "Completed" && wo.status !== "Cancelled";
 		const menu_items = [
 			can_hold ? `<a class="dropdown-item" href="#" id="ib-wo-hold"><iconify-icon icon="lucide:pause" width="12" height="12" style="vertical-align:middle;margin-right:6px"></iconify-icon>Put On Hold</a>` : "",
-			`<a class="dropdown-item" href="#" id="ib-wo-print-job-order"><iconify-icon icon="lucide:printer" width="12" height="12" style="vertical-align:middle;margin-right:6px"></iconify-icon>Print Job Order</a>`,
 			(can_adjust_qty && (wo.target_uom === "PCS" || wo.target_uom === "SQMT"))
 				? `<a class="dropdown-item" href="#" id="ib-wo-adjust-qty"><iconify-icon icon="lucide:sliders-horizontal" width="12" height="12" style="vertical-align:middle;margin-right:6px"></iconify-icon>Adjust Qty</a>`
 				: "",
@@ -3544,7 +3604,6 @@ class IBProductionStages {
 		guarded("#ib-wo-hold", () => this._update_wo_status(wo, "On Hold", stage_key));
 		guarded("#ib-wo-advance", () => this._advance_wo(wo, stage_key));
 		guarded("#ib-wo-complete", () => this._update_wo_status(wo, "Completed", stage_key));
-		$panel.on("click", "#ib-wo-print-job-order", (e) => { e.preventDefault(); this._print_job_order(wo); });
 		$panel.on("click", "#ib-wo-adjust-qty", (e) => { e.preventDefault(); this._show_adjust_qty_dialog(wo, stage_key); });
 	}
 
@@ -3582,14 +3641,6 @@ class IBProductionStages {
 				}
 			},
 		});
-	}
-
-	// Opens Frappe's own print view for this WO. "IB Job Order" is set as the
-	// IB Work Order doctype's default print format (Property Setter, see
-	// hooks.py fixtures) so it's auto-selected — no format picker needed for
-	// the one format floor staff actually use.
-	_print_job_order(wo) {
-		frappe.set_route("print", "IB Work Order", wo.name);
 	}
 
 	// Bulk Print Job Order — from the Order-wise list's Actions column.
@@ -3804,7 +3855,7 @@ class IBProductionStages {
 					// Complete → immediately prompt for the next stage, same
 					// picker as the Dashboard's Start Production button and
 					// Order-wise's "+" cell — one continuous action.
-					_show_start_stage_dialog(wo.order_sheet_item, wo.item_code, next_stage, () => this.refresh());
+					_start_production_flow(wo.order_sheet_item, wo.item_code, next_stage, () => this.refresh());
 				} else {
 					this.refresh();
 				}

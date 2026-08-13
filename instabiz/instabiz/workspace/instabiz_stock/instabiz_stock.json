@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\": \"stk-h0\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>INVENTORY</b></span>\", \"col\": 12}}, {\"id\": \"stk-sb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Live Stock Balance\", \"col\": 3}}, {\"id\": \"stock-recon\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Stock Reconciliation\", \"col\": 3}}, {\"id\": \"stk-inward\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Inward Stock Transfer\", \"col\": 3}}, {\"id\": \"stock-analytics-hub\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Analytics Hub\", \"col\": 3}}, {\"id\": \"stk-h1\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>REPORTS</b></span>\", \"col\": 12}}, {\"id\": \"stk-sa\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Stock Ageing\", \"col\": 3}}, {\"id\": \"stk-h2\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\", \"col\": 12}}, {\"id\": \"stk-kb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Knowledge Base\", \"col\": 3}}, {\"id\": \"ai-h\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>PLANNING</b></span>\", \"col\": 12}}, {\"id\": \"ai-abc\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"ABC Analysis\", \"col\": 3}}, {\"id\": \"ai-dem\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Demand Forecast\", \"col\": 3}}, {\"id\": \"ai-cop\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Copilot\", \"col\": 3}}]",
+ "content": "[{\"id\":\"stk-h0\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>INVENTORY</b></span>\",\"col\":12}},{\"id\":\"stk-sb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Live Stock Balance\",\"col\":3}},{\"id\":\"bVRTGcBOwF\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Item\",\"col\":3}},{\"id\":\"stock-recon\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Stock Reconciliation\",\"col\":3}},{\"id\":\"stk-inward\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inward Stock Transfer\",\"col\":3}},{\"id\":\"stock-analytics-hub\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Analytics Hub\",\"col\":3}},{\"id\":\"UkqLemnryj\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Warehouse\",\"col\":3}},{\"id\":\"stk-h1\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>REPORTS</b></span>\",\"col\":12}},{\"id\":\"stk-sa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Stock Ageing\",\"col\":3}},{\"id\":\"stk-h2\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\",\"col\":12}},{\"id\":\"stk-kb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Knowledge Base\",\"col\":3}},{\"id\":\"ai-h\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>PLANNING</b></span>\",\"col\":12}},{\"id\":\"ai-abc\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"ABC Analysis\",\"col\":3}},{\"id\":\"ai-dem\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Demand Forecast\",\"col\":3}},{\"id\":\"ai-cop\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Copilot\",\"col\":3}}]",
  "creation": "2026-08-10 20:28:49.398810",
  "custom_blocks": [],
  "docstatus": 0,
@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz Stock",
  "links": [],
- "modified": "2026-08-05 05:04:38.783635",
+ "modified": "2026-08-13 15:05:50.744578",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz Stock",
@@ -39,6 +39,22 @@
    "label": "Live Stock Balance",
    "link_to": "ib-stock-dashboard",
    "type": "Page"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Item",
+   "link_to": "Item",
+   "stats_filter": "[[\"Item\",\"disabled\",\"=\",0,false]]",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "doc_view": "List",
+   "label": "Warehouse",
+   "link_to": "Warehouse",
+   "stats_filter": "[]",
+   "type": "DocType"
   },
   {
    "color": "Orange",

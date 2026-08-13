@@ -4,7 +4,7 @@ import json
 import frappe
 from frappe import _
 from frappe.model.workflow import apply_workflow
-from frappe.utils import today, now, flt, add_days, getdate, nowdate, date_diff, get_fullname
+from frappe.utils import today, now, flt, cint, add_days, getdate, nowdate, date_diff, get_fullname
 
 _PRODUCTION_ROLES = {"Factory Management", "Factory Production", "System Manager"}
 
@@ -975,7 +975,9 @@ def get_order_sheet_stage_workflow(order_sheet):
 	items = frappe.db.get_all(
 		"IB Order Sheet Item",
 		filters={"parent": order_sheet},
-		fields=["name", "item_code", "item_name", "qty", "uom"],
+		fields=["name", "item_code", "item_name", "qty", "uom",
+		        "custom_brand", "custom_core", "custom_ctn", "custom_shrink_film",
+		        "custom_no_of_logs", "custom_packing_type", "custom_size"],
 	)
 
 	any_color = any_width_mm = any_length_mtr = any_qty_pkg = any_total_pkg = False
@@ -1057,6 +1059,13 @@ def get_order_sheet_stage_workflow(order_sheet):
 			"length_mtr": dims.length_mtr,
 			"qty_pkg": dims.qty_pkg,
 			"total_pkg": dims.total_pkg,
+			"brand": item.custom_brand,
+			"core": item.custom_core,
+			"ctn": item.custom_ctn,
+			"shrink_film": item.custom_shrink_film,
+			"no_of_logs": item.custom_no_of_logs,
+			"packing_type": item.custom_packing_type,
+			"size": item.custom_size,
 			"stages": stages_out,
 		})
 
@@ -1718,6 +1727,47 @@ def start_item_stage(order_sheet_item, stage):
 		frappe.db.sql("SELECT RELEASE_LOCK(%s)", lock_name)
 
 
+@frappe.whitelist()
+def get_packing_capture_status(order_sheet_item):
+	"""Whether the pre-stage-picker packing-details form has already been
+	filled for this Order Sheet Item. Checked fresh from the DB (not from
+	whatever data the calling tab happened to have loaded) so the "ask once
+	per item, before its first stage" rule holds no matter which of the
+	Dashboard's several entry points (Active Plan, Item-wise, Stage-wise,
+	Machine-wise, WO panel post-complete prompt) triggered the stage picker.
+	"""
+	_require_production_role()
+	return bool(frappe.db.get_value("IB Order Sheet Item", order_sheet_item, "custom_packing_captured"))
+
+
+@frappe.whitelist()
+def save_packing_details(order_sheet_item, brand=None, core=None, ctn=None,
+                          shrink_film=None, no_of_logs=None, packing_type=None, size=None):
+	"""Saves the pre-stage packing-details form (Brand/Core/CTN/Shrink Film/
+	No. of Logs/Packing Type/Size) onto the Order Sheet Item and marks it
+	captured so it isn't asked again for this item. Direct db.set_value, not
+	doc.save() — these are plain descriptive/reference fields, no doctype
+	validate() logic depends on them, and every other JIT-picker mutation in
+	this module (start_item_stage, advance_to_next_stage) already writes to
+	IB Order Sheet Item / IB Work Order the same way."""
+	_require_production_role()
+	if not frappe.db.exists("IB Order Sheet Item", order_sheet_item):
+		frappe.throw(_("Order Sheet Item {0} not found").format(order_sheet_item))
+
+	frappe.db.set_value("IB Order Sheet Item", order_sheet_item, {
+		"custom_brand": brand or None,
+		"custom_core": core or None,
+		"custom_ctn": ctn or None,
+		"custom_shrink_film": shrink_film or None,
+		"custom_no_of_logs": cint(no_of_logs) if no_of_logs else 0,
+		"custom_packing_type": packing_type or None,
+		"custom_size": size or None,
+		"custom_packing_captured": 1,
+	})
+	frappe.db.commit()
+	return {"status": "ok"}
+
+
 # bulk_wo_action() (mass Start/Next Stage across a checkbox selection)
 # removed 2026-08-13 along with its frontend UI — the mass-select bulk
 # feature was dropped as part of making the JIT stage picker (start_item_stage)
@@ -1859,7 +1909,8 @@ def get_production_plan(limit=None, start=0, location=None, search=None, priorit
 		all_items = frappe.db.get_all(
 			"IB Order Sheet Item",
 			filters={"parent": ["in", os_names]},
-			fields=["name", "parent", "item_code", "item_name", "qty", "uom", "completed_qty", "status"],
+			fields=["name", "parent", "item_code", "item_name", "qty", "uom", "completed_qty", "status",
+			        "custom_packing_captured"],
 		)
 		for it in all_items:
 			items_by_os.setdefault(it.parent, []).append(it)

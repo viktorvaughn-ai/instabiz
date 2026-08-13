@@ -45,6 +45,25 @@ function _ib_remove_filters(listview, fieldname) {
     }
 }
 
+// Final-pass reorder of the whole filter row (native Frappe standard-filter
+// fields AND ib_setup_* custom controls together) into an explicit sequence —
+// used when matching filter order to list view column order requires moving
+// NATIVE fields too (e.g. Customer/Supplier), not just the custom ones
+// _ib_chain_anchor already keeps in relative call order. Call once, after
+// every ib_setup_* call for this list, with the fully resolved jQuery
+// elements in the target left-to-right order (resolve native fields via
+// listview.page.fields_dict[fieldname].$wrapper, custom ones via their
+// known .ib-* class). appendTo() moves (doesn't clone) so passing every
+// visible filter box guarantees the final order; omitting one just leaves
+// it wherever it already was.
+function ib_reorder_filter_row(listview, $elements) {
+    const $container = listview.filter_area && listview.filter_area.standard_filters_wrapper;
+    if (!$container || !$container.length) return;
+    $elements.forEach(($el) => {
+        if ($el && $el.length) $el.appendTo($container);
+    });
+}
+
 // Chains custom filter controls together in call order, so whatever sequence
 // onload() calls the ib_setup_* functions in is exactly the resulting left-to-
 // right DOM order — no more fragile per-function class-name lookups (a stale
@@ -140,6 +159,64 @@ function ib_setup_status_multiselect(listview, doctype, statuses) {
     }
 }
 
+// ── Generic single-value Link filter (any doctype, any Link field) ───────────
+// Same chaining as every other ib_setup_list_* control here — call these in
+// the exact order you want them to appear left-to-right in the filter row,
+// matching list view column order (that's the actual ask this exists for:
+// filter row order should match the columns, not whatever order the native
+// standard-filter fields happen to render in).
+function ib_setup_list_link_filter(listview, doctype, fieldname, placeholder, options) {
+    const slug    = doctype.toLowerCase().replace(/ /g, "-");
+    const css     = `ib-${slug}-${fieldname.replace(/_/g, "-")}-filter`;
+    const eventNs = `ib_${slug.replace(/-/g, "_")}_${fieldname}_clear`;
+
+    const existingField = listview.page.fields_dict[fieldname];
+    if (existingField && existingField.$wrapper) {
+        existingField.$wrapper.hide();
+    }
+
+    $(`.${css}`).remove();
+    const $wrapper = $(
+        `<div class="form-group frappe-control input-max-width ${css}" ` +
+        `data-fieldtype="Link" data-fieldname="${fieldname}"></div>`
+    );
+    $wrapper.css({ flex: "0 0 160px", maxWidth: "160px" });
+
+    _ib_chain_anchor(listview, $wrapper, existingField && existingField.$wrapper);
+
+    const control = frappe.ui.form.make_control({
+        df: {
+            label: "",
+            fieldtype: "Link",
+            options: options,
+            placeholder: __(placeholder),
+            onchange() {
+                const val = control.get_value();
+                _ib_remove_filters(listview, fieldname);
+                if (val) {
+                    listview.filter_area.add([[doctype, fieldname, "=", val]]);
+                }
+                listview.refresh();
+            },
+        },
+        parent: $wrapper,
+        only_input: true,
+        render_input: 1,
+    });
+    control.$wrapper.removeClass("form-group");
+    control.$wrapper.css("margin-bottom", 0);
+
+    const current = listview.filter_area.get().find((f) => f[1] === fieldname);
+    if (current) control.set_value(current[3]);
+
+    const $clearBtn = listview.filter_area && listview.filter_area.filter_x_button;
+    if ($clearBtn && $clearBtn.length) {
+        $clearBtn
+            .off(`click.${eventNs}`)
+            .on(`click.${eventNs}`, () => control.set_value(""));
+    }
+}
+
 // ── Generic sales person (User link) filter ───────────────────────────────────
 function ib_setup_list_sales_user_filter(listview, doctype, placeholder) {
     placeholder = placeholder || "Sales Person";
@@ -201,7 +278,7 @@ function ib_setup_customer_handled_by_filter(listview) {
         `data-fieldtype="Data" data-fieldname="custom_sales_person"></div>`
     );
     $wrapper.css({ flex: "0 0 160px", maxWidth: "160px" });
-    $wrapper.appendTo(listview.page.page_form);
+    _ib_chain_anchor(listview, $wrapper);
 
     const control = frappe.ui.form.make_control({
         df: {
