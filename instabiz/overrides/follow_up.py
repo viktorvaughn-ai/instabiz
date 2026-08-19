@@ -1,5 +1,5 @@
 import frappe
-from frappe.utils import today
+from frappe.utils import today, escape_html
 
 
 def run_follow_up_reminders():
@@ -43,9 +43,9 @@ def _notify(user: str, lead: dict) -> None:
 	marker = f"[ib-followup-{lead.name}-{lead.custom_next_follow_up_date}]"
 	if frappe.db.exists("Notification Log", {"for_user": user, "subject": ["like", f"%{marker}%"]}):
 		return
-	body = f"Follow-up overdue: {lead.lead_name or lead.name} (due {lead.custom_next_follow_up_date})"
+	body = f"Follow-up overdue: {escape_html(lead.lead_name or lead.name)} (due {lead.custom_next_follow_up_date})"
 	if lead.custom_follow_up_note:
-		note_part = f" — {lead.custom_follow_up_note}"
+		note_part = f" — {escape_html(lead.custom_follow_up_note)}"
 		max_body = 140 - len(marker) - 1
 		if len(body) + len(note_part) <= max_body:
 			body += note_part

@@ -8,7 +8,7 @@ Daily scheduler: two win-back nudges for sales reps.
 Re-alerts every WINBACK_COOLDOWN_DAYS so reps keep getting nudged on chronically stale docs.
 """
 import frappe
-from frappe.utils import add_days, nowdate
+from frappe.utils import add_days, nowdate, escape_html
 
 QUOTE_STALE_DAYS    = 14
 LEAD_STALE_DAYS     = 30
@@ -47,7 +47,7 @@ def _stale_quotations():
 			continue
 
 		subject = (
-			f"{_MARKER} Stale quotation: {q.name} ({q.customer_name}) — "
+			f"{_MARKER} Stale quotation: {q.name} ({escape_html(q.customer_name or '')}) — "
 			f"no activity in {QUOTE_STALE_DAYS}+ days"
 		)
 		frappe.get_doc({
@@ -88,7 +88,7 @@ def _cold_leads():
 			continue
 
 		subject = (
-			f"{_MARKER} Cold lead: {lead.lead_name or lead.name} — "
+			f"{_MARKER} Cold lead: {escape_html(lead.lead_name or lead.name)} — "
 			f"no activity in {LEAD_STALE_DAYS}+ days (status: {lead.custom_status})"
 		)
 		frappe.get_doc({

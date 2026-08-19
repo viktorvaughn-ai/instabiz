@@ -1,5 +1,5 @@
 import frappe
-from frappe.utils import today, add_days, getdate, date_diff
+from frappe.utils import today, add_days, getdate, date_diff, escape_html
 
 _HR_ROLES = {"System Manager", "HR Manager", "HR User"}
 
@@ -82,9 +82,9 @@ def run_employee_doc_expiry():
 			if already:
 				continue
 
-			doc_num = f" ({row.document_number})" if row.document_number else ""
+			doc_num = f" ({escape_html(row.document_number)})" if row.document_number else ""
 			base = (
-				f"{row.employee_name} — {row.document_type}{doc_num} "
+				f"{escape_html(row.employee_name or '')} — {escape_html(row.document_type or '')}{doc_num} "
 				f"expires in {days_left} day{'s' if days_left != 1 else ''} "
 				f"({row.expiry_date})"
 			)

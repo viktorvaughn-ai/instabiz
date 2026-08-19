@@ -1,6 +1,6 @@
 """instabiz.overrides.customer_score — daily customer health score computation."""
 import frappe
-from frappe.utils import today, add_days
+from frappe.utils import today, add_days, escape_html
 
 
 _WEIGHTS = {
@@ -163,7 +163,7 @@ def _alert_score_drop(customer: dict, new_score: float, prev_score: float, statu
 		return
 
 	drop = round(prev_score - new_score, 1)
-	link = f'<a href="/app/customer/{customer.name}">{customer.get("customer_name") or customer.name}</a>'
+	link = f'<a href="/app/customer/{customer.name}">{escape_html(customer.get("customer_name") or customer.name)}</a>'
 	message = f"""
 <p>Customer health score alert for {link}:</p>
 <ul>

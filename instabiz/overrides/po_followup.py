@@ -7,7 +7,7 @@ Deduplication: [ib-po-followup] marker in Notification Log subject —
 one alert per PO per day (checked via document_name + subject pattern).
 """
 import frappe
-from frappe.utils import add_days, nowdate
+from frappe.utils import add_days, nowdate, escape_html
 
 _MARKER = "[ib-po-followup]"
 _OVERDUE_DAYS = 7
@@ -79,7 +79,7 @@ def run_po_followup():
 
 		subject = (
 			f"{_MARKER} PO {po.name} — no GRN after {_OVERDUE_DAYS}+ days "
-			f"| {po.supplier_name or po.supplier} "
+			f"| {escape_html(po.supplier_name or po.supplier)} "
 			f"| {po.currency} {po.grand_total:,.2f}"
 		)
 

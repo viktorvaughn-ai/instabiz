@@ -20,7 +20,7 @@ Adding a new module = adding one dict to hooks.py. Zero engine changes.
 
 import frappe
 from frappe import _
-from frappe.utils import today, add_days
+from frappe.utils import today, add_days, escape_html
 
 
 # ── Public scheduler entry points ─────────────────────────────────────────────
@@ -224,12 +224,13 @@ def _notify_hr_managers(doc, item_count, subject=None):
         return
 
     if not subject:
+        safe_name = escape_html(doc.employee_name or "")
         if item_count:
             subject = _("{0} relieved — {1} pending document(s) need reassignment").format(
-                doc.employee_name, item_count
+                safe_name, item_count
             )
         else:
-            subject = _("{0} relieved — no pending documents found").format(doc.employee_name)
+            subject = _("{0} relieved — no pending documents found").format(safe_name)
 
     for user in hr_users:
         # ── Bell (Notification Log) ───────────────────────────────────────────

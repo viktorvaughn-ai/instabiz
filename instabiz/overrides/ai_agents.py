@@ -30,7 +30,7 @@ Whitelisted entry points:
 """
 import json
 import frappe
-from frappe.utils import nowdate, getdate, flt, cint, now_datetime, add_days
+from frappe.utils import nowdate, getdate, flt, cint, now_datetime, add_days, escape_html
 from instabiz.overrides import llm
 
 # ── static agent metadata ────────────────────────────────────────────────────
@@ -1518,6 +1518,7 @@ def _apply_dynamic(action_doc, draft):
 			subject = frappe.render_template(subject_tmpl, draft)
 		except Exception:
 			subject = subject_tmpl
+		subject = escape_html(subject)
 		msg_field = config.get("message_field", "message")
 		msg = draft.get(msg_field, "") or action_doc.summary or ""
 		frappe.get_doc({
@@ -1732,7 +1733,7 @@ def _apply(action_doc):
 		la_name = draft.get("leave_application", "")
 		frappe.get_doc({
 			"doctype": "Notification Log",
-			"subject": f"Leave Approval Needed: {draft.get('employee_name')} — {draft.get('leave_type')}",
+			"subject": f"Leave Approval Needed: {escape_html(draft.get('employee_name') or '')} — {escape_html(draft.get('leave_type') or '')}",
 			"email_content": draft.get("message", ""),
 			"for_user": approver,
 			"type": "Alert",
@@ -1747,7 +1748,7 @@ def _apply(action_doc):
 		emp = draft.get("employee_name", "")
 		frappe.get_doc({
 			"doctype": "Notification Log",
-			"subject": f"Attendance Gap: {emp} absent {draft.get('absent_days')} days",
+			"subject": f"Attendance Gap: {escape_html(emp)} absent {draft.get('absent_days')} days",
 			"email_content": draft.get("message", ""),
 			"for_user": hr_user,
 			"type": "Alert",
@@ -1774,7 +1775,7 @@ def _apply(action_doc):
 		hr_user = _get_role_user("HR Manager")
 		frappe.get_doc({
 			"doctype": "Notification Log",
-			"subject": f"Late Arrivals: {draft.get('employee_name')} — {draft.get('late_count')}x this month",
+			"subject": f"Late Arrivals: {escape_html(draft.get('employee_name') or '')} — {draft.get('late_count')}x this month",
 			"email_content": draft.get("message", ""),
 			"for_user": hr_user,
 			"type": "Alert",
@@ -1790,7 +1791,7 @@ def _apply(action_doc):
 		acct_user = _get_role_user("Accounts Manager")
 		frappe.get_doc({
 			"doctype": "Notification Log",
-			"subject": f"Payment Due: {draft.get('supplier')} — ₹{flt(draft.get('amount', 0)):,.0f} in {draft.get('days_until_due')}d",
+			"subject": f"Payment Due: {escape_html(draft.get('supplier') or '')} — ₹{flt(draft.get('amount', 0)):,.0f} in {draft.get('days_until_due')}d",
 			"email_content": draft.get("message", ""),
 			"for_user": acct_user,
 			"type": "Alert",
@@ -1804,7 +1805,7 @@ def _apply(action_doc):
 		acct_user = _get_role_user("Accounts Manager")
 		frappe.get_doc({
 			"doctype": "Notification Log",
-			"subject": f"Expense Claim Pending: {draft.get('employee_name')} — ₹{flt(draft.get('amount', 0)):,.0f}",
+			"subject": f"Expense Claim Pending: {escape_html(draft.get('employee_name') or '')} — ₹{flt(draft.get('amount', 0)):,.0f}",
 			"email_content": draft.get("message", ""),
 			"for_user": acct_user,
 			"type": "Alert",
@@ -1818,7 +1819,7 @@ def _apply(action_doc):
 		acct_user = _get_role_user("Accounts Manager")
 		frappe.get_doc({
 			"doctype": "Notification Log",
-			"subject": f"Unreconciled Bank Txn: {draft.get('bank_account')} — ₹{flt(draft.get('amount', 0)):,.0f} ({draft.get('days_old')}d old)",
+			"subject": f"Unreconciled Bank Txn: {escape_html(draft.get('bank_account') or '')} — ₹{flt(draft.get('amount', 0)):,.0f} ({draft.get('days_old')}d old)",
 			"email_content": draft.get("message", ""),
 			"for_user": acct_user,
 			"type": "Alert",
@@ -1834,7 +1835,7 @@ def _apply(action_doc):
 		pur_user = _get_role_user("Purchase Manager")
 		frappe.get_doc({
 			"doctype": "Notification Log",
-			"subject": f"PO Receipt Overdue {draft.get('days_overdue')}d: {draft.get('po_name')} — {draft.get('supplier_name')}",
+			"subject": f"PO Receipt Overdue {draft.get('days_overdue')}d: {draft.get('po_name')} — {escape_html(draft.get('supplier_name') or '')}",
 			"email_content": draft.get("message", ""),
 			"for_user": pur_user,
 			"type": "Alert",
@@ -1848,7 +1849,7 @@ def _apply(action_doc):
 		sales_user = draft.get("sales_user") or _get_role_user("Sales Manager")
 		frappe.get_doc({
 			"doctype": "Notification Log",
-			"subject": f"Delivery Overdue {draft.get('days_overdue')}d: {draft.get('sales_order')} — {draft.get('customer_name')}",
+			"subject": f"Delivery Overdue {draft.get('days_overdue')}d: {draft.get('sales_order')} — {escape_html(draft.get('customer_name') or '')}",
 			"email_content": draft.get("message", ""),
 			"for_user": sales_user,
 			"type": "Alert",
@@ -1863,7 +1864,7 @@ def _apply(action_doc):
 		acct_user = _stock_user if _stock_user != "Administrator" else _get_role_user("Accounts Manager")
 		frappe.get_doc({
 			"doctype": "Notification Log",
-			"subject": f"Aging Stock {draft.get('days_stale')}d: {draft.get('item_name')} ({draft.get('total_qty'):g} units)",
+			"subject": f"Aging Stock {draft.get('days_stale')}d: {escape_html(draft.get('item_name') or '')} ({draft.get('total_qty'):g} units)",
 			"email_content": draft.get("message", ""),
 			"for_user": acct_user,
 			"type": "Alert",

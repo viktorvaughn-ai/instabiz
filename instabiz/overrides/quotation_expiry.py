@@ -1,5 +1,5 @@
 import frappe
-from frappe.utils import today, add_days
+from frappe.utils import today, add_days, escape_html
 
 
 _ALERT_DAYS = [15, 7, 1]
@@ -44,7 +44,7 @@ def _send_expiry_alert_email(q: dict, days_remaining: int) -> None:
 	link = f'<a href="/app/quotation/{q.name}">{q.name}</a>'
 	day_label = "day" if days_remaining == 1 else "days"
 	message = f"""
-<p>Quotation {link} for <strong>{q.customer_name}</strong> expires in
+<p>Quotation {link} for <strong>{escape_html(q.customer_name or "")}</strong> expires in
 <strong>{days_remaining} {day_label}</strong> (on {q.valid_till}).</p>
 <p>Grand Total: ₹{(q.grand_total or 0):,.2f}</p>
 <p>Please follow up with the customer or extend the validity date.</p>

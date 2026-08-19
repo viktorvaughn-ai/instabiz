@@ -9,7 +9,7 @@ by PDC name only (no date component), so widening this to a catch-up range is
 safe — a user already notified for a given PDC won't be re-notified.
 """
 import frappe
-from frappe.utils import today, add_days, getdate
+from frappe.utils import today, add_days, getdate, escape_html
 
 
 def run_pdc_alert():
@@ -47,8 +47,8 @@ def run_pdc_alert():
 			days_left = (getdate(pdc.cheque_date) - getdate(today())).days
 			label = f"overdue by {abs(days_left)}d" if days_left < 0 else f"due in {days_left}d"
 			base = (
-				f"PDC {label}: #{pdc.cheque_no} "
-				f"{pdc.customer_name or pdc.customer} "
+				f"PDC {label}: #{escape_html(pdc.cheque_no or '')} "
+				f"{escape_html(pdc.customer_name or pdc.customer)} "
 				f"Rs.{pdc.amount:,.0f} on {pdc.cheque_date}"
 			)
 			subject = f"{base[:140 - len(marker) - 1]} {marker}"

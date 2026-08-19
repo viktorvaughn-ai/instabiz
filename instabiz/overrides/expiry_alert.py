@@ -1,6 +1,6 @@
 """instabiz.overrides.expiry_alert — daily batch expiry alert for adhesive products."""
 import frappe
-from frappe.utils import today, add_days
+from frappe.utils import today, add_days, escape_html
 
 _ALERT_DAYS = 30
 _MARKER = "[ib-expiry]"
@@ -76,7 +76,7 @@ def _notify(user: str, batch: dict) -> None:
 		"for_user": user,
 		"from_user": "Administrator",
 		"subject": (
-			f"{_MARKER} {urgency}Batch {batch.name} ({batch.item_name or batch.item}) "
+			f"{_MARKER} {urgency}Batch {batch.name} ({escape_html(batch.item_name or batch.item)}) "
 			f"expires in {days} day{'s' if days != 1 else ''} on {batch.expiry_date}"
 		),
 		"type": "Alert",

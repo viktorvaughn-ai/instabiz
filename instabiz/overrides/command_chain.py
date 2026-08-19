@@ -256,7 +256,7 @@ def _notify_escalation(insight_name, insight_title, role):
 	)
 	if not users:
 		return
-	subject = f"[ib-insight-escalated] {insight_title} — escalated to {role}"
+	subject = f"[ib-insight-escalated] {frappe.utils.escape_html(insight_title or '')} — escalated to {role}"
 	for user in users:
 		frappe.get_doc({
 			"doctype": "Notification Log",

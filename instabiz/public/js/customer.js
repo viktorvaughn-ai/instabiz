@@ -108,9 +108,10 @@ function _ib_render_outstanding_btn(frm) {
 
 function _ib_render_sales_orders_btn(frm) {
 	frm.remove_custom_button("All Sales Orders", "View");
-	frm.add_custom_button("All Sales Orders", () => {
+	frm.add_custom_button("View Full Order History ⟳", () => {
 		frappe.set_route("List", "Sales Order", {
 			customer: frm.doc.name,
+			docstatus: 1,
 		});
 	}, "View");
 }
@@ -136,7 +137,7 @@ function _ib_render_remove_assignment_button(frm) {
 	frm.remove_custom_button("Remove Assignment", "Assign");
 	frm.add_custom_button("Remove Assignment", () => {
 		const current = frm.doc.custom_sales_person || frm.doc.custom_sales_person_user;
-		frappe.confirm(`Remove assignment from ${current}?`, () => {
+		frappe.confirm(`Remove assignment from ${frappe.utils.escape_html(current)}?`, () => {
 			frappe.call({
 				method: "instabiz.overrides.customer_assignment.remove_customer_assignment",
 				args: { customer: frm.doc.name },
