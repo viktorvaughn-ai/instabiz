@@ -158,7 +158,7 @@ fixtures = [
     {
         "dt": "Property Setter",
         "filters": [["doc_type", "in", ["Quotation", "Quotation Item", "Sales Order", "Sales Order Item",
-                                          "Lead", "Delivery Note", "Customer",
+                                          "Lead", "Delivery Note", "Delivery Note Item", "Customer",
                                           "IB Credit Note", "IB Debit Note", "Purchase Invoice",
                                           "Purchase Order", "Purchase Receipt", "Sales Invoice",
                                           "Salary Slip", "IB Work Order", "IB Order Sheet"]]]
@@ -362,6 +362,8 @@ jinja = {
     "methods": [
         "instabiz.overrides.production.get_order_sheet_wo_names",
         "instabiz.overrides.production.get_order_sheet_stage_workflow",
+        "instabiz.instabiz.doctype.ib_container_import.ib_container_import.get_barcode_data_uri",
+        "instabiz.instabiz.doctype.ib_container_import.ib_container_import.get_qr_data_uri",
     ],
 }
 
