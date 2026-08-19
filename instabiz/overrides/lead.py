@@ -334,6 +334,11 @@ def transfer_leads(leads, to_user):
     full_name = frappe.db.get_value("User", to_user, "full_name") or to_user
 
     placeholders = ", ".join(["%s"] * len(leads))
+    old_owners = frappe.db.sql(
+        f"SELECT name, lead_owner, lead_name FROM `tabLead` WHERE name IN ({placeholders})",
+        leads,
+        as_dict=True,
+    )
     frappe.db.sql(
         f"UPDATE `tabLead` SET lead_owner = %s, custom_lead_owner_name = %s"
         f" WHERE name IN ({placeholders})",
@@ -354,6 +359,42 @@ def transfer_leads(leads, to_user):
         " VALUES " + ", ".join(["(%s, 'Info', 'Lead', %s, %s, %s, %s, %s, %s, 0, 0, 0)"] * len(rows)),
         [v for row in rows for v in row],
     )
+    frappe.db.commit()
+
+    # Bell-notify the new owner and every displaced old owner — same convention
+    # as customer_assignment.py's _notify_customer_reassignment: from_user=
+    # Administrator, subject capped to 140 chars, any free-text field (lead_name,
+    # full_name) escaped before it goes into subject (Frappe's bell dropdown
+    # renders Notification Log.subject via .html()).
+    safe_to_name = frappe.utils.escape_html(full_name)
+    lead_names = [frappe.utils.escape_html(r.lead_name or r.name) for r in old_owners]
+    frappe.get_doc({
+        "doctype":       "Notification Log",
+        "subject":       (_("{0} lead(s) transferred to you").format(len(leads)))[:140],
+        "email_content": "<br>".join(lead_names[:50]),
+        "for_user":      to_user,
+        "from_user":     "Administrator",
+        "type":          "Alert",
+        "document_type": "Lead",
+        "document_name": leads[0],
+    }).insert(ignore_permissions=True)
+
+    by_old_owner = {}
+    for r in old_owners:
+        if r.lead_owner and r.lead_owner != to_user:
+            by_old_owner.setdefault(r.lead_owner, []).append(r.lead_name or r.name)
+
+    for old_owner, names in by_old_owner.items():
+        subject = _("{0} lead(s) reassigned to {1}").format(len(names), safe_to_name)
+        frappe.get_doc({
+            "doctype":       "Notification Log",
+            "subject":       subject[:140],
+            "email_content": "<br>".join(frappe.utils.escape_html(n) for n in names[:50]),
+            "for_user":      old_owner,
+            "from_user":     "Administrator",
+            "type":          "Alert",
+            "document_type": "Lead",
+        }).insert(ignore_permissions=True)
 
     return {"transferred": len(leads), "to": full_name}
 

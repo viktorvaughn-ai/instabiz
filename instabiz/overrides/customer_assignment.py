@@ -6,6 +6,54 @@ from frappe.utils import today, now, add_days
 from instabiz.overrides.sales_target import get_target_map, compute_incentive, _month_first
 
 
+# ── Reassignment notifications ─────────────────────────────────────────────────
+
+def _notify_customer_reassignment(pairs, new_owner):
+	"""Bell-notify the new owner and every displaced old owner after a permanent
+	Customer.custom_sales_person_user change — same convention as every other
+	state-change in this app (see dispatch_notification.py): from_user=Administrator,
+	subject capped to 140 chars, any free-text field escaped before it goes into
+	subject (Frappe's bell dropdown renders Notification Log.subject via .html()).
+
+	pairs: list of (customer, customer_name, old_owner) already committed.
+	"""
+	if not pairs:
+		return
+
+	new_owner_name = frappe.db.get_value("User", new_owner, "full_name") or new_owner
+
+	gained_names = [frappe.utils.escape_html(cname or cust) for cust, cname, _old in pairs]
+	frappe.get_doc({
+		"doctype":       "Notification Log",
+		"subject":       (_("{0} customer(s) assigned to you").format(len(pairs)))[:140],
+		"email_content": "<br>".join(gained_names[:50]),
+		"for_user":      new_owner,
+		"from_user":     "Administrator",
+		"type":          "Alert",
+		"document_type": "Customer",
+		"document_name": pairs[0][0],
+	}).insert(ignore_permissions=True)
+
+	by_old_owner = {}
+	for cust, cname, old_owner in pairs:
+		if old_owner and old_owner != new_owner:
+			by_old_owner.setdefault(old_owner, []).append(cname or cust)
+
+	for old_owner, names in by_old_owner.items():
+		subject = _("{0} customer(s) reassigned to {1}").format(
+			len(names), frappe.utils.escape_html(new_owner_name)
+		)
+		frappe.get_doc({
+			"doctype":       "Notification Log",
+			"subject":       subject[:140],
+			"email_content": "<br>".join(frappe.utils.escape_html(n) for n in names[:50]),
+			"for_user":      old_owner,
+			"from_user":     "Administrator",
+			"type":          "Alert",
+			"document_type": "Customer",
+		}).insert(ignore_permissions=True)
+
+
 # ── Config ────────────────────────────────────────────────────────────────────
 
 @frappe.whitelist()
@@ -1157,6 +1205,35 @@ def transfer_assignments(from_user, to_user, date=None):
 		frappe.db.set_value("IB Customer Assignment", a.name, "assigned_to", to_user, update_modified=True)
 
 	frappe.db.commit()
+
+	to_name  = frappe.db.get_value("User", to_user, "full_name") or to_user
+	date_str = frappe.utils.formatdate(date)
+	count     = len(assignments)
+
+	frappe.get_doc({
+		"doctype":       "Notification Log",
+		"subject":       (_("{0} assignment(s) transferred to you for {1}").format(count, date_str))[:140],
+		"email_content": _("{0} of your {1} board assignment(s) were transferred to {2}.").format(
+			count, date_str, frappe.utils.escape_html(to_name)
+		),
+		"for_user":      to_user,
+		"from_user":     "Administrator",
+		"type":          "Alert",
+		"document_type": "IB Customer Assignment",
+	}).insert(ignore_permissions=True)
+
+	frappe.get_doc({
+		"doctype":       "Notification Log",
+		"subject":       (_("{0} assignment(s) transferred away for {1}").format(count, date_str))[:140],
+		"email_content": _("{0} of your {1} board assignment(s) were transferred to {2}.").format(
+			count, date_str, frappe.utils.escape_html(to_name)
+		),
+		"for_user":      from_user,
+		"from_user":     "Administrator",
+		"type":          "Alert",
+		"document_type": "IB Customer Assignment",
+	}).insert(ignore_permissions=True)
+
 	return {"transferred": len(assignments)}
 
 
@@ -1234,8 +1311,13 @@ def bulk_assign_to_user(customers, assigned_to, date=None):
 	today_date    = today()
 	tomorrow_date = _next_working_day(today_date)
 	now_ts        = now()
+	notify_pairs  = []
 
 	for customer in customers:
+		old_owner, customer_name = frappe.db.get_value(
+			"Customer", customer, ["custom_sales_person_user", "customer_name"]
+		)
+		notify_pairs.append((customer, customer_name, old_owner))
 		# Clear old shares on reassignment
 		frappe.db.delete("IB Customer Share", {"customer": customer})
 		frappe.db.set_value("Customer", customer, {
@@ -1265,6 +1347,7 @@ def bulk_assign_to_user(customers, assigned_to, date=None):
 
 	if assigned:
 		frappe.db.commit()
+		_notify_customer_reassignment(notify_pairs, assigned_to)
 
 	return {"assigned": assigned}
 
@@ -1373,6 +1456,10 @@ def assign_customer_to_user(customer, sales_user):
 	if not frappe.db.get_value("User", sales_user, "enabled"):
 		frappe.throw(_("User not found or disabled."))
 
+	old_owner, customer_name = frappe.db.get_value(
+		"Customer", customer, ["custom_sales_person_user", "customer_name"]
+	)
+
 	# Clear any existing shares — new owner should manage sharing themselves
 	frappe.db.delete("IB Customer Share", {"customer": customer})
 
@@ -1402,6 +1489,7 @@ def assign_customer_to_user(customer, sales_user):
 		"custom_sales_person": full_name,
 	})
 	frappe.db.commit()
+	_notify_customer_reassignment([(customer, customer_name, old_owner)], sales_user)
 	return {"status": "ok"}
 
 

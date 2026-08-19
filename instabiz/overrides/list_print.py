@@ -53,6 +53,21 @@ def get_party_gl(party_type, party, from_date=None, to_date=None):
     Returns GL entries for a party with running balance.
     party_type: 'Customer' or 'Supplier'
     """
+    from instabiz.overrides.permissions import _is_privileged
+
+    if party_type not in ("Customer", "Supplier"):
+        frappe.throw(_("Invalid party type."), frappe.PermissionError)
+
+    user = frappe.session.user
+    if not _is_privileged(user):
+        if party_type == "Customer":
+            owner = frappe.db.get_value("Customer", party, "custom_sales_person_user")
+            if owner != user:
+                frappe.throw(_("Not permitted to view this ledger."), frappe.PermissionError)
+        else:
+            if not set(frappe.get_roles(user)) & {"Purchase User", "Purchase Manager", "Accounts User", "Accounts Manager"}:
+                frappe.throw(_("Not permitted to view this ledger."), frappe.PermissionError)
+
     filters = {
         "party_type": party_type,
         "party": party,
@@ -90,6 +105,7 @@ def get_party_gl(party_type, party, from_date=None, to_date=None):
 def get_gl_entries(filters=None, from_date=None, to_date=None,
                    account=None, party_type=None, party=None, limit=500):
     """Full GL entry list for the GL print view."""
+    frappe.only_for(["System Manager", "Accounts Manager", "Accounts User"])
     db_filters = {"is_cancelled": 0}
     if from_date:
         db_filters["posting_date"] = [">=", from_date]

@@ -12,11 +12,13 @@ _EXCEL_PATH = os.path.join(
 _PRICE_FIELDS = {"face_price", "last_price", "slab1", "slab2", "slab3", "slab4", "slab5"}
 _JUMBO_PRICE_FIELDS = {"face_price", "last_price"}
 _CUTPACK_PRICE_FIELDS = {"slab1", "slab2", "slab3", "slab4", "slab5"}
+_VIEW_ROLES = ["System Manager", "Sales Manager", "Sales User"]
 
 
 @frappe.whitelist()
 def get_rate_card_meta():
 	"""Return summary counts + last effective dates per product type."""
+	frappe.only_for(_VIEW_ROLES)
 	rows = frappe.db.sql("""
 		SELECT product_type,
 		       COUNT(*) AS cnt,
@@ -111,6 +113,7 @@ def reimport_rate_card():
 @frappe.whitelist()
 def get_rate_card(product_type=None):
 	"""Return all IB Rate Card Entry rows, optionally filtered by product_type."""
+	frappe.only_for(_VIEW_ROLES)
 	filters = {}
 	if product_type:
 		filters["product_type"] = product_type
@@ -217,6 +220,7 @@ def get_current_rate_for_item(item_code):
 	other in practice, but LENGTH DESC + LIMIT 1 makes the choice
 	deterministic either way).
 	"""
+	frappe.only_for(_VIEW_ROLES)
 	if not item_code:
 		return None
 	rows = frappe.db.sql(
@@ -241,6 +245,7 @@ def get_matching_items_for_rate_card(name):
 	get_current_rate_for_item(), powers the Price List tab's "View Sold
 	History" row action (jumps to a real Item the Item History tab can
 	actually query Sales Order Item rows for)."""
+	frappe.only_for(_VIEW_ROLES)
 	base = frappe.db.get_value("IB Rate Card Entry", name, "item_code")
 	if not base:
 		return []
@@ -256,6 +261,7 @@ def get_matching_items_for_rate_card(name):
 @frappe.whitelist()
 def get_price_history(name):
 	"""Return chronological price-change log for an IB Rate Card Entry."""
+	frappe.only_for(_VIEW_ROLES)
 	versions = frappe.db.get_all(
 		"Version",
 		filters={"ref_doctype": "IB Rate Card Entry", "docname": name},
@@ -284,8 +290,8 @@ def _notify_price_change(doc, action):
 	"""Publish realtime event + Notification Log for all sales-role users."""
 	try:
 		me = frappe.session.user
-		item_label = doc.item_code or doc.name
-		product_label = doc.product_name or item_label
+		item_label = frappe.utils.escape_html(doc.item_code or doc.name)
+		product_label = doc.product_name or (doc.item_code or doc.name)
 
 		subject = (
 			f"New price list item: {item_label}" if action == "add"
