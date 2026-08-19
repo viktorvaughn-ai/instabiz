@@ -1,5 +1,6 @@
 """instabiz.overrides.delivery_note"""
 import frappe
+from frappe.utils import flt
 from erpnext.stock.doctype.delivery_note.delivery_note import (
     DeliveryNote,  # pyright: ignore[reportMissingImports]
 )
@@ -56,6 +57,7 @@ class CustomDeliveryNote(IbStatusMixin, DeliveryNote):
         recalculate_items(self)
         apply_location_cost_center(self)
         _guard_document_attachments(self)
+        _set_item_weights(self)
         super().validate()
 
     def on_update_after_submit(self):
@@ -71,6 +73,18 @@ class CustomDeliveryNote(IbStatusMixin, DeliveryNote):
 
     def before_submit(self):
         _auto_create_sr_if_needed(self)
+
+
+# ── Per-row weight (same carton-weight math as IB Packing List) ───────────────
+
+def _set_item_weights(dn):
+    for row in dn.items:
+        item = frappe.get_cached_doc("Item", row.item_code)
+        rolls_per_box = item.custom_rolls_per_box or 1
+        carton_wt = item.custom_carton_weight_kg or 0
+        boxes = flt(row.qty) / rolls_per_box
+        row.custom_total_weight_kg = round(boxes * carton_wt, 2)
+    dn.total_net_weight = sum(flt(row.custom_total_weight_kg) for row in dn.items)
 
 
 # ── Auto Stock Reconciliation on insufficient stock ───────────────────────────
