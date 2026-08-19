@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h5\\\"><b>INVENTORY</b></span>\"\n  },\n  \"id\": \"stk-h0\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Live Stock Balance\"\n  },\n  \"id\": \"stk-sb\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Item\"\n  },\n  \"id\": \"bVRTGcBOwF\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Stock Reconciliation\"\n  },\n  \"id\": \"stock-recon\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Inward Stock Transfer\"\n  },\n  \"id\": \"stk-inward\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Container Import\"\n  },\n  \"id\": \"stk-ctn\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Scan Stock\"\n  },\n  \"id\": \"stk-scan\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Analytics Hub\"\n  },\n  \"id\": \"stock-analytics-hub\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Warehouse\"\n  },\n  \"id\": \"UkqLemnryj\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h5\\\"><b>REPORTS</b></span>\"\n  },\n  \"id\": \"stk-h1\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Stock Ageing\"\n  },\n  \"id\": \"stk-sa\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\"\n  },\n  \"id\": \"stk-h2\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Knowledge Base\"\n  },\n  \"id\": \"stk-kb\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h5\\\"><b>PLANNING</b></span>\"\n  },\n  \"id\": \"ai-h\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"ABC Analysis\"\n  },\n  \"id\": \"ai-abc\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Demand Forecast\"\n  },\n  \"id\": \"ai-dem\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Copilot\"\n  },\n  \"id\": \"ai-cop\",\n  \"type\": \"shortcut\"\n }\n]",
+ "content": "[\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h5\\\"><b>INVENTORY</b></span>\"\n  },\n  \"id\": \"stk-h0\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Live Stock Balance\"\n  },\n  \"id\": \"stk-sb\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Item\"\n  },\n  \"id\": \"bVRTGcBOwF\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Stock Reconciliation\"\n  },\n  \"id\": \"stock-recon\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Inward Stock Transfer\"\n  },\n  \"id\": \"stk-inward\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Container Import\"\n  },\n  \"id\": \"stk-ctn\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Scan Stock\"\n  },\n  \"id\": \"stk-scan\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Analytics Hub\"\n  },\n  \"id\": \"stock-analytics-hub\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Follow-Ups\"\n  },\n  \"id\": \"fu-shortcut\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Warehouse\"\n  },\n  \"id\": \"UkqLemnryj\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h5\\\"><b>REPORTS</b></span>\"\n  },\n  \"id\": \"stk-h1\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Stock Ageing\"\n  },\n  \"id\": \"stk-sa\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\"\n  },\n  \"id\": \"stk-h2\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Knowledge Base\"\n  },\n  \"id\": \"stk-kb\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h5\\\"><b>PLANNING</b></span>\"\n  },\n  \"id\": \"ai-h\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"ABC Analysis\"\n  },\n  \"id\": \"ai-abc\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Demand Forecast\"\n  },\n  \"id\": \"ai-dem\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Copilot\"\n  },\n  \"id\": \"ai-cop\",\n  \"type\": \"shortcut\"\n }\n]",
  "creation": "2026-08-10 20:28:49.398810",
  "custom_blocks": [],
  "docstatus": 0,
@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz Stock",
  "links": [],
- "modified": "2026-08-20 02:50:21.957289",
+ "modified": "2026-08-20 03:40:49.160409",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz Stock",
@@ -127,6 +127,13 @@
    "doc_view": "",
    "label": "Scan Stock",
    "link_to": "ib-stock-scan",
+   "type": "Page"
+  },
+  {
+   "color": "Blue",
+   "doc_view": "",
+   "label": "Follow-Ups",
+   "link_to": "ib-follow-ups",
    "type": "Page"
   }
  ],

@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\": \"prod-h0\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>PRODUCTION</b></span>\", \"col\": 12}}, {\"id\": \"prod-pd\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Production Dashboard\", \"col\": 3}}, {\"id\": \"prod-dpr\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"DPR Report\", \"col\": 3}}, {\"id\": \"prod-analytics-hub\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Analytics Hub\", \"col\": 3}}, {\"id\": \"prod-h1\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>WORK MANAGEMENT</b></span>\", \"col\": 12}}, {\"id\": \"prod-mach\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Machines\", \"col\": 3}}, {\"id\": \"prod-wo\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Work Orders\", \"col\": 3}}, {\"id\": \"prod-h2\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>INVENTORY</b></span>\", \"col\": 12}}, {\"id\": \"prod-sb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Live Stock Balance\", \"col\": 3}}, {\"id\": \"prod-h3\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>REPORTS</b></span>\", \"col\": 12}}, {\"id\": \"prod-rpt\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Production Report\", \"col\": 3}}, {\"id\": \"prod-h4\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\", \"col\": 12}}, {\"id\": \"prod-kb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Knowledge Base\", \"col\": 3}}, {\"id\": \"ai-h\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>PLANNING</b></span>\", \"col\": 12}}, {\"id\": \"ai-prec\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Production Recipe\", \"col\": 3}}, {\"id\": \"ai-cop\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Copilot\", \"col\": 3}}]",
+ "content": "[\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h5\\\"><b>PRODUCTION</b></span>\"\n  },\n  \"id\": \"prod-h0\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Production Dashboard\"\n  },\n  \"id\": \"prod-pd\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"DPR Report\"\n  },\n  \"id\": \"prod-dpr\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Analytics Hub\"\n  },\n  \"id\": \"prod-analytics-hub\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Follow-Ups\"\n  },\n  \"id\": \"fu-shortcut\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h5\\\"><b>WORK MANAGEMENT</b></span>\"\n  },\n  \"id\": \"prod-h1\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Machines\"\n  },\n  \"id\": \"prod-mach\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Work Orders\"\n  },\n  \"id\": \"prod-wo\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h5\\\"><b>INVENTORY</b></span>\"\n  },\n  \"id\": \"prod-h2\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Live Stock Balance\"\n  },\n  \"id\": \"prod-sb\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h5\\\"><b>REPORTS</b></span>\"\n  },\n  \"id\": \"prod-h3\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Production Report\"\n  },\n  \"id\": \"prod-rpt\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\"\n  },\n  \"id\": \"prod-h4\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Knowledge Base\"\n  },\n  \"id\": \"prod-kb\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h5\\\"><b>PLANNING</b></span>\"\n  },\n  \"id\": \"ai-h\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Production Recipe\"\n  },\n  \"id\": \"ai-prec\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Copilot\"\n  },\n  \"id\": \"ai-cop\",\n  \"type\": \"shortcut\"\n }\n]",
  "creation": "2026-08-10 20:28:49.376271",
  "custom_blocks": [],
  "docstatus": 0,
@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz Production",
  "links": [],
- "modified": "2026-08-05 10:37:47.959026",
+ "modified": "2026-08-20 03:40:49.128128",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz Production",
@@ -104,6 +104,13 @@
    "doc_view": "",
    "label": "Copilot",
    "link_to": "ib-copilot",
+   "type": "Page"
+  },
+  {
+   "color": "Blue",
+   "doc_view": "",
+   "label": "Follow-Ups",
+   "link_to": "ib-follow-ups",
    "type": "Page"
   }
  ],

@@ -1,0 +1,15 @@
+{
+ "creation": "2026-08-20 00:00:00.000000",
+ "doctype": "Page",
+ "modified": "2026-08-20 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "instabiz",
+ "name": "ib-follow-ups",
+ "owner": "Administrator",
+ "page_name": "ib-follow-ups",
+ "restrict_to_domain": null,
+ "roles": [],
+ "standard": "Yes",
+ "system_page": 0,
+ "title": "Follow-Ups"
+}

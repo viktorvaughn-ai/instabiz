@@ -2809,6 +2809,28 @@ const KB_SECTIONS = [
 		],
 	},
 	{
+		id: "followups", cat: "dashboard",
+		icon: '<iconify-icon icon="lucide:calendar-check" width="17" height="17"></iconify-icon>', color: "#e0f2fe", iconColor: "#0369a1",
+		title: "Follow-Ups",
+		roles: _ALL,
+		items: [
+			{
+				num: "137", title: "Follow-Ups — Cross-Department Follow-up Tool (New)",
+				desc: "Workspace → Follow-Ups (every workspace has this shortcut). A single page, open to every role, for logging follow-ups against your own documents across Sales, Purchase, and HR — generalizes the same Type/Outcome/Notes/Next-Date pattern Lead's \"Log Activity\" already uses, but works on Quotation, Sales Order, Delivery Note, Sales Invoice, Purchase Order, Purchase Receipt, Purchase Invoice, Leave Application, IB Overtime Request, IB Full Final Settlement, and Employee Exit Handover. Pick a document type, see your own documents (owned, assigned to you, or — for sales docs — your rep field; for HR docs — matched via your linked Employee record) with a status chip (Never / Followed Up / Overdue), click one to log a follow-up. Summary cards at the top (Total My Docs / Followed Up / Pending / Overdue) update immediately after every save. Logging a follow-up also posts a note on the actual document's own timeline, same as Lead's activity log.",
+				link: "/app/ib-follow-ups", linkLabel: "Open Follow-Ups",
+				tags: "follow up followup follow-up dashboard log activity call meeting outcome next date overdue pending track",
+				steps: [
+					"Go to <b>Workspace → Follow-Ups</b> (any workspace — it's the same page everywhere).",
+					"Pick a <b>Document Type</b> from the dropdown.",
+					"Your own documents for that type list below, each with a status chip.",
+					"Click <b>Log Follow-up</b> on a row → pick Type + Outcome, add Notes, optionally set a Next Follow-up Date → Save.",
+					"The list and the summary cards refresh immediately.",
+				],
+				note: "You can only ever log a follow-up against a document that's actually yours (owner, assigned via Assign To, or the doctype's own rep/employee field) — enforced server-side regardless of what the page shows, not just a UI restriction. There is no company-wide/manager view in this first version — every user only ever sees their own documents.",
+			},
+		],
+	},
+	{
 		id: "faq", cat: "faq",
 		icon: '<iconify-icon icon="lucide:help-circle" width="17" height="17"></iconify-icon>', color: "#f3e8ff", iconColor: "#7c3aed",
 		title: "Frequently Asked Questions",
