@@ -7,8 +7,10 @@ const API = {
 };
 
 const STATUS = {
-	IN:   { label: "In",  color: "green" },
-	OUT:  { label: "Out", color: "blue"  },
+	IN:   { label: "In",              color: "green" },
+	OUT:  { label: "Out",             color: "blue"  },
+	DONE: { label: "Done",            color: "green" },
+	NONE: { label: "Not Checked In",  color: "gray"  },
 };
 
 const TZ = "Asia/Kolkata";
@@ -59,7 +61,7 @@ function fmt_datetime(str) {
 function make_row(emp) {
 	const is_in   = emp.last_log_type === "IN";
 	const is_done = emp.last_log_type === "OUT" || emp.last_log_type === "DONE";
-	const status  = STATUS[emp.last_log_type] || { label: "Absent", color: "red" };
+	const status  = STATUS[emp.last_log_type] || STATUS.NONE;
 
 	return frappe.render(ROW_TEMPLATE, {
 		emp, status, is_in, is_done,
@@ -123,7 +125,7 @@ function build_markup(page, state) {
 						<option value="">${__("All Status")}</option>
 						<option value="In">${__("In")}</option>
 						<option value="Out">${__("Out")}</option>
-						<option value="Absent">${__("Absent")}</option>
+						<option value="Absent">${__("Not Checked In")}</option>
 					</select>
 					<div class="at-category-wrap btn-group">
 						<label class="btn btn-default btn-sm at-cat-label">
@@ -414,7 +416,7 @@ function setup_events($wrap, state, page) {
 
 // ── UI helpers ─────────────────────────────────────────────────────────────────
 function update_row_ui($row, log_type) {
-	const st   = STATUS[log_type] || { label: "Absent", color: "red" };
+	const st   = STATUS[log_type] || STATUS.NONE;
 	const done = log_type === "OUT" || log_type === "DONE";
 	$row.find(".indicator-pill").attr("class", `indicator-pill ${st.color}`).text(__(st.label));
 	$row.find(".at-btn-in").prop("disabled",     log_type === "IN" || done);

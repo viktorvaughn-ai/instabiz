@@ -1859,19 +1859,20 @@ const KB_SECTIONS = [
 			},
 			{
 				num: "65", title: "Attendance Terminal (Admin Bulk Check-In)",
-				desc: "Separate from the employee self-service /checkin portal. The Attendance Terminal page is for HR / Admin to bulk check-in or mark absent for factory and office employees in one operation. Access from Workspace → HR → Attendance Terminal.",
+				desc: "Separate from the employee self-service /checkin portal. The Attendance Terminal page is for HR / Admin to bulk check-in or mark absent for factory and office employees in one operation. Access from Workspace → HR → Attendance Terminal. Privileged users (HR Manager/User, System Manager) can also pick a past or future date via the date picker — non-privileged users are locked to today.",
 				link: "/app/attendance-terminal", linkLabel: "Attendance Terminal",
-				tags: "attendance terminal bulk check admin factory office absent mark hr",
+				tags: "attendance terminal bulk check admin factory office absent mark hr not checked in",
 				steps: [
 					"Go to <b>Workspace → HR → Attendance Terminal</b>.",
 					"Filter by category: <b>Factory</b> or <b>Office</b>.",
-					"The page shows all employees in that category with their current check-in status.",
+					"The page shows all employees in that category with their current check-in status: <b>In</b> (green), <b>Out</b> (blue), <b>Done</b> (green, checked in and out), or <b>Not Checked In</b> (gray).",
 					"Select employees and click <b>Check In</b> for bulk check-in.",
-					"Click <b>Mark Absent</b> to mark selected employees absent.",
+					"Click <b>Mark Absent</b> to mark selected employees absent (a real Absent Attendance record — genuinely-absent employees don't appear in this list at all once marked).",
 					"Late check-in (more than 10 min after shift start) or early check-out (more than 10 min before shift end) auto-triggers a reason dialog.",
 					"Reason is saved to <code>custom_late_reason</code> on the Employee Checkin record.",
 				],
 				tip: "Employees without a default_shift assigned never trigger the late/early reason dialog.",
+				note: "<b>Bug fixed 2026-08-22:</b> the status pill previously fell back to a red \"Absent\" label for anyone who simply hadn't checked in yet — including everyone, for a future date, since nobody can check in ahead of time. Confirmed live: 28 of 50 employees showed wrongly \"Absent\" today, and all 55 showed \"Absent\" when viewing tomorrow. Now correctly shows gray \"Not Checked In\" — real Absent records (from Mark Absent or the nightly auto-absent scheduler) are unaffected and still excluded from this list entirely, same as before.",
 			},
 			{
 				num: "32", title: "IB Overtime Request",
@@ -2757,6 +2758,7 @@ const KB_SECTIONS = [
 					"<b>Statutory tab</b>: PF, ESIC, PT deduction totals for current payroll month.",
 				],
 				tip: "Use the Leaves tab for quick leave approvals without opening each Leave Application individually.",
+				note: "<b>Bug fixed 2026-08-22:</b> the Attendance tab's list previously only read submitted `Attendance` records — which only ever get a \"Present\" row from HRMS's own end-of-day auto-attendance job, never live during the day — so today's real check-ins never showed up as Present in the list (only Absent records, created via Attendance Terminal's Mark Absent or the nightly scheduler, ever appeared for today). The \"Present Today\" KPI card above it was always correct (computed live from Employee Checkin) — the list just disagreed with it. Fixed by merging in a live \"Present\" row for anyone checked in today with no Attendance doc yet, so the list and the KPI can no longer disagree.",
 			},
 			{
 				num: "DASH-4", title: "Procurement Dashboard",

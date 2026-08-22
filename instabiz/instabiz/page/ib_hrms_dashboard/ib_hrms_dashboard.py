@@ -91,28 +91,56 @@ def get_hrms_data(month=None, att_search=None, att_status=None, leave_search=Non
 		payroll_is_draft = False
 
 	# ── Attendance for month ──────────────────────────────────────────────────
+	# Real `tabAttendance` rows only ever get a submitted "Present" record via
+	# HRMS's own end-of-day auto-attendance job — never live, intra-day. So a
+	# plain query against it always shows today's real check-ins as missing,
+	# even though the "Present Today" KPI above (computed live from Employee
+	# Checkin) already knows better. UNION in a synthetic "Present" row per
+	# employee who checked in today but has no Attendance doc yet, so the list
+	# and the KPI can't disagree. Only applies to today's date — every other
+	# day in the range is fully settled and read from `tabAttendance` alone.
 	try:
-		conditions = ["a.attendance_date BETWEEN %(month_start)s AND %(month_end)s", "a.docstatus=1"]
-		params = {"month_start": month_start, "month_end": month_end}
+		conditions = ["combined.attendance_date BETWEEN %(month_start)s AND %(month_end)s"]
+		params = {"month_start": month_start, "month_end": month_end, "today": today}
 		if att_status:
-			conditions.append("a.status = %(att_status)s")
+			conditions.append("combined.status = %(att_status)s")
 			params["att_status"] = att_status
-		att_cond, att_extra = build_multi_token_where_named(["e.employee_name", "a.employee"], att_search, "att_tok")
+		att_cond, att_extra = build_multi_token_where_named(["combined.employee_name", "combined.employee"], att_search, "att_tok")
 		if att_cond:
 			conditions.append(att_cond)
 			params.update(att_extra)
+
+		combined_sql = """
+			SELECT a.employee AS employee, e.employee_name AS employee_name, e.department AS department,
+				   a.attendance_date AS attendance_date, a.status AS status, a.in_time AS in_time, a.out_time AS out_time
+			FROM `tabAttendance` a
+			LEFT JOIN `tabEmployee` e ON e.name = a.employee
+			WHERE a.docstatus = 1
+
+			UNION ALL
+
+			SELECT ec.employee AS employee, e2.employee_name AS employee_name, e2.department AS department,
+				   %(today)s AS attendance_date, 'Present' AS status, MIN(ec.time) AS in_time,
+				   MAX(CASE WHEN ec.log_type = 'OUT' THEN ec.time END) AS out_time
+			FROM `tabEmployee Checkin` ec
+			LEFT JOIN `tabEmployee` e2 ON e2.name = ec.employee
+			WHERE DATE(ec.time) = %(today)s
+			  AND ec.log_type = 'IN'
+			  AND NOT EXISTS (
+				  SELECT 1 FROM `tabAttendance` a2
+				  WHERE a2.employee = ec.employee AND a2.attendance_date = %(today)s AND a2.docstatus = 1
+			  )
+			GROUP BY ec.employee
+		"""
+
 		attendance_total = int(frappe.db.sql(f"""
-			SELECT COUNT(*) FROM `tabAttendance` a
-			LEFT JOIN `tabEmployee` e ON e.name=a.employee
+			SELECT COUNT(*) FROM ({combined_sql}) combined
 			WHERE {' AND '.join(conditions)}
 		""", params)[0][0])
 		attendance_list = frappe.db.sql(f"""
-			SELECT a.employee, e.employee_name, e.department, a.attendance_date,
-				   a.status, a.in_time, a.out_time
-			FROM `tabAttendance` a
-			LEFT JOIN `tabEmployee` e ON e.name=a.employee
+			SELECT * FROM ({combined_sql}) combined
 			WHERE {' AND '.join(conditions)}
-			ORDER BY a.attendance_date DESC, a.employee
+			ORDER BY combined.attendance_date DESC, combined.employee
 			LIMIT %(page_size)s OFFSET %(att_offset)s
 		""", {**params, "page_size": page_size, "att_offset": att_offset}, as_dict=True)
 	except Exception:
