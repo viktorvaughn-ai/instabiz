@@ -80,6 +80,7 @@ class IBCustomerHealth {
 						<th>Health</th><th>Customer</th><th>Territory</th>
 						<th>Sales Person</th><th>Last Order</th>
 						<th style="text-align:right">MTD Revenue</th>
+						<th style="text-align:right">YTD Revenue</th>
 						<th style="text-align:right">Outstanding</th>
 						<th style="text-align:right">Open Quotes</th>
 					</tr></thead>
@@ -125,6 +126,7 @@ class IBCustomerHealth {
 		// KPI totals come from server (full dataset, not just current page)
 		const total_outstanding = d.agg_outstanding || 0;
 		const total_mtd = d.agg_mtd || 0;
+		const total_ytd = d.agg_ytd || 0;
 		const at_risk = d.agg_at_risk || 0;
 		const healthy = d.agg_healthy || 0;
 
@@ -133,6 +135,7 @@ class IBCustomerHealth {
 			<div class="ib-ch-kpi"><div class="ib-ch-kpi-l">Healthy (≥80)</div><div class="ib-ch-kpi-v" style="color:#059669">${healthy}</div></div>
 			<div class="ib-ch-kpi"><div class="ib-ch-kpi-l">At Risk (&lt;50)</div><div class="ib-ch-kpi-v" style="color:#dc2626">${at_risk}</div></div>
 			<div class="ib-ch-kpi"><div class="ib-ch-kpi-l">MTD Revenue</div><div class="ib-ch-kpi-v">${this._fmt(total_mtd)}</div></div>
+			<div class="ib-ch-kpi"><div class="ib-ch-kpi-l">YTD Revenue</div><div class="ib-ch-kpi-v">${this._fmt(total_ytd)}</div></div>
 			<div class="ib-ch-kpi"><div class="ib-ch-kpi-l">Total Outstanding</div><div class="ib-ch-kpi-v" style="color:#d97706">${this._fmt(total_outstanding)}</div></div>
 		`);
 
@@ -149,12 +152,13 @@ class IBCustomerHealth {
 				<td>${frappe.utils.escape_html(c.sales_person || "—")}</td>
 				<td>${days_lbl}</td>
 				<td style="text-align:right">${this._fmt(c.mtd_revenue)}</td>
+				<td style="text-align:right">${this._fmt(c.ytd_revenue)}</td>
 				<td style="text-align:right;${Number(c.outstanding) > 0 ? 'color:#d97706;font-weight:600' : ''}">${this._fmt(c.outstanding)}</td>
 				<td style="text-align:right">${c.open_quotes > 0 ? `<span class="ib-ch-badge warn">${c.open_quotes}</span>` : "—"}</td>
 			</tr>`;
 		}).join("");
 
-		this.$wrap.find("#ib-ch-body").html(rows || '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:20px">No customers</td></tr>');
+		this.$wrap.find("#ib-ch-body").html(rows || '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:20px">No customers</td></tr>');
 
 		this.$wrap.find("#ib-ch-body tr").on("click", function () {
 			frappe.set_route("Form", "Customer", $(this).data("customer"));

@@ -1,5 +1,6 @@
 import frappe
 from frappe.utils import nowdate, getdate, get_first_day, add_months, flt
+from erpnext.accounts.utils import get_fiscal_year
 
 from instabiz.overrides.billing_mode import is_dev_billing_mode, sales_doctype, sales_outstanding_expr
 from instabiz.overrides.utils import build_multi_token_where
@@ -19,6 +20,7 @@ def get_customer_health(search=None, territory=None, limit=50, offset=0):
 	today = getdate(nowdate())
 	month_start = get_first_day(today)
 	three_months = get_first_day(add_months(today, -3))
+	year_start = getdate(get_fiscal_year(today, as_dict=True).year_start_date)
 
 	limit = int(limit)
 	offset = int(offset)
@@ -62,6 +64,7 @@ def get_customer_health(search=None, territory=None, limit=50, offset=0):
 			c.custom_sales_person_user as sales_person,
 			COALESCE(ar.outstanding, 0) as outstanding,
 			COALESCE(mtd.revenue, 0) as mtd_revenue,
+			COALESCE(ytd.revenue, 0) as ytd_revenue,
 			COALESCE(q3.revenue, 0) as q3_revenue,
 			last_si.last_order as last_order_date,
 			COALESCE(oq.open_quotes, 0) as open_quotes,
@@ -86,6 +89,13 @@ def get_customer_health(search=None, territory=None, limit=50, offset=0):
 			WHERE t.docstatus=1 {return_cond}
 			AND t.{date_field} BETWEEN %s AND %s
 			GROUP BY customer
+		) ytd ON ytd.customer = c.name
+		LEFT JOIN (
+			SELECT customer, SUM(grand_total) as revenue
+			FROM `tab{doctype}` t
+			WHERE t.docstatus=1 {return_cond}
+			AND t.{date_field} BETWEEN %s AND %s
+			GROUP BY customer
 		) q3 ON q3.customer = c.name
 		LEFT JOIN (
 			SELECT customer, MAX(t.{date_field}) as last_order
@@ -103,7 +113,7 @@ def get_customer_health(search=None, territory=None, limit=50, offset=0):
 		WHERE {where}
 		ORDER BY ar.outstanding DESC, mtd.revenue DESC
 		LIMIT %s OFFSET %s
-	""", [month_start, today, three_months, today] + params + [limit, offset], as_dict=True)
+	""", [month_start, today, year_start, today, three_months, today] + params + [limit, offset], as_dict=True)
 
 	# Health score per customer (current page)
 	for r in rows:
@@ -128,7 +138,8 @@ def get_customer_health(search=None, territory=None, limit=50, offset=0):
 	agg = frappe.db.sql(f"""
 		SELECT
 			COALESCE(SUM(ar.outstanding), 0) as total_outstanding,
-			COALESCE(SUM(mtd.revenue), 0) as total_mtd
+			COALESCE(SUM(mtd.revenue), 0) as total_mtd,
+			COALESCE(SUM(ytd.revenue), 0) as total_ytd
 		FROM `tabCustomer` c
 		LEFT JOIN (
 			SELECT customer, SUM({outstanding_expr}) as outstanding
@@ -143,11 +154,19 @@ def get_customer_health(search=None, territory=None, limit=50, offset=0):
 			AND t.{date_field} BETWEEN %s AND %s
 			GROUP BY customer
 		) mtd ON mtd.customer = c.name
+		LEFT JOIN (
+			SELECT customer, SUM(grand_total) as revenue
+			FROM `tab{doctype}` t
+			WHERE t.docstatus=1 {return_cond}
+			AND t.{date_field} BETWEEN %s AND %s
+			GROUP BY customer
+		) ytd ON ytd.customer = c.name
 		WHERE {where}
-	""", [month_start, today] + params, as_dict=True)
+	""", [month_start, today, year_start, today] + params, as_dict=True)
 
 	agg_outstanding = flt(agg[0].total_outstanding) if agg else 0
 	agg_mtd = flt(agg[0].total_mtd) if agg else 0
+	agg_ytd = flt(agg[0].total_ytd) if agg else 0
 
 	# Health counts from score distribution on the current page
 	# (Full scan would be expensive; we approximate from the page)
@@ -166,6 +185,7 @@ def get_customer_health(search=None, territory=None, limit=50, offset=0):
 		"territories": [t[0] for t in territories],
 		"agg_outstanding": agg_outstanding,
 		"agg_mtd": agg_mtd,
+		"agg_ytd": agg_ytd,
 		"agg_healthy": agg_healthy,
 		"agg_at_risk": agg_at_risk,
 	}
