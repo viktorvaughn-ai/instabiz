@@ -47,6 +47,7 @@ frappe.ui.form.on("Customer", {
 		if (!frm.is_new()) {
 			_ib_load_outstanding(frm);
 			_ib_render_outstanding_btn(frm);
+			_ib_render_outstanding_statement_btn(frm);
 			_ib_render_sales_orders_btn(frm);
 		}
 	},
@@ -106,8 +107,19 @@ function _ib_render_outstanding_btn(frm) {
 	}, "View");
 }
 
+function _ib_render_outstanding_statement_btn(frm) {
+	frm.remove_custom_button("Outstanding Statement", "View");
+	frm.add_custom_button("Outstanding Statement", () => {
+		window.open(
+			"/printview?doctype=Customer&name=" + encodeURIComponent(frm.doc.name) +
+			"&format=IB%20Outstanding%20Statement&no_letterhead=1&letterhead=No%20Letterhead&settings=%7B%7D",
+			"_blank"
+		);
+	}, "View");
+}
+
 function _ib_render_sales_orders_btn(frm) {
-	frm.remove_custom_button("All Sales Orders", "View");
+	frm.remove_custom_button("View Full Order History ⟳", "View");
 	frm.add_custom_button("View Full Order History ⟳", () => {
 		frappe.set_route("List", "Sales Order", {
 			customer: frm.doc.name,

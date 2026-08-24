@@ -246,20 +246,4 @@ def create_quotation_from_cpq(customer, location, items, territory=None):
 
 	q.insert()
 
-	# Guardrailed Autonomy (Wave 2, additive only) — auto-submits this draft
-	# Quotation if a System Manager has explicitly enabled+configured
-	# autonomy for "CPQ Draft Quotation" (instabiz.overrides.autonomy) and
-	# it matches the configured conditions (amount / customer credit) and
-	# today's cap isn't exceeded. Leaves it as the draft it already is
-	# (today's unchanged default) otherwise. Never allowed to block draft
-	# creation itself.
-	try:
-		from instabiz.overrides.autonomy import maybe_auto_submit_quotation
-		maybe_auto_submit_quotation(q)
-	except Exception:
-		frappe.log_error(
-			title=f"CPQ autonomy hook failed for {q.name}",
-			message=frappe.get_traceback(),
-		)
-
 	return {"name": q.name}

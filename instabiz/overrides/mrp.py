@@ -26,8 +26,7 @@ Assumptions (document here since none of this is spelled out elsewhere):
     will eventually fulfil them, so a company-wide shortfall check is the
     simplest correct model for Phase 1.
   - New draft MRs are created against Stock Settings' default warehouse,
-    falling back to the Maharashtra warehouse — same convention already
-    used by ai_agents.py's smart_reorder draft-MR builder.
+    falling back to the Maharashtra warehouse.
   - Lead time: schedule_date = today + MRP_LEAD_TIME_DAYS. No per-item
     lead-time field exists yet in this app, so a flat generic default is
     used (documented, easy to promote to a per-item field later).
@@ -169,21 +168,6 @@ def _create_draft_mr(item_code, qty):
 		"schedule_date": add_days(nowdate(), MRP_LEAD_TIME_DAYS),
 	})
 	mr.insert(ignore_permissions=True)
-
-	# Guardrailed Autonomy (Wave 2, additive only) — auto-submits this draft
-	# MR if a System Manager has explicitly enabled+configured autonomy for
-	# "MRP Draft Material Request" (instabiz.overrides.autonomy) and it
-	# matches the configured conditions and today's cap isn't exceeded.
-	# Leaves it as the draft it already is (today's unchanged default)
-	# otherwise. Never allowed to block draft creation itself.
-	try:
-		from instabiz.overrides.autonomy import maybe_auto_submit_mr
-		maybe_auto_submit_mr(mr)
-	except Exception:
-		frappe.log_error(
-			title=f"MRP autonomy hook failed for {mr.name}",
-			message=frappe.get_traceback(),
-		)
 
 	return mr.name
 

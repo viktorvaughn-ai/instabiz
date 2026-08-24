@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\": \"misc-h0\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>SETUP MASTERS</b></span>\", \"col\": 12}}, {\"id\": \"misc-coa\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Chart of Accounts\", \"col\": 3}}, {\"id\": \"misc-cc\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Cost Center\", \"col\": 3}}, {\"id\": \"misc-h1\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>AUTOMATION / INFRA</b></span>\", \"col\": 12}}, {\"id\": \"misc-sh\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"System Health\", \"col\": 3}}, {\"id\": \"misc-h2\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>HELP & KNOWLEDGE BASE</b></span>\", \"col\": 12}}, {\"id\": \"misc-kb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Knowledge Base\", \"col\": 3}}]",
+ "content": "[{\"id\":\"misc-h2\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\",\"col\":12}},{\"id\":\"misc-sh\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"System Health\",\"col\":3}},{\"id\":\"misc-kb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Knowledge Base\",\"col\":3}},{\"id\":\"misc-insight\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Insights\",\"col\":3}}]",
  "creation": "2026-07-29 01:54:13.220811",
  "custom_blocks": [],
  "docstatus": 0,
@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz Misc",
  "links": [],
- "modified": "2026-07-30 12:43:11.819530",
+ "modified": "2026-08-25 01:07:18.153469",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz Misc",
@@ -29,20 +29,6 @@
  "shortcuts": [
   {
    "color": "Grey",
-   "doc_view": "List",
-   "label": "Chart of Accounts",
-   "link_to": "Account",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "List",
-   "label": "Cost Center",
-   "link_to": "Cost Center",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
    "doc_view": "",
    "label": "System Health",
    "link_to": "ib-system-health",
@@ -54,6 +40,14 @@
    "label": "Knowledge Base",
    "link_to": "ib-knowledge-base",
    "type": "Page"
+  },
+  {
+   "color": "Red",
+   "doc_view": "List",
+   "label": "Insights",
+   "link_to": "IB Insight",
+   "stats_filter": "[]",
+   "type": "DocType"
   }
  ],
  "title": "Instabiz Misc"

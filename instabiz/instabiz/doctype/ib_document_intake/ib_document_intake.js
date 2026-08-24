@@ -5,6 +5,30 @@ frappe.ui.form.on("IB Document Intake", {
 	refresh(frm) {
 		if (frm.is_new()) return;
 
+		if (frm.doc.status !== "Converted" && frm.doc.scanned_document) {
+			frm.add_custom_button(__("Run OCR"), () => {
+				frappe.call({
+					method: "run_ocr",
+					doc: frm.doc,
+					freeze: true,
+					freeze_message: __("Reading the scanned document…"),
+					callback: (r) => {
+						frm.reload_doc();
+						const res = r.message || {};
+						if (res.ok) {
+							frappe.show_alert({ message: __("OCR complete — review Raw Text below, then Extract."), indicator: "green" });
+						} else {
+							frappe.msgprint({
+								title: __("OCR unavailable"),
+								indicator: "orange",
+								message: res.message || __("Could not read the document — see OCR Status / Error."),
+							});
+						}
+					},
+				});
+			});
+		}
+
 		if (frm.doc.status !== "Converted") {
 			frm.add_custom_button(__("Extract"), () => {
 				frappe.call({

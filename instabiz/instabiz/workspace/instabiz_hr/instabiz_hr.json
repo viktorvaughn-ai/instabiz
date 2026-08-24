@@ -1,7 +1,7 @@
 {
  "charts": [],
- "content": "[\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h5\\\"><b>DASHBOARDS</b></span>\"\n  },\n  \"id\": \"hr-h0\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"HR Dashboard\"\n  },\n  \"id\": \"hr-dash\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Analytics Hub\"\n  },\n  \"id\": \"hr-analytics-hub\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Follow-Ups\"\n  },\n  \"id\": \"fu-shortcut\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h5\\\"><b>HR MANAGEMENT</b></span>\"\n  },\n  \"id\": \"hr-h1\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Employees\"\n  },\n  \"id\": \"hr-emp\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Attendance Terminal\"\n  },\n  \"id\": \"hr-att\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Biometric Import\"\n  },\n  \"id\": \"hr-bio\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Checkins\"\n  },\n  \"id\": \"H9Tz5LnWPQ\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Org Chart\"\n  },\n  \"id\": \"hr-org\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Leave Applications\"\n  },\n  \"id\": \"hr-lv\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Salary Slips\"\n  },\n  \"id\": \"hr-sal\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"F&F Settlement\"\n  },\n  \"id\": \"hr-ffs\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Employee Exit Handover\"\n  },\n  \"id\": \"mty86_lBYn\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Hikvision Terminals\"\n  },\n  \"id\": \"hr-hik\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Employee Salary Structure\"\n  },\n  \"id\": \"RjprtKIp11\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h5\\\"><b>TOOLS</b></span>\"\n  },\n  \"id\": \"hr-h2\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h5\\\"><b>REPORTS</b></span>\"\n  },\n  \"id\": \"hr-h3\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Payroll Summary\"\n  },\n  \"id\": \"hr-pay\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\"\n  },\n  \"id\": \"hr-h4\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Knowledge Base\"\n  },\n  \"id\": \"hr-kb\",\n  \"type\": \"shortcut\"\n }\n]",
- "creation": "2026-07-29 01:54:12.399483",
+ "content": "[{\"id\":\"hr-h0\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>DASHBOARDS</b></span>\",\"col\":12}},{\"id\":\"hr-dash\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"HR Dashboard\",\"col\":3}},{\"id\":\"hr-analytics-hub\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Analytics Hub\",\"col\":3}},{\"id\":\"fu-shortcut\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Follow-Ups\",\"col\":3}},{\"id\":\"hr-h1\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>HR MANAGEMENT</b></span>\",\"col\":12}},{\"id\":\"hr-emp\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Employees\",\"col\":3}},{\"id\":\"hr-att\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Attendance Terminal\",\"col\":3}},{\"id\":\"hr-bio\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Biometric Import\",\"col\":3}},{\"id\":\"H9Tz5LnWPQ\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Checkins\",\"col\":3}},{\"id\":\"hr-org\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Org Chart\",\"col\":3}},{\"id\":\"hr-lv\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Leave Applications\",\"col\":3}},{\"id\":\"hr-sal\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Salary Slips\",\"col\":3}},{\"id\":\"hr-ffs\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"F&F Settlement\",\"col\":3}},{\"id\":\"mty86_lBYn\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Employee Exit Handover\",\"col\":3}},{\"id\":\"hr-hik\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Hikvision Terminals\",\"col\":3}},{\"id\":\"RjprtKIp11\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Employee Salary Structure\",\"col\":3}},{\"id\":\"hr-h3\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>REPORTS</b></span>\",\"col\":12}},{\"id\":\"hr-pay\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Payroll Summary\",\"col\":3}},{\"id\":\"hr-h4\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\",\"col\":12}},{\"id\":\"hr-kb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Knowledge Base\",\"col\":3}},{\"id\":\"hr-asset-loan\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Asset Loans\",\"col\":3}},{\"id\":\"hr-overtime\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Overtime Requests\",\"col\":3}},{\"id\":\"hr-my-hr\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"My HR\",\"col\":3}}]",
+ "creation": "2026-08-25 00:11:14.505719",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz HR",
  "links": [],
- "modified": "2026-08-20 03:40:49.088418",
+ "modified": "2026-08-25 01:06:48.467736",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz HR",
@@ -155,6 +155,29 @@
    "doc_view": "",
    "label": "Follow-Ups",
    "link_to": "ib-follow-ups",
+   "type": "Page"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Asset Loans",
+   "link_to": "IB Asset Loan",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "List",
+   "label": "Overtime Requests",
+   "link_to": "IB Overtime Request",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "doc_view": "",
+   "label": "My HR",
+   "link_to": "ib-my-hr",
    "type": "Page"
   }
  ],

@@ -38,8 +38,8 @@ scheduler_events = {
         "instabiz.overrides.overdue_alert.run_overdue_alert",
         # Alert Accounts/Sales when PDC cheque date is 3 days away
         "instabiz.overrides.pdc_alert.run_pdc_alert",
-        # AI agents — auto_quote, demand_forecast, smart_reorder, collections, istix_enforcer, buying_dna
-        "instabiz.overrides.ai_agents.run_daily_agents",
+        # Flag IB Asset Loans past expected_return_date as Overdue + alert HR/borrower
+        "instabiz.overrides.asset_loan_alert.run_asset_loan_alert",
         # Monthly payroll draft creation — fires daily but only acts on the 7th
         "instabiz.overrides.payroll.run_monthly_payroll_draft",
         # Vendor Scorecard: trailing-90-day on-time/quality/fulfillment score per vendor
@@ -182,6 +182,22 @@ fixtures = [
                     ["role", "=", "Sales User"]]
     },
     {
+        # Market Segment (standard CRM doctype) had zero Sales User permission —
+        # a real Sales User (Mantasha) hit "does not have doctype access" trying
+        # to pick a Market Segment on her own Lead. Only Sales Manager had core
+        # read/create/write. Adding a Custom DocPerm for one role silently
+        # SUPPRESSES every core DocPerm role on that doctype (see
+        # frappe.permissions.get_valid_perms — once ANY Custom DocPerm exists
+        # for a doctype, core DocPerm rows for it are entirely ignored, not
+        # merged) — so Sales Manager's original access had to be re-added here
+        # too, as an explicit Custom DocPerm row, or it would have silently lost
+        # access. Fixed live 2026-08-25; exported here so it survives a fresh
+        # site setup instead of being a DB-only change with no fixture trail.
+        "dt": "Custom DocPerm",
+        "filters": [["parent", "=", "Market Segment"],
+                    ["role", "in", ["Sales User", "Sales Manager"]]]
+    },
+    {
         "dt": "Purchase Taxes and Charges Template",
         "filters": [["company", "=", "Instabiz Solutions India Pvt Ltd"]]
     },
@@ -308,6 +324,7 @@ permission_query_conditions = {
     "Delivery Note":     "instabiz.overrides.permissions.delivery_note_query_conditions",
     "Sales Invoice":     "instabiz.overrides.permissions.sales_invoice_query_conditions",
     "Employee Checkin":  "instabiz.overrides.checkin.employee_checkin_query_conditions",
+    "IB Asset Loan":     "instabiz.instabiz.doctype.ib_asset_loan.ib_asset_loan.get_permission_query_conditions",
 }
 
 has_permission = {

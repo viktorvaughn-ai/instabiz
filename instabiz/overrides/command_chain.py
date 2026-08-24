@@ -130,8 +130,7 @@ def _get_comparison_value(domain, metric_name, period):
 
 
 def _insight_dedup_exists(domain, title):
-	"""One open Insight per domain+metric per day — same dedup shape as
-	ai_agents._dedup_exists (agent+reference, status, DATE(creation))."""
+	"""One open Insight per domain+metric per day (status, DATE(creation))."""
 	today = nowdate()
 	return bool(frappe.db.sql(
 		"""

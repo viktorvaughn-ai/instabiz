@@ -3,8 +3,14 @@
 """
 instabiz/instabiz/doctype/ib_document_intake/ib_document_intake.py
 
-Document Intake AI: paste raw PO/SO text -> Claude extraction -> human
-review on this record -> explicit convert_to_draft() -> real draft SO/PO.
+Document Intake AI: upload a scanned PO/SO (or paste raw text directly) ->
+local Tesseract OCR fills Raw Text -> Claude extraction -> human review on
+this record -> explicit convert_to_draft() -> real draft SO/PO.
+
+OCR (run_ocr) and extraction (extract) are two independent steps — OCR
+needs only a local Tesseract install (no API key, no credits) and only
+ever touches raw_text/ocr_error; it's a convenience for filling Raw Text,
+not a requirement. Raw Text can always be typed or pasted directly instead.
 
 Guarantees (see tests in test_ib_document_intake.py):
   1. extract() NEVER creates a Sales Order / Purchase Order. It only writes
@@ -43,6 +49,35 @@ class IBDocumentIntake(Document):
 			frappe.throw(_("You need a Sales role to create a Sales Order intake."))
 		if self.intake_type == "Purchase Order" and not (_PURCHASE_ROLES & roles):
 			frappe.throw(_("You need a Purchase role to create a Purchase Order intake."))
+
+	# ── OCR ──────────────────────────────────────────────────────────────────
+
+	@frappe.whitelist()
+	def run_ocr(self):
+		"""OCR the attached Scanned Document (image or PDF) into Raw Text.
+		Local Tesseract only — no LLM/API call, no credit dependency. Never
+		touches extracted_json/status; purely fills raw_text so the existing
+		extract() flow can run on it exactly as if it had been pasted."""
+		self.check_permission("write")
+		if not self.scanned_document:
+			frappe.throw(_("Attach a Scanned Document first."))
+
+		try:
+			text = _ocr_file(self.scanned_document)
+		except Exception as e:
+			self.ocr_error = f"OCR failed: {e}"
+			self.save()
+			return {"ok": False, "message": self.ocr_error}
+
+		if not text.strip():
+			self.ocr_error = "OCR ran but found no readable text — try a clearer scan or paste the text manually."
+			self.save()
+			return {"ok": False, "message": self.ocr_error}
+
+		self.raw_text = text
+		self.ocr_error = ""
+		self.save()
+		return {"ok": True, "text": text}
 
 	# ── extraction ───────────────────────────────────────────────────────────
 
@@ -234,6 +269,24 @@ def _parse_llm_json(raw):
 			except Exception:
 				return None
 		return None
+
+
+def _ocr_file(file_url):
+	"""Run local Tesseract OCR on an attached file (image or PDF) and return
+	the extracted text. PDFs are rasterized page-by-page via pdf2image
+	(needs poppler-utils) before OCR — Tesseract itself only reads images."""
+	import pytesseract
+	from PIL import Image
+
+	file_doc = frappe.get_doc("File", {"file_url": file_url})
+	path = file_doc.get_full_path()
+
+	if path.lower().endswith(".pdf"):
+		from pdf2image import convert_from_path
+		pages = convert_from_path(path)
+		return "\n\n".join(pytesseract.image_to_string(page) for page in pages)
+
+	return pytesseract.image_to_string(Image.open(path))
 
 
 def _tokenize(text):

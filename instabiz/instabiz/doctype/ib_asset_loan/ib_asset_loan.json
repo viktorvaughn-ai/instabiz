@@ -1,0 +1,184 @@
+{
+ "actions": [],
+ "allow_copy": 1,
+ "autoname": "IB-AL-.YYYY.-.#####",
+ "creation": "2026-08-25 00:09:03.605229",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "asset_code",
+  "asset_name",
+  "asset_category",
+  "column_break_1",
+  "employee",
+  "employee_name",
+  "status",
+  "section_dates",
+  "issue_date",
+  "expected_return_date",
+  "column_break_2",
+  "actual_return_date",
+  "section_condition",
+  "condition_at_issue",
+  "condition_at_return",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "asset_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Asset Code / Tag",
+   "reqd": 1
+  },
+  {
+   "fieldname": "asset_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Asset Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "asset_category",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Category",
+   "options": "IT Equipment\nTool\nVehicle\nFurniture\nOther"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Employee",
+   "options": "Employee",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "employee.employee_name",
+   "fieldname": "employee_name",
+   "fieldtype": "Data",
+   "label": "Employee Name",
+   "read_only": 1
+  },
+  {
+   "default": "Issued",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Issued\nReturned\nOverdue\nLost"
+  },
+  {
+   "fieldname": "section_dates",
+   "fieldtype": "Section Break",
+   "label": "Dates"
+  },
+  {
+   "default": "Today",
+   "fieldname": "issue_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Issue Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "expected_return_date",
+   "fieldtype": "Date",
+   "label": "Expected Return Date"
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "actual_return_date",
+   "fieldtype": "Date",
+   "label": "Actual Return Date"
+  },
+  {
+   "fieldname": "section_condition",
+   "fieldtype": "Section Break",
+   "label": "Condition & Notes"
+  },
+  {
+   "fieldname": "condition_at_issue",
+   "fieldtype": "Small Text",
+   "label": "Condition at Issue"
+  },
+  {
+   "fieldname": "condition_at_return",
+   "fieldtype": "Small Text",
+   "label": "Condition at Return"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "hide_toolbar": 0,
+ "in_create": 0,
+ "links": [],
+ "modified": "2026-08-25 00:31:40.692943",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "IB Asset Loan",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR User",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Employee"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "issue_date",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "asset_name",
+ "track_changes": 1
+}

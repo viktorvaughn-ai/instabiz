@@ -166,7 +166,7 @@
    "fieldname": "batch_group",
    "fieldtype": "Data",
    "label": "Batch Group",
-   "description": "Groups WOs batched together on the same machine run. Auto-set by batch_assign_machine.",
+   "description": "Groups WOs batched onto the same machine run.",
    "in_list_view": 0,
    "bold": 0
   },

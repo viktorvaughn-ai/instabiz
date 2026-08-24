@@ -434,6 +434,44 @@ def get_outstanding(customer):
 
 
 @frappe.whitelist()
+def get_outstanding_statement_rows(customer):
+	"""Itemized outstanding rows for the IB Outstanding Statement print format —
+	same basis as compute_customer_outstanding() (instabiz.overrides.billing_mode).
+	Called from the print format's Jinja via frappe.call(), since frappe.conf
+	isn't reachable from the sandboxed print-format Jinja context."""
+	if not frappe.has_permission("Customer", "read", customer):
+		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+
+	dev_mode = is_dev_billing_mode()
+	if dev_mode:
+		doctype = sales_doctype()
+		outstanding_expr = sales_outstanding_expr("t")
+		rows = frappe.db.sql(
+			f"SELECT t.name, t.transaction_date AS doc_date, t.grand_total,"
+			f" {outstanding_expr} AS balance"
+			f" FROM `tab{doctype}` t"
+			" WHERE t.customer = %s AND t.docstatus = 1 AND t.status != 'Cancelled'"
+			f" AND {outstanding_expr} > 0"
+			" ORDER BY t.transaction_date ASC",
+			customer, as_dict=True,
+		)
+	else:
+		rows = frappe.db.sql(
+			"SELECT name, posting_date AS doc_date, grand_total, outstanding_amount AS balance"
+			" FROM `tabSales Invoice`"
+			" WHERE customer = %s AND docstatus = 1 AND outstanding_amount > 0"
+			" ORDER BY posting_date ASC",
+			customer, as_dict=True,
+		)
+	return {
+		"dev_mode": dev_mode,
+		"doc_label": frappe._("Order") if dev_mode else frappe._("Invoice"),
+		"rows": rows,
+		"total": flt(sum(flt(r.balance) for r in rows)),
+	}
+
+
+@frappe.whitelist()
 def clear_overdue_block(customer):
 	"""Manually lift the overdue block flag. Sales Manager / System Manager only."""
 	from instabiz.overrides.permissions import _PRIVILEGED_ROLES

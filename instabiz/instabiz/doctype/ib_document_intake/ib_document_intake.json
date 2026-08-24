@@ -3,7 +3,7 @@
  "allow_rename": 0,
  "autoname": "IB-DI-.YYYY.-.#####",
  "creation": "2026-08-10 00:00:00",
- "description": "Document Intake AI — paste raw PO/SO text, extract structured fields via Claude, review/correct, then explicitly convert to a draft Sales Order / Purchase Order.",
+ "description": "Document Intake AI — upload a scanned PO/SO (or paste raw text directly), OCR fills in the text, extract structured fields via Claude, review/correct, then explicitly convert to a draft Sales Order / Purchase Order.",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
@@ -16,6 +16,8 @@
   "matched_party",
   "match_status",
   "section_raw",
+  "scanned_document",
+  "ocr_error",
   "raw_text",
   "section_extract",
   "extracted_json",
@@ -82,7 +84,19 @@
    "label": "Raw Text"
   },
   {
-   "description": "Paste the raw PO/SO text here (email body, OCR'd scan, etc).",
+   "description": "Upload a photo or scan (JPG/PNG/PDF) of the PO/SO and click Run OCR to fill Raw Text below automatically — or skip this and paste the text directly.",
+   "fieldname": "scanned_document",
+   "fieldtype": "Attach",
+   "label": "Scanned Document (optional)"
+  },
+  {
+   "fieldname": "ocr_error",
+   "fieldtype": "Small Text",
+   "label": "OCR Status / Error",
+   "read_only": 1
+  },
+  {
+   "description": "Paste the raw PO/SO text here (email body, OCR'd scan, etc) — or upload a Scanned Document above and click Run OCR to fill this automatically.",
    "fieldname": "raw_text",
    "fieldtype": "Long Text",
    "label": "Raw Text",

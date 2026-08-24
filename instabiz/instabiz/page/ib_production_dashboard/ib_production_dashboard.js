@@ -378,7 +378,7 @@ class IBProductionDashboard {
 		this._plan_page = 1;
 
 		let _done = 0;
-		const _total = 3;
+		const _total = 2;
 		const _check_done = () => {
 			if (++_done >= _total) {
 				this._fetching = false;
@@ -398,19 +398,6 @@ class IBProductionDashboard {
 			error: () => { this._set_refresh_label("Error loading data"); _check_done(); },
 		});
 		this._load_plan_page(1, _check_done);
-		frappe.call({
-			method: "instabiz.overrides.ai_agents.get_ai_actions",
-			args: { status: "pending", agent: "all", start: 0, page_length: 5 },
-			callback: (r) => {
-				if (r.message) {
-					const prodAgents = ["prod_advance","prod_machine_assign","prod_notify_ready","prod_auto_os","prod_job_bundle"];
-					const prodActions = (r.message.actions || []).filter(a => prodAgents.includes(a.agent));
-					this._render_ai_prod_actions(prodActions);
-				}
-				_check_done();
-			},
-			error: () => _check_done(),
-		});
 	}
 
 	// Pagination (not infinite scroll — replaced 2026-08-11): fetches exactly
@@ -470,13 +457,6 @@ class IBProductionDashboard {
 					Pick a location above to see its stage pipeline — Maharashtra and Chennai are
 					warehouse-only (Packing only), Gujarat runs the full factory chain.
 				</div>
-				<div class="ib-pd-section-title" id="ib-pd-ai-title" style="display:none">
-					<iconify-icon icon="lucide:bot" width="13" height="13" style="vertical-align:middle;margin-right:5px"></iconify-icon>
-					AI Production Actions
-					<span id="ib-pd-ai-count" style="margin-left:6px;background:#2563eb;color:#fff;
-						border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700"></span>
-				</div>
-				<div id="ib-pd-ai-actions"></div>
 				<div class="ib-pd-section-title" id="ib-pd-bundles-title" style="display:none">
 					<iconify-icon icon="lucide:layers" width="13" height="13" style="vertical-align:middle;margin-right:5px"></iconify-icon>
 					Job Bundles
@@ -1315,97 +1295,6 @@ class IBProductionDashboard {
 	}
 
 	// ── AI prod actions panel ─────────────────────────────────────────────────
-	_render_ai_prod_actions(actions) {
-		const $el    = this.$container.find("#ib-pd-ai-actions");
-		const $title = this.$container.find("#ib-pd-ai-title");
-		const $count = this.$container.find("#ib-pd-ai-count");
-		if (!actions.length) { $el.html(""); $title.hide(); return; }
-
-		$title.show();
-		$count.text(actions.length);
-
-		const AGENT_LABELS = {
-			prod_advance:       { label: "Advance Stage",     icon: "lucide:fast-forward",   color: "#2563eb" },
-			prod_machine_assign:{ label: "Assign Machine",    icon: "lucide:settings-2",      color: "#0891b2" },
-			prod_notify_ready:  { label: "Notify Sales",      icon: "lucide:bell",            color: "#ea580c" },
-			prod_auto_os:       { label: "Create Order Sheet",icon: "lucide:file-plus",       color: "#7c3aed" },
-			prod_job_bundle:    { label: "Bundle Jobs",       icon: "lucide:layers",          color: "#059669" },
-		};
-
-		const cards = actions.map(a => {
-			const meta  = AGENT_LABELS[a.agent] || { label: a.agent, icon: "lucide:bot", color: "#888" };
-			const refLink = a.reference_doctype && a.reference_name
-				? `<a href="/app/${frappe.router.slug(a.reference_doctype)}/${a.reference_name}"
-						target="_blank" style="font-size:11px;color:var(--primary)">${a.reference_name}</a>`
-				: "";
-			return `
-			<div class="ib-pd-ai-card" data-action="${frappe.utils.escape_html(a.name)}">
-				<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-					<iconify-icon icon="${meta.icon}" width="14" height="14"
-						style="color:${meta.color};flex-shrink:0"></iconify-icon>
-					<span style="font-size:11px;font-weight:700;text-transform:uppercase;
-						color:${meta.color};letter-spacing:.04em">${meta.label}</span>
-					${refLink}
-					<span style="margin-left:auto;font-size:10px;color:var(--text-muted)">
-						${frappe.datetime.str_to_user(a.creation)}</span>
-				</div>
-				<div style="font-size:12px;color:var(--text-color);margin-bottom:8px">
-					${frappe.utils.escape_html(a.title || "")}</div>
-				<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;
-					white-space:pre-wrap">${frappe.utils.escape_html(a.summary || "")}</div>
-				<div style="display:flex;gap:6px">
-					<button class="ib-pd-ai-btn ib-pd-ai-approve btn btn-xs btn-success" data-name="${frappe.utils.escape_html(a.name)}"
-						style="background:#059669;color:#fff;border:none;border-radius:5px;
-						padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer">
-						<iconify-icon icon="lucide:check" width="11" height="11"
-							style="vertical-align:middle;margin-right:3px"></iconify-icon>
-						Approve
-					</button>
-					<button class="ib-pd-ai-btn ib-pd-ai-reject btn btn-xs btn-danger" data-name="${frappe.utils.escape_html(a.name)}"
-						style="background:none;border:1px solid #dc2626;color:#dc2626;border-radius:5px;
-						padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer">
-						<iconify-icon icon="lucide:x" width="11" height="11"
-							style="vertical-align:middle;margin-right:3px"></iconify-icon>
-						Reject
-					</button>
-					<a href="/app/ib-ai-inbox" style="font-size:11px;color:var(--primary);
-						margin-left:auto;align-self:center;text-decoration:none">
-						View all in AI Inbox
-						<iconify-icon icon="lucide:arrow-right" width="11" height="11"
-							style="vertical-align:middle"></iconify-icon>
-					</a>
-				</div>
-			</div>`;
-		}).join("");
-
-		$el.html(`<div class="ib-pd-ai-list">${cards}</div>`);
-
-		$el.find(".ib-pd-ai-approve").on("click", (e) => {
-			const name = $(e.currentTarget).data("name");
-			frappe.call({
-				method: "instabiz.overrides.ai_agents.approve_action",
-				args: { name },
-				callback: (r) => {
-					frappe.show_alert({ message: r.message?.result || "Approved", indicator: "green" });
-					$(e.currentTarget).closest(".ib-pd-ai-card").fadeOut(300, function() { $(this).remove(); });
-				},
-				error: () => frappe.show_alert({ message: "Approve failed", indicator: "red" }),
-			});
-		});
-		$el.find(".ib-pd-ai-reject").on("click", (e) => {
-			const name = $(e.currentTarget).data("name");
-			frappe.call({
-				method: "instabiz.overrides.ai_agents.reject_action",
-				args: { name },
-				callback: () => {
-					frappe.show_alert({ message: "Rejected", indicator: "orange" });
-					$(e.currentTarget).closest(".ib-pd-ai-card").fadeOut(300, function() { $(this).remove(); });
-				},
-				error: () => frappe.show_alert({ message: "Reject failed", indicator: "red" }),
-			});
-		});
-	}
-
 	// ── Styles ────────────────────────────────────────────────────────────────
 	_inject_styles() {
 		if (document.getElementById("ib-pd-styles")) return;
@@ -1938,19 +1827,6 @@ class IBProductionDashboard {
 				font-size: 11px;
 				font-weight: 600;
 				color: #059669;
-			}
-			.ib-pd-ai-list {
-				display: grid;
-				grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-				gap: 12px;
-				margin-bottom: 20px;
-			}
-			.ib-pd-ai-card {
-				background: var(--card-bg, #fff);
-				border: 1px solid var(--border-color, #e2e8f0);
-				border-radius: 8px;
-				padding: 12px 14px;
-				box-shadow: 0 1px 3px rgba(0,0,0,.05);
 			}
 			@media (max-width: 640px) {
 				.ib-pd-plan-header { flex-direction: column; align-items: stretch; }
