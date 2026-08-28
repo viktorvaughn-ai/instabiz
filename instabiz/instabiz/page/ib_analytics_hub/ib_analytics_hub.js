@@ -48,6 +48,7 @@ class IBAnalyticsHub {
 		this._me_stab = "outstanding";
 		this._docs_search = "";
 		this._docs_filter = "all";
+		this._docs_sp = "";
 		this._docs_page = 0;
 		this._docs_page_size = 10;
 		this._inject_styles();
@@ -246,6 +247,12 @@ class IBAnalyticsHub {
 .ib-hub-chain-badge.risk   { background: rgba(220,38,38,.12); color: #dc2626; }
 .ib-hub-chain-link { cursor: pointer; }
 .ib-hub-chain-link:hover { text-decoration: underline; }
+.ib-hub-chain-badge-link { cursor: pointer; text-decoration: none; }
+.ib-hub-chain-badge-link:hover { text-decoration: underline; filter: brightness(0.9); }
+.ib-hub-docs-empty {
+  padding: 40px 20px; text-align: center; color: var(--text-muted); font-size: 12px;
+}
+.ib-hub-docs-empty iconify-icon { opacity: .5; margin-bottom: 8px; display: block; margin-left: auto; margin-right: auto; }
 
 /* Docs tab — toolbar (search / filter / pager), reuses period-pill look */
 .ib-hub-docs-toolbar {
@@ -419,6 +426,7 @@ class IBAnalyticsHub {
 			this._active_tab = tab;
 			this._docs_search = "";
 			this._docs_filter = "all";
+			this._docs_sp = "";
 			this._docs_page = 0;
 			this._load();
 		});
@@ -843,7 +851,7 @@ class IBAnalyticsHub {
 			if (meta.chain_type === "hr") {
 				this._render_docs_hr_table(chain);
 			} else {
-				this._render_docs_order_table(chain);
+				this._render_docs_order_table(chain, meta);
 			}
 		} else {
 			this.$wrap.find("#ib-hub-table-card").hide();
@@ -853,14 +861,20 @@ class IBAnalyticsHub {
 	// ── Docs tab shared toolbar (search / status filter / pager) ─────────────
 	_docs_badge(label, cls) { return `<span class="ib-hub-chain-badge ${cls}">${frappe.utils.escape_html(label)}</span>`; }
 
-	_docs_toolbar_html(filters) {
+	_docs_toolbar_html(filters, sales_persons) {
 		const chips = filters.map(f => `
 			<div class="ib-hub-docs-filter${this._docs_filter === f.key ? " active" : ""}" data-filter="${f.key}">${f.label}</div>
 		`).join("");
+		const sp_select = (sales_persons && sales_persons.length) ? `
+			<select class="ib-hub-docs-search" id="ib-hub-docs-sp" style="flex:0 0 160px;min-width:120px">
+				<option value="">${__("All Sales Persons")}</option>
+				${sales_persons.map(sp => `<option value="${frappe.utils.escape_html(sp)}" ${this._docs_sp === sp ? "selected" : ""}>${frappe.utils.escape_html(sp)}</option>`).join("")}
+			</select>` : "";
 		return `
 			<div class="ib-hub-docs-toolbar">
 				<input type="text" class="ib-hub-docs-search" id="ib-hub-docs-search"
-					placeholder="Search…" value="${frappe.utils.escape_html(this._docs_search || "")}">
+					placeholder="${__("Search…")}" value="${frappe.utils.escape_html(this._docs_search || "")}">
+				${sp_select}
 				${chips}
 				<span class="ib-hub-docs-count" id="ib-hub-docs-count"></span>
 			</div>
@@ -872,6 +886,11 @@ class IBAnalyticsHub {
 	_docs_bind_toolbar(on_change) {
 		this.$wrap.find("#ib-hub-docs-search").off("input").on("input", (e) => {
 			this._docs_search = e.currentTarget.value;
+			this._docs_page = 0;
+			on_change();
+		});
+		this.$wrap.find("#ib-hub-docs-sp").off("change").on("change", (e) => {
+			this._docs_sp = e.currentTarget.value;
 			this._docs_page = 0;
 			on_change();
 		});
@@ -897,13 +916,14 @@ class IBAnalyticsHub {
 	}
 
 	// ── Docs tab: order-chain (Q→SO→DN→SI→Payment→Production→AR) ────────────
-	_render_docs_order_table(chain) {
+	_render_docs_order_table(chain, meta) {
 		this.$wrap.find("#ib-hub-table-title").text("Order Chain");
 		this._docs_order_chain = chain;
+		this._docs_sales_persons = (meta || {}).sales_persons || [];
 
 		if (!chain.length) {
 			this.$wrap.find("#ib-hub-table").html(
-				`<div style="padding:30px;text-align:center;color:var(--text-muted);font-size:12px">No orders</div>`
+				`<div class="ib-hub-docs-empty"><iconify-icon icon="lucide:inbox" width="22" height="22"></iconify-icon><div>No orders to track yet.</div></div>`
 			);
 			return;
 		}
@@ -915,7 +935,7 @@ class IBAnalyticsHub {
 			{ key: "paid", label: "Fully Paid" },
 			{ key: "risk", label: "At Risk" },
 		];
-		this.$wrap.find("#ib-hub-table").html(this._docs_toolbar_html(filters));
+		this.$wrap.find("#ib-hub-table").html(this._docs_toolbar_html(filters, this._docs_sales_persons));
 		this._docs_bind_toolbar(() => this._docs_draw_order_table());
 		this.$wrap.find("#ib-hub-docs-pager").off("click", "button").on("click", "button", (e) => {
 			this._docs_page += e.currentTarget.id === "ib-hub-docs-next" ? 1 : -1;
@@ -934,12 +954,20 @@ class IBAnalyticsHub {
 	_docs_draw_order_table() {
 		const fmt = (v) => "₹" + Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 		const badge = (l, c) => this._docs_badge(l, c);
+		// Only badges backed by a real, unambiguous document (one Quotation
+		// per SO; latest DN/SI when one exists) are clickable — a badge with
+		// no doc behind it (Not Created/Not Dispatched) stays plain text so it
+		// never looks like a dead link.
+		const link_badge = (l, c, doctype, name) => name
+			? `<a href="/app/${frappe.router.slug(doctype)}/${encodeURIComponent(name)}" target="_blank" class="ib-hub-chain-badge ib-hub-chain-badge-link ${c}" title="${__("Open {0}", [name])}">${frappe.utils.escape_html(l)}</a>`
+			: badge(l, c);
 		const arrow = `<span class="ib-hub-chain-arrow">→</span>`;
-		const dn_badge = (r) => r.dn_status === "Dispatched" ? badge("Dispatched", "done")
-			: r.dn_status === "Pending" ? badge("DN Pending", "pending")
+		const q_badge = (r) => r.quotation ? link_badge("Quoted", "done", "Quotation", r.quotation) : badge("No Quote", "none");
+		const dn_badge = (r) => r.dn_status === "Dispatched" ? link_badge("Dispatched", "done", "Delivery Note", r.dn_name)
+			: r.dn_status === "Pending" ? link_badge("DN Pending", "pending", "Delivery Note", r.dn_name)
 			: badge("Not Dispatched", "none");
-		const si_badge = (r) => r.si_status === "Invoiced" ? badge("Invoiced", "done")
-			: r.si_status === "Pending" ? badge("SI Pending", "pending")
+		const si_badge = (r) => r.si_status === "Invoiced" ? link_badge("Invoiced", "done", "Sales Invoice", r.si_name)
+			: r.si_status === "Pending" ? link_badge("SI Pending", "pending", "Sales Invoice", r.si_name)
 			: badge("Not Invoiced", "none");
 		const pay_badge = (r) => r.payment_status === "Paid" ? badge("Paid", "done")
 			: r.payment_status === "Partial" ? badge("Partial", "pending")
@@ -953,6 +981,7 @@ class IBAnalyticsHub {
 		const q = (this._docs_search || "").trim().toLowerCase();
 		let rows = this._docs_order_chain.filter(r => {
 			if (q && !`${r.sales_order} ${r.customer} ${r.quotation || ""}`.toLowerCase().includes(q)) return false;
+			if (this._docs_sp && r.sales_person !== this._docs_sp) return false;
 			if (this._docs_filter === "risk") return r.risk === "overdue" || r.risk === "at-risk";
 			if (this._docs_filter !== "all") return this._docs_stage_of(r) === this._docs_filter;
 			return true;
@@ -984,7 +1013,7 @@ class IBAnalyticsHub {
 						<td>${frappe.utils.escape_html(r.customer || "")}</td>
 						<td>
 							<div class="ib-hub-chain-row">
-								${r.quotation ? badge("Quoted", "done") : badge("No Quote", "none")}
+								${q_badge(r)}
 								${arrow}${dn_badge(r)}${arrow}${si_badge(r)}${arrow}${pay_badge(r)}${arrow}${prod_badge(r)}
 							</div>
 						</td>

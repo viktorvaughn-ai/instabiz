@@ -11,6 +11,7 @@
   "machine_name",
   "machine_type",
   "location",
+  "floor",
   "col_break_1",
   "capacity",
   "capacity_uom",
@@ -48,6 +49,13 @@
    "in_list_view": 1,
    "label": "Location",
    "options": "\nmaharashtra\ngujarat\nchennai"
+  },
+  {
+   "fieldname": "floor",
+   "fieldtype": "Link",
+   "label": "Floor",
+   "options": "IB Production Floor",
+   "description": "Optional. Blank = location-only assignment (today's behavior). Set once this machine's physical floor has an IB Production Floor record with the right stages checked."
   },
   {
    "fieldname": "col_break_1",

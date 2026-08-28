@@ -11,6 +11,10 @@
   "column_break_basic",
   "warehouse",
   "import_date",
+  "section_compliance",
+  "vat_no",
+  "column_break_compliance",
+  "exim_code",
   "section_items",
   "items",
   "section_remarks",
@@ -59,6 +63,25 @@
    "in_list_view": 1,
    "label": "Import Date",
    "reqd": 1
+  },
+  {
+   "fieldname": "section_compliance",
+   "fieldtype": "Section Break",
+   "label": "Compliance"
+  },
+  {
+   "fieldname": "vat_no",
+   "fieldtype": "Data",
+   "label": "VAT No"
+  },
+  {
+   "fieldname": "column_break_compliance",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "exim_code",
+   "fieldtype": "Data",
+   "label": "EXIM Code"
   },
   {
    "fieldname": "section_items",

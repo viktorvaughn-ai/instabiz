@@ -1223,26 +1223,49 @@ def _docs_order_data(user, privileged):
 	""", {"names": names}, as_dict=True)
 	q_map = {r.so_name: r.quotation for r in q_rows}
 
+	# latest_name: picked per-SO in Python below (MySQL has no clean "value from
+	# the max-date row" aggregate) — used to give the Docs tab's Dispatched/
+	# Invoiced badges a real document to deep-link to instead of just a status
+	# word. Multiple DNs/SIs can exist per SO; "most recent by posting date" is
+	# the same most-recent-wins tie-break this app already uses elsewhere.
 	dn_rows = frappe.db.sql("""
-		SELECT dni.against_sales_order as so_name, MAX(dn.docstatus) as any_submitted
+		SELECT dni.against_sales_order as so_name, dn.name as dn_name,
+		       dn.docstatus, dn.posting_date
 		FROM `tabDelivery Note Item` dni
 		JOIN `tabDelivery Note` dn ON dn.name = dni.parent
 		WHERE dni.against_sales_order IN %(names)s AND dn.docstatus != 2
-		GROUP BY dni.against_sales_order
+		GROUP BY dni.against_sales_order, dn.name
 	""", {"names": names}, as_dict=True)
-	dn_map = {r.so_name: r for r in dn_rows}
+	dn_map = {}
+	for r in dn_rows:
+		existing = dn_map.get(r.so_name)
+		dn_map[r.so_name] = {
+			"any_submitted": max(r.docstatus, (existing or {}).get("any_submitted", 0)),
+			"latest_name": r.dn_name if not existing or (r.posting_date or "") >= existing.get("_pd", "") else existing["latest_name"],
+			"_pd": max(str(r.posting_date or ""), (existing or {}).get("_pd", "")),
+		}
 
 	si_rows = frappe.db.sql("""
-		SELECT sii.sales_order as so_name,
-			   MAX(si.docstatus) as any_submitted,
-			   COALESCE(SUM(CASE WHEN si.docstatus=1 THEN si.outstanding_amount ELSE 0 END),0) as outstanding,
-			   COALESCE(SUM(CASE WHEN si.docstatus=1 THEN si.grand_total ELSE 0 END),0) as invoiced
+		SELECT sii.sales_order as so_name, si.name as si_name,
+		       si.docstatus, si.posting_date, si.outstanding_amount, si.grand_total
 		FROM `tabSales Invoice Item` sii
 		JOIN `tabSales Invoice` si ON si.name = sii.parent
 		WHERE sii.sales_order IN %(names)s AND si.docstatus != 2
-		GROUP BY sii.sales_order
+		GROUP BY sii.sales_order, si.name
 	""", {"names": names}, as_dict=True)
-	si_map = {r.so_name: r for r in si_rows}
+	si_map = {}
+	si_agg = {}
+	for r in si_rows:
+		existing = si_map.get(r.so_name)
+		si_map[r.so_name] = {
+			"any_submitted": max(r.docstatus, (existing or {}).get("any_submitted", 0)),
+			"latest_name": r.si_name if not existing or (r.posting_date or "") >= existing.get("_pd", "") else existing["latest_name"],
+			"_pd": max(str(r.posting_date or ""), (existing or {}).get("_pd", "")),
+		}
+		agg = si_agg.setdefault(r.so_name, {"outstanding": 0, "invoiced": 0})
+		if r.docstatus == 1:
+			agg["outstanding"] += flt(r.outstanding_amount)
+			agg["invoiced"] += flt(r.grand_total)
 
 	# sales_person_user=None (privileged) reuses the exact function/shape that
 	# powers the sales-facing Production Tracker page — one source of truth
@@ -1255,16 +1278,17 @@ def _docs_order_data(user, privileged):
 	for o in orders:
 		dn = dn_map.get(o.name)
 		si = si_map.get(o.name)
+		si_totals = si_agg.get(o.name) or {}
 		prod = prod_map.get(o.name)
 
-		dn_submitted = bool(dn and dn.any_submitted == 1)
-		si_submitted = bool(si and si.any_submitted == 1)
-		invoiced = flt(si.invoiced) if si else 0
+		dn_submitted = bool(dn and dn.get("any_submitted") == 1)
+		si_submitted = bool(si and si.get("any_submitted") == 1)
+		invoiced = flt(si_totals.get("invoiced"))
 		advance = flt(o.advance_paid)
 
 		if si_submitted:
 			# Real invoice AR.
-			outstanding = flt(si.outstanding)
+			outstanding = flt(si_totals.get("outstanding"))
 			payment_status = "Paid" if outstanding <= 0 else "Partial" if outstanding < invoiced else "Unpaid"
 		else:
 			# No SI yet (the normal case right now — billing isn't live,
@@ -1283,7 +1307,9 @@ def _docs_order_data(user, privileged):
 			"grand_total": flt(o.grand_total),
 			"quotation": q_map.get(o.name),
 			"dn_status": "Dispatched" if dn_submitted else ("Pending" if dn else "Not Created"),
+			"dn_name": (dn or {}).get("latest_name"),
 			"si_status": "Invoiced" if si_submitted else ("Pending" if si else "Not Created"),
+			"si_name": (si or {}).get("latest_name"),
 			"payment_status": payment_status,
 			"outstanding": outstanding,
 			"production_stage": (prod or {}).get("current_stage"),
@@ -1311,7 +1337,14 @@ def _docs_order_data(user, privileged):
 		"trend": [],
 		"breakdown": [],
 		"pending": {"chain": chain},
-		"meta": {"chain_type": "order", "scoped": not privileged},
+		"meta": {
+			"chain_type": "order",
+			"scoped": not privileged,
+			# Company-wide view has no way to narrow to one rep otherwise —
+			# only populated when privileged, since a scoped Sales User's
+			# chain is already just their own orders.
+			"sales_persons": sorted({c["sales_person"] for c in chain if privileged and c["sales_person"]}),
+		},
 	}
 
 

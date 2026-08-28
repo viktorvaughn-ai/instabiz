@@ -3102,6 +3102,16 @@ class IBProductionStages {
 		const yield_pct = selected.today_yield_pct != null ? selected.today_yield_pct : (100 - waste_norm);
 		const yield_color = (100 - yield_pct) > waste_norm ? "#dc2626" : "#16a34a";
 
+		const STAT_ICON = { Output: "lucide:package", Wastage: "lucide:trash-2", Yield: "lucide:gauge-circle", Capacity: "lucide:zap" };
+		const stat_tile = (label, val, color) => `
+			<div class="ib-mw-stat">
+				<iconify-icon icon="${STAT_ICON[label] || "lucide:circle"}" width="14" height="14" class="ib-mw-stat-icon"></iconify-icon>
+				<div class="ib-mw-stat-body">
+					<div class="ib-mw-stat-val"${color ? ` style="color:${color}"` : ""}>${val}</div>
+					<div class="ib-mw-stat-label">${label}</div>
+				</div>
+			</div>`;
+
 		const machine_header = `
 			<div class="ib-mw-selected-header">
 				<div>
@@ -3113,40 +3123,31 @@ class IBProductionStages {
 					<div class="ib-mw-name-row">
 						<span class="ib-ps-machine-name">${frappe.utils.escape_html(selected.machine_name || "")}</span>
 						<span class="ib-ps-location-badge">${frappe.utils.escape_html((selected.location || "").charAt(0).toUpperCase() + (selected.location || "").slice(1))}</span>
+						${selected.floor ? `<span class="ib-ps-location-badge" style="opacity:.75">${frappe.utils.escape_html(selected.floor)}</span>` : ""}
 					</div>
 				</div>
 				<button class="ib-mw-edit-btn ib-ps-machine-edit-btn" data-machineid="${frappe.utils.escape_html(this.machine_wise_pill)}" title="Edit Machine">
 					<iconify-icon icon="lucide:settings" width="11" height="11"></iconify-icon> Edit
 				</button>
 			</div>
-			<div class="ib-mw-load-section">
-				<div class="ib-mw-load-header">
-					<span style="font-size:11px;color:var(--text-muted)">Machine Load</span>
-					<span style="font-size:12px;font-weight:700;color:${load_color}">${load_pct}%</span>
+			<div class="ib-mw-body-row">
+				<div class="ib-mw-load-block">
+					<div class="ib-mw-load-header">
+						<span style="font-size:11px;color:var(--text-muted)">Machine Load</span>
+						<span style="font-size:12px;font-weight:700;color:${load_color}">${load_pct}%</span>
+					</div>
+					<div class="ib-mw-load-bar-wrap">
+						<div class="ib-mw-load-bar" style="width:${Math.min(100, load_pct)}%;background:${load_color}"></div>
+					</div>
+					<div style="font-size:10px;color:var(--text-muted);margin-top:4px">
+						${selected.active_load || 0} active · ${(selected.current_wos || []).length} queued
+					</div>
 				</div>
-				<div class="ib-mw-load-bar-wrap">
-					<div class="ib-mw-load-bar" style="width:${Math.min(100, load_pct)}%;background:${load_color}"></div>
-				</div>
-				<div style="font-size:10px;color:var(--text-muted);margin-top:2px">
-					${selected.active_load || 0} active · ${(selected.current_wos || []).length} queued
-				</div>
-			</div>
-			<div class="ib-mw-stats-row">
-				<div class="ib-mw-stat">
-					<div class="ib-mw-stat-val">${selected.today_output || 0}</div>
-					<div class="ib-mw-stat-label">Output</div>
-				</div>
-				<div class="ib-mw-stat">
-					<div class="ib-mw-stat-val" style="color:${waste_color}">${selected.today_avg_wastage || 0}%</div>
-					<div class="ib-mw-stat-label">Wastage</div>
-				</div>
-				<div class="ib-mw-stat">
-					<div class="ib-mw-stat-val" style="color:${yield_color}">${yield_pct}%</div>
-					<div class="ib-mw-stat-label">Yield</div>
-				</div>
-				<div class="ib-mw-stat">
-					<div class="ib-mw-stat-val">${selected.capacity || "—"}</div>
-					<div class="ib-mw-stat-label">${selected.capacity_uom || "cap"}</div>
+				<div class="ib-mw-stats-row">
+					${stat_tile("Output", selected.today_output || 0)}
+					${stat_tile("Wastage", (selected.today_avg_wastage || 0) + "%", waste_color)}
+					${stat_tile("Yield", yield_pct + "%", yield_color)}
+					${stat_tile("Capacity", selected.capacity ? `${selected.capacity} <span class="ib-mw-stat-uom">${frappe.utils.escape_html(selected.capacity_uom || "")}</span>` : "—")}
 				</div>
 			</div>`;
 
@@ -3256,6 +3257,23 @@ class IBProductionStages {
 					fieldtype: "Select",
 					options: ["maharashtra", "gujarat", "chennai"],
 					default: machine?.location || "maharashtra",
+					onchange: () => {
+						// Floor list is location-scoped — a floor picked for one
+						// location makes no sense once location changes.
+						d.set_value("floor", "");
+						d.refresh_field("floor");
+					},
+				},
+				{
+					fieldname: "floor",
+					label: "Floor",
+					fieldtype: "Link",
+					options: "IB Production Floor",
+					default: machine?.floor || "",
+					description: "Optional — leave blank to keep location-only auto-assignment.",
+					get_query: () => ({
+						filters: { location: d.get_value("location") || "" },
+					}),
 				},
 				{ fieldname: "capacity", label: "Capacity", fieldtype: "Float", default: machine?.capacity || 0 },
 				{
@@ -4372,41 +4390,64 @@ tr.ib-ps-wo-sub-item--clickable:hover td { background: var(--subtle-fg, #f8fafc)
 .ib-mw-code-row { display: flex; align-items: center; gap: 6px; }
 .ib-mw-name-row { display: flex; align-items: center; gap: 6px; margin-top: 1px; }
 
-/* Redesigned Machine-wise (2026-08-13) — a single "selected machine" block
-   (stats for whichever machine pill is active) instead of a grid of cards.
-   Reuses the same code-row/name-row/load-section/stats-row pieces the old
-   per-card markup used, but those were only ever styled to fit inside
-   .ib-mw-card's own bordered/padded/max-380px box — without an equivalent
-   wrapper here they had no border, no padding, no width cap, and stretched
-   full page width (the "overflowing, not placed properly" report). */
+/* Redesigned Machine-wise (2026-08-27) — the "selected machine" header used
+   to be a single card capped at max-width:440px, floating alone at the left
+   of a full-width row with nothing filling the rest ("machine card is not
+   aligned correctly" report — a narrow orphaned box in a wide empty row).
+   Now a full-width header bar: identity on top, then a body row splitting
+   Load (fixed-width block) from the 4 stat tiles (spread across the
+   remaining width as icon+value tiles instead of a cramped 4-col grid
+   squeezed into the old 440px box). */
 .ib-mw-selected-card {
 	background: var(--card-bg);
 	border: 1px solid var(--border-color);
 	border-radius: 10px;
-	padding: 14px;
-	display: flex; flex-direction: column; gap: 11px;
-	max-width: 440px;
+	padding: 16px 18px;
+	display: flex; flex-direction: column; gap: 14px;
+	width: 100%;
+	margin-top: 14px;
 	margin-bottom: 4px;
 }
 .ib-mw-selected-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 
-/* Load bar */
-.ib-mw-load-section { background: var(--fg-color, #f9fafb); border-radius: 7px; padding: 8px 10px; border: 1px solid var(--border-color); }
-.ib-mw-load-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+.ib-mw-body-row { display: flex; align-items: stretch; gap: 20px; flex-wrap: wrap; }
+
+/* Load block — fixed-width column on the left of the body row */
+.ib-mw-load-block {
+	flex: 0 0 260px;
+	background: var(--fg-color, #f9fafb); border-radius: 7px; padding: 10px 12px;
+	border: 1px solid var(--border-color);
+	display: flex; flex-direction: column; justify-content: center;
+}
+.ib-mw-load-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .ib-mw-load-bar-wrap { height: 6px; background: var(--border-color); border-radius: 3px; overflow: hidden; }
 .ib-mw-load-bar { height: 100%; border-radius: 3px; transition: width .4s; }
 
-/* Stats */
+/* Stats — spread across the remaining width, icon+value tiles separated by
+   dividers instead of a tight 4-col grid squeezed into a narrow box. */
 .ib-mw-stats-row {
-	display: grid; grid-template-columns: repeat(4, 1fr);
-	gap: 4px;
+	flex: 1 1 320px;
+	display: flex; align-items: stretch;
 	background: var(--fg-color, #f9fafb);
-	border-radius: 7px; padding: 8px 6px;
-	border: 1px solid var(--border-color);
+	border-radius: 7px; border: 1px solid var(--border-color);
+	overflow: hidden;
 }
-.ib-mw-stat { text-align: center; }
-.ib-mw-stat-val { font-size: 15px; font-weight: 700; color: var(--text-color); line-height: 1.2; }
+.ib-mw-stat {
+	flex: 1; display: flex; align-items: center; gap: 8px;
+	justify-content: center; padding: 10px 8px;
+	border-right: 1px solid var(--border-color);
+}
+.ib-mw-stat:last-child { border-right: none; }
+.ib-mw-stat-icon { color: var(--text-muted); flex-shrink: 0; }
+.ib-mw-stat-body { text-align: left; }
+.ib-mw-stat-val { font-size: 16px; font-weight: 700; color: var(--text-color); line-height: 1.2; }
+.ib-mw-stat-uom { font-size: 10px; font-weight: 500; color: var(--text-muted); }
 .ib-mw-stat-label { font-size: 9px; color: var(--text-muted); margin-top: 2px; text-transform: uppercase; letter-spacing: .04em; }
+@media (max-width: 780px) {
+	.ib-mw-load-block { flex-basis: 100%; }
+	.ib-mw-stat { flex-direction: column; gap: 2px; text-align: center; }
+	.ib-mw-stat-body { text-align: center; }
+}
 
 /* WO list — 2-line row per Work Order (2026-08-09), replacing a 6-column
    <table> that could not fit a ~300px machine card at any layout setting:

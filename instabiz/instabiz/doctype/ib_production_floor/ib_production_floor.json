@@ -1,0 +1,149 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:warehouse",
+ "creation": "2026-08-27 00:00:00",
+ "description": "One row per real factory floor (a leaf Warehouse) — which production stages that floor is equipped for. IB Machine.floor links here to constrain auto machine-assignment to floors that actually have the right stage capability.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "warehouse",
+  "floor_name",
+  "location",
+  "column_break_loc",
+  "is_active",
+  "section_stages",
+  "allow_coating",
+  "allow_slitting",
+  "allow_rewinding",
+  "column_break_stages",
+  "allow_cutting",
+  "allow_packing"
+ ],
+ "fields": [
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Warehouse (Floor)",
+   "options": "Warehouse",
+   "reqd": 1,
+   "unique": 1,
+   "description": "Must be a leaf warehouse (not a group) sitting under one of the 3 location warehouses (MAHARASHTRA - IB / GUJARAT - IB / CHENNAI - IB)."
+  },
+  {
+   "fieldname": "floor_name",
+   "fieldtype": "Data",
+   "fetch_from": "warehouse.warehouse_name",
+   "in_list_view": 1,
+   "label": "Floor Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "location",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Location",
+   "options": "maharashtra\ngujarat\nchennai",
+   "read_only": 1,
+   "description": "Auto-derived from the warehouse's parent — same 3-value location used across Production/GST/naming."
+  },
+  {
+   "fieldname": "column_break_loc",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "default": "1",
+   "in_list_view": 1,
+   "label": "Active",
+   "description": "Uncheck to pull this floor out of machine auto-assignment rotation (maintenance, reflow) without deleting it."
+  },
+  {
+   "fieldname": "section_stages",
+   "fieldtype": "Section Break",
+   "label": "Allowed Stages"
+  },
+  {
+   "fieldname": "allow_coating",
+   "fieldtype": "Check",
+   "label": "Coating"
+  },
+  {
+   "fieldname": "allow_slitting",
+   "fieldtype": "Check",
+   "label": "Slitting"
+  },
+  {
+   "fieldname": "allow_rewinding",
+   "fieldtype": "Check",
+   "label": "Rewinding"
+  },
+  {
+   "fieldname": "column_break_stages",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "allow_cutting",
+   "fieldtype": "Check",
+   "label": "Cutting"
+  },
+  {
+   "fieldname": "allow_packing",
+   "fieldtype": "Check",
+   "label": "Packing"
+  }
+ ],
+ "links": [],
+ "modified": "2026-08-27 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Instabiz",
+ "name": "IB Production Floor",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Factory Management",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 0,
+   "role": "Factory Production",
+   "share": 0,
+   "write": 0
+  }
+ ],
+ "search_fields": "floor_name,location",
+ "sort_field": "creation",
+ "sort_order": "ASC",
+ "states": [],
+ "title_field": "floor_name",
+ "track_changes": 1
+}

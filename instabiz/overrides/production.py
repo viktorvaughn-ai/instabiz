@@ -112,9 +112,20 @@ def _assign_machine_load_balanced(stage, location=None):
 	machines = frappe.db.get_all(
 		"IB Machine",
 		filters={"machine_type": machine_type, "status": "Active"},
-		fields=["name", "location", "capacity"],
+		fields=["name", "location", "capacity", "floor"],
 		order_by="name asc",
 	)
+	if not machines:
+		return None
+
+	# Floor-aware filter: a machine with a floor set may only run stages that
+	# floor is actually equipped for (IB Production Floor.allow_*). Machines
+	# with no floor set are untouched by this — location-only behavior as before.
+	from instabiz.instabiz.doctype.ib_production_floor.ib_production_floor import get_allowed_stages
+	machines = [
+		m for m in machines
+		if not m.floor or stage in get_allowed_stages(m.floor)
+	]
 	if not machines:
 		return None
 
@@ -374,6 +385,7 @@ def get_machines(machine_type=None, location=None):
 			"machine_name",
 			"machine_type",
 			"location",
+			"floor",
 			"capacity",
 			"capacity_uom",
 			"wastage_norm_pct",
@@ -397,6 +409,7 @@ def save_machine(
 	status,
 	capacity_uom="",
 	notes=None,
+	floor=None,
 	name=None,  # ignored — machine_code IS the name (autoname = field:machine_code)
 ):
 	"""Create or update IB Machine. Requires Factory Management or System Manager."""
@@ -411,6 +424,7 @@ def save_machine(
 	doc.machine_name = machine_name
 	doc.machine_type = machine_type
 	doc.location = location
+	doc.floor = floor or ""
 	doc.capacity = flt(capacity)
 	doc.capacity_uom = capacity_uom or ""
 	doc.wastage_norm_pct = flt(wastage_norm_pct)
@@ -1120,16 +1134,32 @@ def assign_machine(work_order, machine):
 		doc = frappe.get_doc("IB Work Order", work_order)
 		if doc.status != "Pending":
 			frappe.throw(_("Machine can only be assigned to a Pending work order. Current status: {0}").format(doc.status))
-		machine_type = frappe.db.get_value("IB Machine", machine, "machine_type")
-		if machine_type is None:
+		machine_row = frappe.db.get_value("IB Machine", machine, ["machine_type", "capacity"], as_dict=True)
+		if machine_row is None:
 			frappe.throw(_("Machine {0} does not exist").format(machine))
 		required_type = _STAGE_MACHINE_TYPE.get(doc.stage)
-		if required_type and machine_type != required_type:
+		if required_type and machine_row.machine_type != required_type:
 			frappe.throw(
 				_("Machine {0} is a {1} machine; Work Order stage {2} requires a {3} machine.").format(
-					machine, machine_type, doc.stage, required_type
+					machine, machine_row.machine_type, doc.stage, required_type
 				)
 			)
+		# Manual assignment previously had no capacity check at all — unlike
+		# _assign_machine_load_balanced() (which only treats capacity as a soft
+		# preference anyway), this is a hard block: a user explicitly picking a
+		# machine should not be able to push it over its own configured capacity.
+		cap = flt(machine_row.capacity)
+		if cap > 0:
+			current_load = frappe.db.count(
+				"IB Work Order",
+				filters={"machine": machine, "status": ["in", ("Pending", "In Progress")], "name": ["!=", work_order]},
+			)
+			if current_load >= cap:
+				frappe.throw(
+					_("Machine {0} is already at capacity ({1}/{2} active Work Orders).").format(
+						machine, current_load, int(cap)
+					)
+				)
 		doc.machine = machine
 		doc.save(ignore_permissions=True)
 		frappe.db.commit()
@@ -1674,6 +1704,7 @@ def start_item_stage(order_sheet_item, stage):
 			as_dict=True,
 		)
 		sales_order = frappe.db.get_value("IB Order Sheet", osi.parent, "sales_order")
+		is_rework = bool(existing and existing.status == "Completed")
 
 		if existing and existing.status == "Completed":
 			# Rework — "Completed" has no apply_workflow transition back out
@@ -1702,20 +1733,42 @@ def start_item_stage(order_sheet_item, stage):
 			wo.insert(ignore_permissions=True)
 			wo_name = wo.name
 
-		if not frappe.db.get_value("IB Work Order", wo_name, "machine"):
-			machine = _assign_machine_load_balanced(stage, location) or ""
-			if machine:
-				frappe.db.set_value("IB Work Order", wo_name, "machine", machine)
-		else:
-			machine = frappe.db.get_value("IB Work Order", wo_name, "machine")
+		# Also hold the same per-WO lock every other status-mutating function
+		# uses (assign_machine/start_work_order/complete_work_order/put_on_hold/
+		# advance_to_next_stage all lock "IB-WO-{name}") — the OSI-scoped lock
+		# above only serializes this endpoint's own existence-check-then-create
+		# race; without this, a concurrent call on one of those other endpoints
+		# for the same WO has no mutual exclusion against what happens next.
+		wo_lock = f"IB-WO-{wo_name}"
+		wo_locked = frappe.db.sql("SELECT GET_LOCK(%s, 5)", wo_lock)[0][0]
+		if not wo_locked:
+			frappe.throw(_("Could not acquire lock for Work Order {0}. Please try again.").format(wo_name))
+		try:
+			if not frappe.db.get_value("IB Work Order", wo_name, "machine"):
+				machine = _assign_machine_load_balanced(stage, location) or ""
+				if machine:
+					frappe.db.set_value("IB Work Order", wo_name, "machine", machine)
+			else:
+				machine = frappe.db.get_value("IB Work Order", wo_name, "machine")
 
-		doc = frappe.get_doc("IB Work Order", wo_name)
-		started_at = now()
-		doc.started_at = started_at
-		apply_workflow(doc, "Resume" if doc.status == "On Hold" else "Start")
-		# Same apply_workflow load_from_db discard as start_work_order()/
-		# complete_work_order() — persist explicitly or it silently stays NULL.
-		frappe.db.set_value("IB Work Order", wo_name, "started_at", started_at)
+			doc = frappe.get_doc("IB Work Order", wo_name)
+			started_at = now()
+			doc.started_at = started_at
+			apply_workflow(doc, "Resume" if doc.status == "On Hold" else "Start")
+			# Same apply_workflow load_from_db discard as start_work_order()/
+			# complete_work_order() — persist explicitly or it silently stays NULL.
+			frappe.db.set_value("IB Work Order", wo_name, "started_at", started_at)
+
+			if is_rework:
+				# Reactivating a Completed stage un-completes the item — without
+				# this, IB Order Sheet Item/IB Order Sheet stayed stuck showing
+				# "Completed" while the stage was genuinely back in progress, and
+				# get_order_dn_readiness() (which only checks Order Sheet status)
+				# would still let a Delivery Note be created mid-rework.
+				_update_order_sheet_item(osi.parent, osi.item_code, 0, order_sheet_item=osi.name)
+				_update_order_sheet_progress(osi.parent)
+		finally:
+			frappe.db.sql("SELECT RELEASE_LOCK(%s)", wo_lock)
 
 		if frappe.db.get_value("IB Order Sheet", osi.parent, "status") == "Draft":
 			frappe.db.set_value("IB Order Sheet", osi.parent, "status", "In Progress")
@@ -2317,7 +2370,7 @@ def get_machine_wise_dashboard(location=None):
 		"IB Machine",
 		filters=machine_filters,
 		fields=["name", "machine_code", "machine_name", "machine_type",
-		        "location", "capacity", "capacity_uom", "wastage_norm_pct"],
+		        "location", "floor", "capacity", "capacity_uom", "wastage_norm_pct"],
 		order_by="machine_type asc, machine_code asc",
 	)
 

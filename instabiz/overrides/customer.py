@@ -438,7 +438,19 @@ def get_outstanding_statement_rows(customer):
 	"""Itemized outstanding rows for the IB Outstanding Statement print format —
 	same basis as compute_customer_outstanding() (instabiz.overrides.billing_mode).
 	Called from the print format's Jinja via frappe.call(), since frappe.conf
-	isn't reachable from the sandboxed print-format Jinja context."""
+	isn't reachable from the sandboxed print-format Jinja context.
+
+	Also resolves which of the company's 3 state GSTINs (Maharashtra/Gujarat/
+	Chennai) belongs at the top of the statement — the print format previously
+	always showed the Company master's single default `gstin` field, which is
+	set to Maharashtra's, regardless of which location actually billed this
+	customer. Each Sales Order/Sales Invoice already carries its own correct
+	`company_gstin` (set per-location at creation — see quotation.py/
+	sales_invoice.py); this reads it straight off the transactions actually
+	being listed rather than re-deriving it from scratch. Most-recent
+	transaction wins when a customer has outstanding dues billed from more
+	than one location — falls back to the Company master's default gstin only
+	when there are no outstanding rows at all (nothing to read a location off)."""
 	if not frappe.has_permission("Customer", "read", customer):
 		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
 
@@ -448,6 +460,7 @@ def get_outstanding_statement_rows(customer):
 		outstanding_expr = sales_outstanding_expr("t")
 		rows = frappe.db.sql(
 			f"SELECT t.name, t.transaction_date AS doc_date, t.grand_total,"
+			f" t.company_gstin,"
 			f" {outstanding_expr} AS balance"
 			f" FROM `tab{doctype}` t"
 			" WHERE t.customer = %s AND t.docstatus = 1 AND t.status != 'Cancelled'"
@@ -457,18 +470,60 @@ def get_outstanding_statement_rows(customer):
 		)
 	else:
 		rows = frappe.db.sql(
-			"SELECT name, posting_date AS doc_date, grand_total, outstanding_amount AS balance"
+			"SELECT name, posting_date AS doc_date, grand_total, company_gstin,"
+			" outstanding_amount AS balance"
 			" FROM `tabSales Invoice`"
 			" WHERE customer = %s AND docstatus = 1 AND outstanding_amount > 0"
 			" ORDER BY posting_date ASC",
 			customer, as_dict=True,
 		)
+
+	company_gstin = rows[-1].company_gstin if rows else None
+	if not company_gstin:
+		default_company = frappe.db.get_single_value("Global Defaults", "default_company")
+		company_gstin = frappe.db.get_value("Company", default_company, "gstin") if default_company else None
+
 	return {
 		"dev_mode": dev_mode,
 		"doc_label": frappe._("Order") if dev_mode else frappe._("Invoice"),
 		"rows": rows,
 		"total": flt(sum(flt(r.balance) for r in rows)),
+		"company_gstin": company_gstin,
+		"bank_account": _bank_account_for_gstin(company_gstin),
 	}
+
+
+# Maharashtra (27...) and Gujarat (24...) share one real HDFC account; Chennai
+# (33...) has its own — same pairing as the "GUJARAT & MAHARASHTRA - HDFC" /
+# "CHENNAI - HDFC" Bank Account masters (see CLAUDE.md item 74).
+_GSTIN_PREFIX_BANK_ACCOUNT = {
+	"27": "GUJARAT & MAHARASHTRA - HDFC",
+	"24": "GUJARAT & MAHARASHTRA - HDFC",
+	"33": "CHENNAI - HDFC",
+}
+
+
+def _bank_account_for_gstin(company_gstin):
+	"""Remittance details for the Outstanding Statement footer — resolved from
+	the same location the statement's own GSTIN was resolved for, not a single
+	hardcoded default (a customer billed from Chennai should never be shown
+	the Maharashtra/Gujarat account)."""
+	bank_account_name = _GSTIN_PREFIX_BANK_ACCOUNT.get((company_gstin or "")[:2])
+	if not bank_account_name:
+		return None
+	row = frappe.db.get_value(
+		"Bank Account", bank_account_name,
+		["bank", "bank_account_no", "branch_code"], as_dict=True,
+	)
+	if not row:
+		return None
+	# "GUJARAT & MAHARASHTRA - HDFC"'s branch_code field has a known data-entry
+	# defect (a branch address string appended ahead of the real IFSC) — the
+	# real IFSC (per CLAUDE.md item 74, matches CHENNAI - HDFC's own clean
+	# value) is always the last "&"-separated segment. Not corrected in the
+	# source record itself — corrected only for display here.
+	ifsc = (row.branch_code or "").split("&")[-1].strip()
+	return {"bank": row.bank, "account_no": row.bank_account_no, "ifsc": ifsc}
 
 
 @frappe.whitelist()
