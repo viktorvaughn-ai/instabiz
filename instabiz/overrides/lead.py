@@ -64,22 +64,66 @@ def has_permission(doc, ptype, user):
 
 
 def check_duplicate_lead(doc, method=None):
-    """Block lead creation if same mobile_no or email_id already exists."""
+    """Block lead creation if same mobile_no or email_id already exists.
+
+    Root-cause fix (2026-08-28): a duplicate match here is a hard block, not a
+    merge — but every real import that hits this block has had to fall back to
+    manually updating the existing Lead instead (e.g. reassigning lead_owner,
+    see the PACKPLUS import). That workaround never touched territory, so an
+    existing Lead's territory — right or wrong — silently outlived every later
+    import that happened to re-match the same mobile/email, no matter what the
+    new row's own State/GSTIN/pincode said. That's the recurring "Gujarat lead
+    shows a Bengaluru territory" bug: not a fuzzy name/city match, and not a
+    Territory-tree matching bug (both confirmed exact-name lookups, see
+    instabiz.overrides.utils.territory_from_gstin) — the existing record's
+    territory was just never re-verified against the new import row.
+
+    Fixed here, not by patching data again: before throwing, re-derive
+    territory fresh from *this* row's own GSTIN/pincode (same authoritative
+    source set_territory_from_pincode uses for a brand-new Lead) and, if it
+    disagrees with the existing Lead's current territory, correct the existing
+    record and log an auditable Comment explaining why — so a future import
+    hitting the same duplicate can't silently keep carrying a stale value, and
+    any correction is visible on the Lead's own timeline instead of invisible.
+    """
     existing = None
     if doc.mobile_no:
         existing = frappe.db.get_value(
-            "Lead", {"mobile_no": doc.mobile_no}, ["name", "lead_name"], as_dict=True
+            "Lead", {"mobile_no": doc.mobile_no}, ["name", "lead_name", "territory"], as_dict=True
         )
     if not existing and doc.email_id:
         existing = frappe.db.get_value(
-            "Lead", {"email_id": doc.email_id}, ["name", "lead_name"], as_dict=True
+            "Lead", {"email_id": doc.email_id}, ["name", "lead_name", "territory"], as_dict=True
         )
     if existing:
+        _reconcile_territory_on_duplicate(doc, existing)
         link = f'<a href="/app/lead/{existing.name}">{existing.lead_name or existing.name}</a>'
         frappe.throw(
             f"Duplicate lead: {link} already exists with this phone or email.",
             title=_("Duplicate Lead"),
         )
+
+
+def _reconcile_territory_on_duplicate(doc, existing):
+    """Re-derive territory from the *new* row's own data and correct the
+    existing (duplicate-matched) Lead if it disagrees. Never inherits the
+    existing record's territory onto the new row — the new row's own data is
+    always authoritative. No-ops (and logs nothing) if the new row carries no
+    derivable GSTIN/pincode, or if the derived value matches what's already
+    there."""
+    new_territory = _derive_territory_from_row(doc)
+    if not new_territory or new_territory == existing.territory:
+        return
+    old_territory = existing.territory or "(blank)"
+    frappe.db.set_value("Lead", existing.name, "territory", new_territory, update_modified=False)
+    frappe.get_doc("Lead", existing.name).add_comment(
+        "Info",
+        _(
+            "Territory corrected {0} → {1} during duplicate-lead import "
+            "(re-derived from the new row's own GSTIN/pincode, not carried "
+            "over from the previously stored value)."
+        ).format(old_territory, new_territory),
+    )
 
 
 # GST state code → Territory derivation lives in instabiz.overrides.utils now
@@ -104,23 +148,37 @@ def _territory_from_pincode(pincode: str):
     return None, None
 
 
-def set_territory_from_pincode(doc, method=None):
-    """Derive territory on Lead insert: GSTIN state code first, pincode fallback."""
-    # GSTIN is authoritative (government-issued, unambiguous state code)
+def _derive_territory_from_row(doc):
+    """Derive territory purely from this row's own data — GSTIN state code
+    first (authoritative), pincode API fallback. Never reads doc.territory or
+    any other document; returns None if neither source resolves. Shared by
+    set_territory_from_pincode (new Lead insert) and
+    _reconcile_territory_on_duplicate (duplicate-match correction) so both
+    paths derive territory the exact same way."""
     gstin = (doc.get("custom_gstin") or "").strip()
     if gstin:
         territory = _territory_from_gstin(gstin)
         if territory:
-            doc.territory = territory
-            return
-    # Only try pincode if territory not already set (manually or from GSTIN)
-    if doc.territory:
-        return
+            return territory
     pincode = doc.get("custom_pincode") or ""
     if pincode:
         territory, _ = _territory_from_pincode(pincode)
         if territory:
-            doc.territory = territory
+            return territory
+    return None
+
+
+def set_territory_from_pincode(doc, method=None):
+    """Derive territory on Lead insert: GSTIN state code first, pincode fallback."""
+    # Never overwrite a territory the row already carries (manually set, or
+    # provided directly by an import file/mapping) — this row's own data
+    # always wins, but an explicit value already on the row still outranks a
+    # derived guess.
+    if doc.territory:
+        return
+    territory = _derive_territory_from_row(doc)
+    if territory:
+        doc.territory = territory
 
 
 def assign_lead_owner(doc, method=None):
@@ -490,8 +548,8 @@ def rectify_lead_territories(dry_run=True):
     leads = frappe.db.sql(
         """
         SELECT name, lead_name, territory,
-               IFNULL(custom_pincode, '') AS pincode,
-               IFNULL(custom_gstin, '')   AS gstin
+               IFNULL(custom_pincode, '') AS custom_pincode,
+               IFNULL(custom_gstin, '')   AS custom_gstin
         FROM `tabLead`
         WHERE status NOT IN ('Converted', 'Junk')
         ORDER BY creation ASC
@@ -501,15 +559,9 @@ def rectify_lead_territories(dry_run=True):
 
     changes = []
     for lead in leads:
-        new_territory = None
-
-        # GSTIN is authoritative — try it first
-        if lead.gstin:
-            new_territory = _territory_from_gstin(lead.gstin)
-
-        # Fall back to pincode API
-        if not new_territory and lead.pincode:
-            new_territory, _ = _territory_from_pincode(lead.pincode)
+        # Same derivation _reconcile_territory_on_duplicate and
+        # set_territory_from_pincode use — GSTIN authoritative, pincode fallback.
+        new_territory = _derive_territory_from_row(lead)
 
         if not new_territory:
             continue

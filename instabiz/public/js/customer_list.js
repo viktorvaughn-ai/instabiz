@@ -19,7 +19,12 @@ frappe.listview_settings["Customer"] = {
 	onload(listview) {
 		ib_setup_list_print(listview, "Customer");
 		ib_setup_party_ledger_print(listview, "Customer");
-		ib_setup_customer_handled_by_filter(listview);
+		// Real Sales Person picker (Link → User, autocomplete, exact match on
+		// custom_sales_person_user) — same shared control Quotation/Sales
+		// Order use, replacing the old free-text "Handled By" filter (fuzzy
+		// LIKE-match on the display-name field custom_sales_person, no
+		// autocomplete, typo-prone).
+		ib_setup_list_sales_user_filter(listview, "Customer");
 
 		// Filter row order = column order (2026-08-13): live columns are
 		// Company Name, Status, Location, Mobile No, Outstanding Amount,
@@ -29,7 +34,7 @@ frappe.listview_settings["Customer"] = {
 		ib_reorder_filter_row(listview, [
 			listview.page.fields_dict.customer_name && listview.page.fields_dict.customer_name.$wrapper,
 			listview.page.fields_dict.territory && listview.page.fields_dict.territory.$wrapper,
-			$(".ib-customer-handled-by-filter"),
+			$(".ib-customer-sales-user-filter"),
 			listview.page.fields_dict.customer_group && listview.page.fields_dict.customer_group.$wrapper,
 		]);
 

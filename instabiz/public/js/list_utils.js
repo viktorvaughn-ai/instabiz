@@ -266,62 +266,6 @@ function ib_setup_list_sales_user_filter(listview, doctype, placeholder) {
     }
 }
 
-// ── Customer "Handled By" filter (text search on custom_sales_person) ────────
-function ib_setup_customer_handled_by_filter(listview) {
-    const css     = "ib-customer-handled-by-filter";
-    const eventNs = "ib_customer_handled_by_clear";
-
-    $(`.${css}`).remove();
-
-    const $wrapper = $(
-        `<div class="form-group frappe-control input-max-width ${css}" ` +
-        `data-fieldtype="Data" data-fieldname="custom_sales_person"></div>`
-    );
-    $wrapper.css({ flex: "0 0 160px", maxWidth: "160px" });
-    _ib_chain_anchor(listview, $wrapper);
-
-    const control = frappe.ui.form.make_control({
-        df: {
-            label: "",
-            fieldtype: "Data",
-            placeholder: __("Handled By"),
-        },
-        parent: $wrapper,
-        only_input: true,
-        render_input: 1,
-    });
-    control.$wrapper.removeClass("form-group");
-    control.$wrapper.css("margin-bottom", 0);
-
-    function _apply() {
-        const val = (control.get_value() || "").trim();
-        _ib_remove_filters(listview, "custom_sales_person");
-        if (val) {
-            listview.filter_area.add([
-                ["Customer", "custom_sales_person", "like", `%${val}%`],
-            ]);
-        }
-        listview.refresh();
-    }
-
-    let _debounce;
-    $(control.input)
-        .on("input", function () {
-            clearTimeout(_debounce);
-            _debounce = setTimeout(_apply, 400);
-        })
-        .on("keydown", function (e) {
-            if (e.key === "Enter") { clearTimeout(_debounce); _apply(); }
-        });
-
-    const $clearBtn = listview.filter_area && listview.filter_area.filter_x_button;
-    if ($clearBtn && $clearBtn.length) {
-        $clearBtn
-            .off(`click.${eventNs}`)
-            .on(`click.${eventNs}`, () => control.set_value(""));
-    }
-}
-
 // ── Generic date range filter ─────────────────────────────────────────────────
 function ib_setup_list_date_filter(listview, doctype, dateField, nativeFieldsToHide) {
     (nativeFieldsToHide || []).forEach(function (fn) {
