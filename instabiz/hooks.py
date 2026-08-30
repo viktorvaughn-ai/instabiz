@@ -431,6 +431,7 @@ doctype_list_js = {
     "Purchase Invoice":  "public/js/purchase_invoice_list.js",
     "Customer":          "public/js/customer_list.js",
     "GL Entry":          "public/js/gl_entry_list.js",
+    "IB Container Import": "public/js/ib_container_import_list.js",
 }
 
 doctype_js = {

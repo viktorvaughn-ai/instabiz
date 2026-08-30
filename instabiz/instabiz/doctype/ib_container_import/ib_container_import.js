@@ -1,4 +1,30 @@
 frappe.ui.form.on("IB Container Import", {
+	// Submit posts a real Stock Entry immediately (see on_submit in
+	// ib_container_import.py) — same Draft=safe/Submit=final/Cancel=reverses
+	// convention every other transactional doctype in this app already
+	// uses, kept deliberately (2026-08-30, user decision after asking
+	// whether this should work differently). This is just a confirmation
+	// nudge before that irreversible-in-spirit action, not a workflow
+	// change — quantities are split by UOM, never blended into one number
+	// (same reasoning as the DPR/report fixes elsewhere this app).
+	before_submit(frm) {
+		return new Promise((resolve, reject) => {
+			const by_uom = {};
+			(frm.doc.items || []).forEach((row) => {
+				const uom = row.stock_uom || "";
+				by_uom[uom] = (by_uom[uom] || 0) + flt(row.total_qty);
+			});
+			const qty_line = Object.entries(by_uom)
+				.map(([uom, qty]) => `${flt(qty)} ${uom}`)
+				.join(", ") || "0";
+			const msg = __("This posts {0} into <strong>{1}</strong>. Confirm the quantities are correct before continuing.", [
+				qty_line,
+				frappe.utils.escape_html(frm.doc.warehouse || ""),
+			]);
+			frappe.confirm(msg, resolve, () => reject());
+		});
+	},
+
 	refresh(frm) {
 		if (!frm.is_new()) {
 			frm.fields_dict["items"].grid.add_custom_button(__("Reprint Labels"), () => {

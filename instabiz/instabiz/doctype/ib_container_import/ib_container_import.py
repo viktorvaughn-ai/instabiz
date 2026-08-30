@@ -114,6 +114,52 @@ def _make_stock_entry(doc: "IBContainerImport"):
 # ── Label printing ───────────────────────────────────────────────────────────
 
 @frappe.whitelist()
+def get_container_items(container_import: str) -> list:
+	"""Item rows for the list-view "Generate Label" picker — just enough to
+	let the user pick which item when a container has more than one."""
+	return frappe.db.get_all(
+		"IB Container Import Item",
+		filters={"parent": container_import},
+		fields=["item_code", "item_name"],
+		order_by="idx asc",
+	)
+
+
+@frappe.whitelist()
+def generate_item_labels(container_import: str, item_code: str, count) -> None:
+	"""List-view "Generate Label" action — print an arbitrary N labels for
+	one item, independent of that row's actual recorded no_of_boxes (the
+	operator just needs however many labels are physically needed right
+	now). Reuses the exact same "IB Container Label" print format/template
+	reprint_item_labels() already uses below — only the in-memory row's
+	no_of_boxes is overridden (never saved) so "ROLL NO: i / N" reflects
+	the requested count, not what's on record."""
+	from frappe.utils.print_utils import get_print
+
+	count = cint(count)
+	if count <= 0:
+		frappe.throw(_("Enter a number of labels greater than 0."))
+
+	doc = frappe.get_doc("IB Container Import", container_import)
+	row = next((r for r in doc.items if r.item_code == item_code), None)
+	if not row:
+		frappe.throw(_("Item {0} not found on {1}").format(item_code, container_import))
+
+	row.no_of_boxes = count
+	doc.items = [row]
+	pdf = get_print(
+		doctype="IB Container Import",
+		name=doc.name,
+		print_format="IB Container Label",
+		doc=doc,
+		as_pdf=True,
+	)
+	frappe.local.response.filename = f"{doc.name}-{item_code}-labels.pdf"
+	frappe.local.response.filecontent = pdf
+	frappe.local.response.type = "download"
+
+
+@frappe.whitelist()
 def reprint_item_labels(container_import: str, item_code: str) -> None:
 	from frappe.utils.print_utils import get_print
 
