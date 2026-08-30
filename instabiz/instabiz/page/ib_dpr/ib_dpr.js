@@ -153,6 +153,24 @@ class IBDPRPage {
 		});
 	}
 
+	// ── UOM-aware formatting helpers ─────────────────────────────────────────
+	// Output is never a single blended number — a Work Order's target_uom
+	// varies by item (PCS/SQMT/ROLL/KG all occur in real data), and summing
+	// across them (e.g. "288 PCS + 2148 SQMT") isn't a real quantity of
+	// anything. Every render below keeps qty split by its own uom.
+	_fmt_qty(n) {
+		return frappe.format(n, { fieldtype: "Float" });
+	}
+	// Stacked badges for a table cell: one line per uom
+	_fmt_uom_stack(list, qtyKey = "qty", extra = null) {
+		if (!list || !list.length) return "—";
+		return list.map(o => `<div class="ib-dpr-uom-line">
+			<span class="ib-dpr-uom-qty">${this._fmt_qty(o[qtyKey])}</span>
+			<span class="ib-dpr-uom-tag">${frappe.utils.escape_html(o.uom)}</span>
+			${extra ? extra(o) : ""}
+		</div>`).join("");
+	}
+
 	// ── KPI card helper ───────────────────────────────────────────────────────
 	_kpi_card(label, value, accent, icon_name, sub = "") {
 		const icon = `<iconify-icon icon="lucide:${icon_name}" width="18" height="18"></iconify-icon>`;
@@ -172,10 +190,16 @@ class IBDPRPage {
 	_render_daily(data) {
 		const s = data.summary || {};
 		const woCompleted = s.wo_completed || 0;
+		const outputByUom = s.output_by_uom || [];
 
+		// One KPI card per UOM actually produced today — "Output (PCS)" /
+		// "Output (SQMT)" etc, never one blended "Total Output" number.
+		const output_cards = outputByUom.length
+			? outputByUom.map(o => this._kpi_card(`Output (${o.uom})`, this._fmt_qty(o.qty), "#059669", "trending-up")).join("")
+			: this._kpi_card("Output", 0, "#059669", "trending-up");
 		const kpi_html = [
 			this._kpi_card("WOs Completed", woCompleted, "#7c3aed", "check-circle"),
-			this._kpi_card("Total Output",  s.total_output ?? 0,   "#059669", "trending-up"),
+			output_cards,
 			this._kpi_card("Total Hours",   s.total_hours  ?? 0,   "#d97706", "clock"),
 		].join("");
 
@@ -186,7 +210,7 @@ class IBDPRPage {
 				<tr class="ib-dpr-machine-row">
 					<td><span class="ib-dpr-machine-pill">${frappe.utils.escape_html(m.machine || "—")}</span></td>
 					<td>${m.wo_completed ?? "—"}</td>
-					<td>${m.output_qty ?? "—"}</td>
+					<td>${this._fmt_uom_stack(m.output, "output_qty")}</td>
 				</tr>
 			`).join("");
 			const sub_table = st.machines && st.machines.length ? `
@@ -201,6 +225,9 @@ class IBDPRPage {
 					</td>
 				</tr>
 			` : "";
+			const hourlyAvgCell = st.output && st.output.length
+				? this._fmt_uom_stack(st.output, "hourly_avg", o => `<span class="ib-dpr-uom-suffix">/hr</span>`)
+				: "—";
 			return `
 				<tr class="ib-dpr-stage-row" data-stage="${st.stage}">
 					<td>
@@ -211,9 +238,9 @@ class IBDPRPage {
 						</div>
 					</td>
 					<td>${st.wo_completed ?? 0}</td>
-					<td>${st.output_qty ?? 0}</td>
+					<td>${this._fmt_uom_stack(st.output, "output_qty")}</td>
 					<td>${st.hours ?? "—"}</td>
-					<td>${st.hourly_avg ?? "—"}</td>
+					<td>${hourlyAvgCell}</td>
 				</tr>
 				${sub_table}
 			`;
@@ -232,7 +259,7 @@ class IBDPRPage {
 						<tr>
 							<th>Stage</th>
 							<th>WOs Completed</th>
-							<th>Output Qty</th>
+							<th>Output</th>
 							<th>Hours</th>
 							<th>Hourly Avg</th>
 						</tr>
@@ -251,19 +278,27 @@ class IBDPRPage {
 	// ── Weekly render ─────────────────────────────────────────────────────────
 	_render_weekly(data) {
 		const s = data.summary || {};
-		const kpi_html = [
-			this._kpi_card("Total Output (Week)", s.total_output ?? 0, "#059669", "box"),
-			this._kpi_card("Avg Daily Output",    s.avg_daily   ?? 0, "#2563eb", "bar-chart-2"),
-		].join("");
+		const outputByUom = s.output_by_uom || [];
+		const avgByUom = s.avg_daily_by_uom || [];
 
-		// Max output for bar scaling
-		const maxOut = Math.max(1, ...(data.days || []).map(d => d.output_qty || 0));
+		const output_cards = outputByUom.length
+			? outputByUom.map(o => this._kpi_card(`Output — Week (${o.uom})`, this._fmt_qty(o.qty), "#059669", "box")).join("")
+			: this._kpi_card("Output — Week", 0, "#059669", "box");
+		const avg_cards = avgByUom.length
+			? avgByUom.map(o => this._kpi_card(`Avg Daily (${o.uom})`, this._fmt_qty(o.qty), "#2563eb", "bar-chart-2")).join("")
+			: this._kpi_card("Avg Daily", 0, "#2563eb", "bar-chart-2");
+		const kpi_html = output_cards + avg_cards;
+
+		// Bar is sized by WOs completed — the one number that's always
+		// comparable across days regardless of which UOMs were produced.
+		// Output itself is shown as text, split by uom, next to the bar.
+		const maxWo = Math.max(1, ...(data.days || []).map(d => d.wo_completed || 0));
 
 		const day_rows = (data.days || []).map(d => {
-			const barPct = Math.round(((d.output_qty || 0) / maxOut) * 100);
+			const barPct = Math.round(((d.wo_completed || 0) / maxWo) * 100);
 			const output_bar = `<div class="ib-dpr-week-cell">
-				<span>${d.output_qty ?? 0}</span>
-				<div class="ib-dpr-eff-wrap" style="margin-top:3px">
+				<div>${this._fmt_uom_stack(d.output_by_uom)}</div>
+				<div class="ib-dpr-eff-wrap" style="margin-top:3px" title="${d.wo_completed || 0} WOs completed">
 					<div class="ib-dpr-eff-bar" style="width:${barPct}%;background:#059669"></div>
 				</div>
 			</div>`;
@@ -382,6 +417,16 @@ class IBDPRPage {
 			.ib-dpr-eff-wrap { height: 3px; background: var(--border-color, #e2e8f0); border-radius: 2px; overflow: hidden; margin-top: 4px; width: 100%; min-width: 48px; max-width: 96px; }
 			.ib-dpr-eff-bar { height: 100%; border-radius: 2px; transition: width .5s cubic-bezier(.4,0,.2,1); }
 			.ib-dpr-week-cell { display: flex; flex-direction: column; }
+
+			/* ── Per-UOM output stack (never blend units into one number) ── */
+			.ib-dpr-uom-line { display: flex; align-items: baseline; gap: 4px; white-space: nowrap; }
+			.ib-dpr-uom-line + .ib-dpr-uom-line { margin-top: 2px; }
+			.ib-dpr-uom-qty { font-weight: 600; font-variant-numeric: tabular-nums; }
+			.ib-dpr-uom-tag {
+				font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+				color: var(--text-muted, #6b7280);
+			}
+			.ib-dpr-uom-suffix { font-size: 10px; color: var(--text-muted, #6b7280); }
 
 			.ib-dpr-empty { text-align: center; padding: 32px; color: var(--text-muted, #6b7280); font-size: 13px; }
 			.ib-dpr-refresh-time { font-size: 11px; color: var(--text-muted, #6b7280); margin-right: 8px; }

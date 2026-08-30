@@ -257,36 +257,77 @@ function _show_packing_details_dialog(order_sheet_item, item_code, onSaved) {
 }
 
 function _show_start_stage_dialog(order_sheet_item, item_code, suggestion, onDone) {
+	const suggested = IB_STAGES.some((s) => s.label === suggestion) ? suggestion : IB_STAGES[0].label;
+
 	const d = new frappe.ui.Dialog({
 		title: `Start Production — ${item_code || ""}`,
 		fields: [
 			{
-				fieldname: "stage",
-				fieldtype: "Select",
-				label: "Stage",
-				reqd: 1,
-				options: IB_STAGES.map((s) => s.label),
-				default: IB_STAGES.some((s) => s.label === suggestion) ? suggestion : IB_STAGES[0].label,
-				description: "Defaults to the item's next stage — pick a different one if this order needs to skip ahead or go out of sequence.",
+				fieldname: "stages",
+				fieldtype: "MultiCheck",
+				label: "Stages",
+				columns: 2,
+				sort_options: false, // keep production-sequence order, not alphabetical
+				options: IB_STAGES.map((s) => ({
+					label: s.label,
+					value: s.label,
+					checked: s.label === suggested,
+				})),
+				description: "Pre-checked with the item's next stage — check others too to start several at once (e.g. Coating + Slitting), or uncheck it and pick a different one to skip ahead.",
 			},
 		],
 		primary_action_label: "Start",
-		primary_action: (values) => {
+		primary_action: () => {
+			// Fire in the same order production actually runs in (IB_STAGES'
+			// own order), not the order checkboxes were clicked — each stage
+			// still gets its own start_item_stage call/lock, run one at a
+			// time so an earlier stage's WO/machine assignment is committed
+			// before the next stage's call reads order-sheet state.
+			const picked = d.get_value("stages") || [];
+			const stages = IB_STAGES.map((s) => s.label).filter((label) => picked.includes(label));
+			if (!stages.length) {
+				frappe.show_alert({ message: "Pick at least one stage.", indicator: "orange" });
+				return;
+			}
+
 			d.get_primary_btn().prop("disabled", true).text("Starting…");
-			frappe.call({
-				method: "instabiz.overrides.production.start_item_stage",
-				args: { order_sheet_item, stage: values.stage },
-				callback: (r) => {
-					if (r.exc) {
-						frappe.show_alert({ message: "Failed to start stage.", indicator: "red" });
-						d.get_primary_btn().prop("disabled", false).text("Start");
-						return;
+			const started = [];
+			const failed = [];
+
+			const runNext = (i) => {
+				if (i >= stages.length) {
+					if (started.length) {
+						frappe.show_alert({
+							message: `${started.join(", ")} started`
+								+ (failed.length ? ` — ${failed.join(", ")} failed` : ""),
+							indicator: failed.length ? "orange" : "green",
+						}, 4);
+					} else {
+						frappe.show_alert({ message: `Failed to start ${failed.join(", ")}.`, indicator: "red" });
 					}
-					frappe.show_alert({ message: `${values.stage} started${r.message?.machine ? ` — machine ${r.message.machine} assigned` : ""}`, indicator: "green" }, 3);
-					d.hide();
-					if (onDone) onDone();
-				},
-			});
+					if (started.length) {
+						d.hide();
+						if (onDone) onDone();
+					} else {
+						d.get_primary_btn().prop("disabled", false).text("Start");
+					}
+					return;
+				}
+				const stage = stages[i];
+				frappe.call({
+					method: "instabiz.overrides.production.start_item_stage",
+					args: { order_sheet_item, stage },
+					callback: (r) => {
+						if (r.exc) {
+							failed.push(stage);
+						} else {
+							started.push(stage);
+						}
+						runNext(i + 1);
+					},
+				});
+			};
+			runNext(0);
 		},
 	});
 	d.show();
@@ -312,17 +353,62 @@ function _start_production_flow(order_sheet_item, item_code, suggestion, onDone)
 	});
 }
 
+// Actual-output-vs-target prompt shown before completing a stage — the
+// only real wastage capture path in the system (IB Production Entry, the
+// sole other thing that ever wrote wastage, has zero rows by design — see
+// complete_work_order()'s own docstring in production.py). Defaults to
+// target_qty so a click-through-without-changing-anything still completes
+// cleanly with zero wastage, same as before this existed. Top-level (not a
+// class method) since both IBProductionDashboard's Active Production Plan
+// row buttons and IBProductionStages' WO side panel need it — same pattern
+// as _start_production_flow above.
+function _prompt_actual_output(wo, onConfirm) {
+	const target = Number(wo.target_qty) || 0;
+	const uom = wo.target_uom || "";
+	const d = new frappe.ui.Dialog({
+		title: "Complete Stage",
+		fields: [
+			{
+				fieldname: "actual_qty",
+				fieldtype: "Float",
+				label: `Actual Output${uom ? ` (${uom})` : ""}`,
+				default: target,
+				reqd: 1,
+				description: `Target: ${target}${uom ? " " + uom : ""}. Wastage is the difference.`,
+			},
+		],
+		primary_action_label: "Complete",
+		primary_action: (vals) => {
+			d.hide();
+			onConfirm(vals.actual_qty);
+		},
+	});
+	d.show();
+}
+
 const PLAN_PAGE_SIZE = 25;
 
-// An Order Sheet Item counts as "done" once every stage it actually has
-// (stage_map entries with a status) is Completed — same criterion the
-// progress bar's pct now uses directly (no more RTD-shortcut needed, see
-// _render_plan's pct calc).
+// Small animated "actively running" indicator — a soft pulsing ring around a
+// solid dot, shown next to a stage label only when a real Work Order there
+// is genuinely In Progress right now (not Pending/On Hold/Completed). CSS
+// keyframes, not SMIL, so it stays crisp and cheap across many rows at once.
+function _live_pulse_svg(title) {
+	return `<svg class="ib-pd-live-pulse" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+		${title ? `<title>${frappe.utils.escape_html(title)}</title>` : ""}
+		<circle class="ib-pd-live-pulse-ring" cx="6" cy="6" r="5" />
+		<circle class="ib-pd-live-pulse-dot" cx="6" cy="6" r="2.5" />
+	</svg>`;
+}
+
+// Server-computed (get_production_plan, production.py) against the item's
+// real route length — NOT a count of however many stage_map entries happen
+// to have a status. Under JIT, stage_map only ever has an entry per stage
+// that's had a Work Order created (most of a fresh item's stages have none
+// at all), so counting "stages with a status" as "total stages" read a
+// freshly-finished first stage as 100% done. Real bug, fixed 2026-08-30 —
+// see get_production_plan's own comment for the full story.
 function _item_is_done(item) {
-	const stageMap = item.stage_map || {};
-	const completedStages = Object.values(stageMap).filter(v => v.status === "Completed").length;
-	const totalStages = Object.values(stageMap).filter(v => v.status).length;
-	return totalStages > 0 && completedStages === totalStages;
+	return item.is_fully_done === true;
 }
 
 class IBProductionDashboard {
@@ -335,21 +421,16 @@ class IBProductionDashboard {
 		this.location_filter = localStorage.getItem("ib_prod_location") || "";
 		this.plan_search = "";
 		this.plan_priority = "";
-		// Stage + ETD-risk filters are purely client-side (like
-		// hide_completed_items below) — every order sheet's items/stage_map and
-		// delivery_date already arrive in the same get_production_plan response,
+		// Stage filter is purely client-side — every order sheet's
+		// items/stage_map already arrives in the get_production_plan response,
 		// no server round-trip needed to re-slice what's already on screen.
 		this.plan_stage = "";
-		this.plan_risk = "";
-		// "Do not show done WO" toggle — hides item rows that have nothing left
-		// to advance (same criterion as the "✓ Done" badge in the Actions
-		// column). Session-only like plan_search/plan_priority, not persisted
-		// to localStorage (unlike location_filter, which is shared with the
-		// Production Stages page — this toggle has no such cross-page need).
-		// Defaults ON per the "do not show done WO" request.
+		// Item rows that have finished every stage are always hidden from the
+		// Active Production Plan (same criterion as the "✓ Done" badge in the
+		// Actions column) — no user-facing toggle, always on.
 		this.hide_completed_items = true;
-		// Current page's Order Sheets — kept so toggling hide_completed_items
-		// can re-render the visible page instantly without a re-fetch.
+		// Current page's Order Sheets — kept so the stage filter/hide-completed
+		// re-filter can re-render the visible page instantly without a re-fetch.
 		this._plan_all_rows = [];
 		// 1-indexed. Server-side paginated (not accumulated) — Prev/Next, not
 		// infinite scroll. _plan_has_more reflects whether the last fetch
@@ -363,6 +444,10 @@ class IBProductionDashboard {
 		// looking at doesn't snap back to collapsed. Cleared on any explicit
 		// reload (Refresh button, location/search/priority filter change).
 		this._plan_keep_open = null;
+		// Order Sheet Item names checked for bulk-start (2026-08-30) — cleared on
+		// every fresh fetch (_load_plan_page), since paging/filtering changes
+		// which rows are even visible; survives a plain re-render otherwise.
+		this._plan_bulk_selected = new Set();
 		this._inject_styles();
 		this._build_layout();
 		this._add_toolbar_buttons();
@@ -421,6 +506,8 @@ class IBProductionDashboard {
 				this._plan_has_more = rows.length === PLAN_PAGE_SIZE;
 				this._plan_loading = false;
 				this._plan_all_rows = rows;
+				this._plan_bulk_selected.clear();
+				this._update_bulk_start_toolbar();
 				this._render_plan(rows);
 				if (on_done) on_done();
 			},
@@ -468,42 +555,19 @@ class IBProductionDashboard {
 						<iconify-icon icon="lucide:search" width="13" height="13" style="color:var(--text-muted)"></iconify-icon>
 						<input type="text" id="ib-pd-plan-search" class="ib-pd-search-input" placeholder="Search Sales Order, customer, or item code…">
 					</div>
-					<div class="ib-pd-filter-group ib-pd-filter-group--priority">
-						<iconify-icon icon="lucide:flag" width="13" height="13" style="color:var(--text-muted)"></iconify-icon>
-						<select id="ib-pd-plan-priority" class="ib-pd-priority-select">
-							<option value="">All Priorities</option>
-							<option value="Urgent">Urgent</option>
-							<option value="High">High</option>
-							<option value="Normal">Normal</option>
-							<option value="Low">Low</option>
-						</select>
-					</div>
-					<div class="ib-pd-filter-group ib-pd-filter-group--stage">
-						<iconify-icon icon="lucide:git-branch" width="13" height="13" style="color:var(--text-muted)"></iconify-icon>
-						<select id="ib-pd-plan-stage" class="ib-pd-priority-select">
-							<option value="">All Stages</option>
-							<option value="Coating">Coating</option>
-							<option value="Slitting">Slitting</option>
-							<option value="Rewinding">Rewinding</option>
-							<option value="Cutting">Cutting</option>
-							<option value="Packing">Packing</option>
-						</select>
-					</div>
-					<div class="ib-pd-filter-group ib-pd-filter-group--risk">
-						<iconify-icon icon="lucide:alert-triangle" width="13" height="13" style="color:var(--text-muted)"></iconify-icon>
-						<select id="ib-pd-plan-risk" class="ib-pd-priority-select">
-							<option value="">Any ETD</option>
-							<option value="overdue">Overdue only</option>
-							<option value="at_risk">Overdue + At risk</option>
-						</select>
-					</div>
-					<label class="ib-pd-filter-group ib-pd-filter-group--hide-done" for="ib-pd-hide-done" title="Hide item rows that have finished every stage — declutters orders that are still active but partly done">
-						<input type="checkbox" id="ib-pd-hide-done">
-						<span>Hide completed items</span>
-					</label>
+					<div id="ib-pd-plan-priority-wrap" class="ib-pd-native-filter"></div>
+					<div id="ib-pd-plan-stage-wrap" class="ib-pd-native-filter"></div>
 				</div>
 				<div id="ib-pd-plan"></div>
 				<div id="ib-pd-plan-pager" class="ib-pd-pager"></div>
+				<div class="ib-pd-bulk-bar" id="ib-pd-bulk-bar" style="display:none">
+					<span class="ib-pd-bulk-bar-count"><span id="ib-pd-bulk-start-count">0</span> selected</span>
+					<button type="button" class="btn btn-default btn-sm" id="ib-pd-bulk-clear-btn">Clear</button>
+					<button type="button" class="btn btn-primary btn-sm" id="ib-pd-bulk-start-btn">
+						<iconify-icon icon="lucide:play" width="12" height="12" style="vertical-align:middle;margin-right:4px"></iconify-icon>
+						Bulk Start
+					</button>
+				</div>
 				<div class="ib-pd-quick-actions" id="ib-pd-actions"></div>
 			</div>
 		`).appendTo(this.$mount);
@@ -527,31 +591,59 @@ class IBProductionDashboard {
 			}, 300);
 		});
 
-		this.$container.find("#ib-pd-plan-priority").val(this.plan_priority);
-		this.$container.find("#ib-pd-plan-priority").on("change", (e) => {
-			this.plan_priority = $(e.target).val();
-			this._plan_keep_open = null;
-			this.refresh();
+		// Native Frappe Select controls (same frappe.ui.form.make_control +
+		// only_input pattern list_utils.js uses for list-view filter rows) —
+		// gives these two filters standard Frappe control markup/styling
+		// instead of a bespoke <select>.
+		const priorityCtrl = frappe.ui.form.make_control({
+			df: {
+				label: "",
+				fieldtype: "Select",
+				options: ["", "Urgent", "High", "Normal", "Low"],
+				placeholder: __("All Priorities"),
+				onchange: () => {
+					this.plan_priority = priorityCtrl.get_value() || "";
+					this._plan_keep_open = null;
+					this.refresh();
+				},
+			},
+			parent: this.$container.find("#ib-pd-plan-priority-wrap"),
+			only_input: true,
+			render_input: 1,
 		});
+		priorityCtrl.$wrapper.css("margin-bottom", 0);
+		priorityCtrl.set_value(this.plan_priority);
 
-		// "Hide completed items" toggle — purely client-side re-filter of
-		// already-loaded Order Sheets (this._plan_all_rows), no re-fetch and
-		// no server round-trip needed.
-		this.$container.find("#ib-pd-hide-done").prop("checked", this.hide_completed_items);
-		this.$container.find("#ib-pd-hide-done").on("change", (e) => {
-			this.hide_completed_items = $(e.target).is(":checked");
-			this._render_plan(this._plan_all_rows);
+		const stageCtrl = frappe.ui.form.make_control({
+			df: {
+				label: "",
+				fieldtype: "Select",
+				options: ["", "Coating", "Slitting", "Rewinding", "Cutting", "Packing"],
+				placeholder: __("All Stages"),
+				onchange: () => {
+					this.plan_stage = stageCtrl.get_value() || "";
+					this._render_plan(this._plan_all_rows);
+				},
+			},
+			parent: this.$container.find("#ib-pd-plan-stage-wrap"),
+			only_input: true,
+			render_input: 1,
 		});
+		stageCtrl.$wrapper.css("margin-bottom", 0);
+		stageCtrl.set_value(this.plan_stage);
+		// Select's rendered <option value=""> label is blank by default —
+		// swap it for the same "All Stages"/"All Priorities" wording the
+		// old plain <select> used, purely cosmetic.
+		priorityCtrl.$input.find(`option[value=""]`).text(__("All Priorities"));
+		stageCtrl.$input.find(`option[value=""]`).text(__("All Stages"));
 
-		this.$container.find("#ib-pd-plan-stage").val(this.plan_stage);
-		this.$container.find("#ib-pd-plan-stage").on("change", (e) => {
-			this.plan_stage = $(e.target).val();
-			this._render_plan(this._plan_all_rows);
+		this.$container.find("#ib-pd-bulk-start-btn").on("click", () => {
+			if (!this._plan_bulk_selected.size) return;
+			this._show_bulk_start_dialog(Array.from(this._plan_bulk_selected));
 		});
-
-		this.$container.find("#ib-pd-plan-risk").val(this.plan_risk);
-		this.$container.find("#ib-pd-plan-risk").on("change", (e) => {
-			this.plan_risk = $(e.target).val();
+		this.$container.find("#ib-pd-bulk-clear-btn").on("click", () => {
+			this._plan_bulk_selected.clear();
+			this._update_bulk_start_toolbar();
 			this._render_plan(this._plan_all_rows);
 		});
 	}
@@ -764,17 +856,11 @@ class IBProductionDashboard {
 			return;
 		}
 
-		// Stage + ETD-risk filters are client-side, applied on top of whatever
+		// Stage filter is client-side, applied on top of whatever
 		// this._plan_all_rows already has loaded — same reasoning as
-		// hide_completed_items above (both fields, and every item's
-		// current_stage, already arrived in the get_production_plan response).
+		// hide_completed_items above (every item's current_stage already
+		// arrived in the get_production_plan response).
 		let filteredSheets = order_sheets;
-		if (this.plan_risk) {
-			filteredSheets = filteredSheets.filter(os => {
-				const risk = _etd_risk(os.delivery_date);
-				return this.plan_risk === "overdue" ? risk === "overdue" : (risk === "overdue" || risk === "at_risk");
-			});
-		}
 		if (this.plan_stage) {
 			filteredSheets = filteredSheets.filter(os =>
 				(os.items || []).some(item => (item.current_stage || "") === this.plan_stage)
@@ -820,13 +906,15 @@ class IBProductionDashboard {
 					return `<span class="ib-pd-stg-chip ${cls}" title="${title}">${abbr}</span>`;
 				}).join("");
 
-				const completedStages = Object.values(stageMap).filter(v => v.status === "Completed").length;
-				const totalStages = Object.values(stageMap).filter(v => v.status).length;
-				// No more RTD-reached-means-100% shortcut needed (RTD/Delivered
-				// collapsed out of the stage model 2026-08-13) — Packing is the
-				// real last stage of every route now, so completedStages/totalStages
-				// already reaches 100% the moment it's Completed, with nothing
-				// further to special-case.
+				// route_length/route_completed_count (get_production_plan,
+				// production.py) are against the item's real route — NOT a count
+				// of however many stage_map entries happen to have a WO. Under
+				// JIT, stage_map only gets an entry per stage that's actually
+				// been started, so a fresh item finishing stage 1 of a real
+				// 5-stage route used to read as "1 of 1 done" here — 100% and
+				// falsely "fully done". Real bug, fixed 2026-08-30.
+				const totalStages = item.route_length || 0;
+				const completedStages = item.route_completed_count || 0;
 				const pct = totalStages ? Math.round(completedStages / totalStages * 100) : 0;
 
 				// Primary action acts on the Work Order behind the item's current
@@ -839,7 +927,7 @@ class IBProductionDashboard {
 				// an explicit done indicator instead of an empty cell.
 				const curInfo = stageMap[currentStage] || {};
 				const woName = curInfo.wo_name || "";
-				const isFullyDone = totalStages > 0 && completedStages === totalStages;
+				const isFullyDone = item.is_fully_done === true;
 
 				// Packing is always the last stage in every item route now (RTD/
 				// Delivered collapsed out of the stage model 2026-08-13 — see
@@ -853,15 +941,25 @@ class IBProductionDashboard {
 				if (woName && (curInfo.status === "Pending" || curInfo.status === "On Hold")) {
 					primaryBtn = `<button class="ib-pd-row-btn ib-pd-row-btn--primary ib-pd-row-start" data-wo="${frappe.utils.escape_html(woName)}" title="${curInfo.status === "On Hold" ? "Resume work on this stage" : "Begin work on this stage"}">${curInfo.status === "On Hold" ? "Resume" : "Start"}</button>`;
 				} else if (woName && curInfo.status === "In Progress" && isLastStage) {
-					primaryBtn = `<button class="ib-pd-row-btn ib-pd-row-btn--primary ib-pd-row-advance" data-wo="${frappe.utils.escape_html(woName)}" title="Mark this item as fully produced">Finish</button>`;
+					primaryBtn = `<button class="ib-pd-row-btn ib-pd-row-btn--primary ib-pd-row-advance" data-wo="${frappe.utils.escape_html(woName)}" data-target-qty="${item.qty || 0}" data-target-uom="${frappe.utils.escape_html(item.uom || "")}" title="Mark this item as fully produced">Finish</button>`;
 				} else if (woName && curInfo.status === "In Progress") {
-					primaryBtn = `<button class="ib-pd-row-btn ib-pd-row-btn--primary ib-pd-row-advance" data-wo="${frappe.utils.escape_html(woName)}" title="Complete this stage and move to the next">Next Stage →</button>`;
+					primaryBtn = `<button class="ib-pd-row-btn ib-pd-row-btn--primary ib-pd-row-advance" data-wo="${frappe.utils.escape_html(woName)}" data-target-qty="${item.qty || 0}" data-target-uom="${frappe.utils.escape_html(item.uom || "")}" title="Complete this stage and move to the next">Next Stage →</button>`;
 				} else if (!woName && !isFullyDone) {
 					// JIT stage model (2026-08-13): the normal resting state now —
 					// nothing active/pending for this item (never started, or its
 					// last-started stage just completed). No WO exists to act on
 					// yet; picking one is the action itself.
-					primaryBtn = `<button class="ib-pd-row-btn ib-pd-row-btn--primary ib-pd-row-start-stage"
+					// Checkbox alongside it (2026-08-30) is purely for bulk-start —
+					// one SKU sold as several line items at different dimensions
+					// (width/color/etc) is common, and clicking Start Production
+					// once per row is slow; ticking several and using the toolbar's
+					// "Bulk Start" button applies the same picked stage(s) to all
+					// of them in one go, still via this exact per-item flow under
+					// the hood (bulk_start_item_stages just loops start_item_stage).
+					primaryBtn = `<label class="ib-pd-row-select" title="Select for bulk start">
+						<input type="checkbox" class="ib-pd-row-bulk-check" data-osi="${frappe.utils.escape_html(item.name)}" ${this._plan_bulk_selected.has(item.name) ? "checked" : ""}>
+					</label>
+					<button class="ib-pd-row-btn ib-pd-row-btn--primary ib-pd-row-start-stage"
 						data-osi="${frappe.utils.escape_html(item.name)}"
 						data-item="${frappe.utils.escape_html(item.item_code || "")}"
 						data-suggestion="${frappe.utils.escape_html(item.next_stage_suggestion || "")}"
@@ -901,7 +999,7 @@ class IBProductionDashboard {
 						</div>
 						<div class="ib-pd-plan-row-cell ib-pd-plan-row-qty">${item.qty || 0} <span class="ib-pd-plan-row-uom">${item.uom || ""}</span>${adjBadge}</div>
 						<div class="ib-pd-plan-row-cell ib-pd-plan-row-stage">
-							<div class="ib-pd-plan-row-stage-label">${currentStage || "—"}</div>
+							<div class="ib-pd-plan-row-stage-label">${currentStage || "—"}${curInfo.status === "In Progress" ? _live_pulse_svg() : ""}</div>
 							<div class="ib-pd-stg-pills">${stagePills}</div>
 						</div>
 						<div class="ib-pd-plan-row-cell ib-pd-plan-row-progress">
@@ -962,6 +1060,7 @@ class IBProductionDashboard {
 									<span class="ib-pd-tag ib-pd-tag--so" title="Sales Order">SO</span>
 									<a class="ib-pd-plan-so-link" href="/app/sales-order/${os.sales_order || ""}" target="_blank" onclick="event.stopPropagation()">${os.sales_order || os.name}</a>
 									<span class="ib-pd-plan-customer">${frappe.utils.escape_html(customerName)}</span>
+									${os.status === "In Progress" ? _live_pulse_svg("In Progress — production active") : ""}
 								</div>
 								<div class="ib-pd-plan-subline">${itemCount} item${itemCount !== 1 ? "s" : ""}${os.creation ? ` · Created ${frappe.datetime.str_to_user(os.creation)}` : ""}</div>
 							</div>
@@ -1027,22 +1126,32 @@ class IBProductionDashboard {
 			e.stopPropagation();
 			const $btn = $(e.currentTarget);
 			if ($btn.prop("disabled")) return;
-			$btn.prop("disabled", true);
 			const wo = $btn.data("wo");
 			this._plan_keep_open = $btn.closest("[data-os-body]").data("osBody") || null;
-			frappe.call({
-				method: "instabiz.overrides.production.advance_to_next_stage",
-				args: { work_order: wo },
-				callback: (r) => {
-					if (r.exc || !r.message || r.message.status !== "ok") {
-						frappe.show_alert({ message: r.message?.message || "Failed to advance.", indicator: "red" });
-						$btn.prop("disabled", false);
-						return;
-					}
-					frappe.show_alert({ message: r.message.message || "Advanced.", indicator: "green" }, 3);
-					this.refresh();
+			// Asks actual output vs target first (wastage capture) — same dialog
+			// the WO side panel's Advance/Complete buttons use. Not disabled
+			// until Confirm, same reasoning as the panel's guarded()-exclusion
+			// comment: nothing to re-enable this button with if the dialog is
+			// cancelled.
+			_prompt_actual_output(
+				{ target_qty: $btn.data("targetQty"), target_uom: $btn.data("targetUom") },
+				(actual_qty) => {
+					$btn.prop("disabled", true);
+					frappe.call({
+						method: "instabiz.overrides.production.advance_to_next_stage",
+						args: { work_order: wo, actual_qty },
+						callback: (r) => {
+							if (r.exc || !r.message || r.message.status !== "ok") {
+								frappe.show_alert({ message: r.message?.message || "Failed to advance.", indicator: "red" });
+								$btn.prop("disabled", false);
+								return;
+							}
+							frappe.show_alert({ message: r.message.message || "Advanced.", indicator: "green" }, 3);
+							this.refresh();
+						},
+					});
 				},
-			});
+			);
 		});
 		$el.off("click", ".ib-pd-row-start-stage").on("click", ".ib-pd-row-start-stage", (e) => {
 			e.stopPropagation();
@@ -1052,6 +1161,16 @@ class IBProductionDashboard {
 				$btn.data("osi"), $btn.data("item"), $btn.data("suggestion"),
 				() => this.refresh(),
 			);
+		});
+
+		$el.off("click", ".ib-pd-row-bulk-check").on("click", ".ib-pd-row-bulk-check", (e) => {
+			e.stopPropagation();
+		});
+		$el.off("change", ".ib-pd-row-bulk-check").on("change", ".ib-pd-row-bulk-check", (e) => {
+			const osi = $(e.currentTarget).data("osi");
+			if ($(e.currentTarget).is(":checked")) this._plan_bulk_selected.add(osi);
+			else this._plan_bulk_selected.delete(osi);
+			this._update_bulk_start_toolbar();
 		});
 		$el.off("click", ".ib-pd-plan-comment-btn").on("click", ".ib-pd-plan-comment-btn", (e) => {
 			e.stopPropagation();
@@ -1079,6 +1198,194 @@ class IBProductionDashboard {
 				},
 				error: () => $btn.prop("disabled", false),
 			});
+		});
+	}
+
+	// Shows/hides the floating bottom bulk bar and keeps its count current —
+	// called on every checkbox toggle instead of a full re-render (selection
+	// state itself doesn't change what any row looks like beyond its own
+	// checkbox, which is already correct from the click that got us here).
+	_update_bulk_start_toolbar() {
+		const n = this._plan_bulk_selected.size;
+		this.$container.find("#ib-pd-bulk-start-count").text(n);
+		this.$container.find("#ib-pd-bulk-bar").css("display", n ? "" : "none");
+	}
+
+	// Bulk-start dialog — one shared stage picker (same MultiCheck control as
+	// the single-item Start Production dialog) applied to every selected
+	// Order Sheet Item at once. Defaults to whichever stage most of the
+	// selected items themselves suggest next, since the common real case is
+	// several dimension-variants of one SKU all sitting at the same stage.
+	// Per-item stage grid, not one shared picker — two selected items can
+	// each be resting at a genuinely different point in their own route
+	// (one brand new needing Coating first, another already past
+	// Coating/Slitting and just resting between stages needing Rewinding
+	// next) even though both show the same "Start Production" button.
+	// Each row defaults to that item's own next_stage_suggestion, checkable
+	// independently — a shared "Same stage for all" toggle covers the
+	// common case (one order's dimension-variants all starting together)
+	// without forcing it.
+	_show_bulk_start_dialog(osiList) {
+		const items = osiList
+			.map((osi) => this._find_plan_item(osi))
+			.filter(Boolean);
+		const item_codes = new Set(items.map((it) => it.item_code));
+		const mixedSuggestions = new Set(items.map((it) => it.next_stage_suggestion || "")).size > 1;
+
+		const subtitle = item_codes.size === 1
+			? `${osiList.length} lines of ${Array.from(item_codes)[0]}`
+			: `${osiList.length} items across ${item_codes.size} SKUs`;
+
+		// Size and No. of Logs describe the physical line itself, not the SKU
+		// family — a 72-roll line and a 24-roll line of the same base item
+		// don't share a log count in practice, so both are per-row inputs
+		// here rather than folded into the shared packing-details fill below
+		// (Brand/Core/CTN/Shrink Film genuinely are constant across
+		// dimension-variants in practice, so those stay shared-only).
+		const gridRows = items.map((it) => {
+			const suggested = IB_STAGES.some((s) => s.label === it.next_stage_suggestion)
+				? it.next_stage_suggestion : IB_STAGES[0].label;
+			const cells = IB_STAGES.map((s) => `
+				<td style="text-align:center">
+					<input type="checkbox" class="ib-pd-bulk-stage-cell" data-osi="${frappe.utils.escape_html(it.name)}"
+						data-stage="${frappe.utils.escape_html(s.label)}" ${s.label === suggested ? "checked" : ""}>
+				</td>`).join("");
+			return `
+				<tr>
+					<td style="white-space:nowrap;padding-right:10px">
+						<strong>${frappe.utils.escape_html(it.item_code || "")}</strong>
+						<div class="text-muted" style="font-size:11px">${it.qty || 0} ${frappe.utils.escape_html(it.uom || "")}</div>
+					</td>
+					<td><input type="text" class="form-control input-sm ib-pd-bulk-size" data-osi="${frappe.utils.escape_html(it.name)}" placeholder="(default)" style="width:90px"></td>
+					<td><input type="number" class="form-control input-sm ib-pd-bulk-logs" data-osi="${frappe.utils.escape_html(it.name)}" placeholder="(default)" style="width:70px"></td>
+					${cells}
+				</tr>`;
+		}).join("");
+
+		const gridHtml = `
+			${mixedSuggestions ? `<div class="text-muted" style="margin-bottom:6px;font-size:12px">Different next stage per row — check each one.</div>` : ""}
+			<div style="overflow-x:auto">
+				<table class="table table-bordered" style="margin-bottom:0">
+					<thead><tr>
+						<th>Item</th>
+						<th style="white-space:nowrap">Size</th>
+						<th style="white-space:nowrap">Logs</th>
+						${IB_STAGES.map((s) => `<th style="text-align:center;white-space:nowrap">${s.label}</th>`).join("")}
+					</tr></thead>
+					<tbody>${gridRows}</tbody>
+				</table>
+			</div>`;
+
+		const d = new frappe.ui.Dialog({
+			title: `Bulk Start Production — ${subtitle}`,
+			size: "large",
+			fields: [
+				{ fieldname: "grid", fieldtype: "HTML", options: gridHtml },
+				{ fieldname: "packing_sb", fieldtype: "Section Break", label: "Packing Details" },
+				{ fieldname: "packing_note", fieldtype: "HTML", options: `<div class="text-muted" style="margin-bottom:6px;font-size:12px">Applies only to items not yet captured. Leave blank to skip those instead.</div>` },
+				{ fieldname: "brand", fieldtype: "Link", options: "Brand", label: "Brand" },
+				{ fieldname: "core", fieldtype: "Link", options: "Item", label: "Core",
+					get_query: () => ({ filters: { custom_is_internal_use: 1 } }) },
+				{ fieldname: "col_pack", fieldtype: "Column Break" },
+				{ fieldname: "ctn", fieldtype: "Link", options: "Item", label: "CTN",
+					get_query: () => ({ filters: { custom_is_internal_use: 1 } }) },
+				{ fieldname: "shrink_film", fieldtype: "Link", options: "Item", label: "Shrink Film",
+					get_query: () => ({ filters: { custom_is_internal_use: 1 } }) },
+				{ fieldname: "packing_type", fieldtype: "Data", label: "Packing Type" },
+				{ fieldname: "no_of_logs", fieldtype: "Int", label: "No. of Logs (default)" },
+				{ fieldname: "size", fieldtype: "Data", label: "Size (default)" },
+			],
+			primary_action_label: "Start",
+			primary_action: (values) => {
+				const byOsi = {};
+				osiList.forEach((osi) => { byOsi[osi] = { stages: [], size: null, no_of_logs: null }; });
+				d.$wrapper.find(".ib-pd-bulk-stage-cell:checked").each(function () {
+					const $c = $(this);
+					byOsi[$c.data("osi")].stages.push($c.data("stage"));
+				});
+				d.$wrapper.find(".ib-pd-bulk-size").each(function () {
+					const $c = $(this);
+					const v = $c.val().trim();
+					if (v) byOsi[$c.data("osi")].size = v;
+				});
+				d.$wrapper.find(".ib-pd-bulk-logs").each(function () {
+					const $c = $(this);
+					const v = $c.val();
+					if (v !== "") byOsi[$c.data("osi")].no_of_logs = v;
+				});
+				const item_stages = osiList.map((osi) => ({
+					order_sheet_item: osi, stages: byOsi[osi].stages,
+					size: byOsi[osi].size, no_of_logs: byOsi[osi].no_of_logs,
+				}));
+				if (!item_stages.some((r) => r.stages.length)) {
+					frappe.show_alert({ message: "Pick at least one stage for at least one item.", indicator: "orange" });
+					return;
+				}
+				d.get_primary_btn().prop("disabled", true).text("Starting…");
+				frappe.call({
+					method: "instabiz.overrides.production.bulk_start_item_stages",
+					args: {
+						item_stages: JSON.stringify(item_stages),
+						brand: values.brand, core: values.core, ctn: values.ctn,
+						shrink_film: values.shrink_film, no_of_logs: values.no_of_logs,
+						packing_type: values.packing_type, size: values.size,
+					},
+					callback: (r) => {
+						d.hide();
+						if (r.exc || !r.message) {
+							frappe.show_alert({ message: "Bulk start failed.", indicator: "red" });
+							return;
+						}
+						this._show_bulk_start_results(r.message);
+						this._plan_bulk_selected.clear();
+						this._update_bulk_start_toolbar();
+						this.refresh();
+					},
+					error: () => {
+						d.get_primary_btn().prop("disabled", false).text("Start");
+					},
+				});
+			},
+		});
+		d.show();
+	}
+
+	// Finds a selected item's own row data (item_code, next_stage_suggestion)
+	// out of the currently-loaded plan page — used only to build the bulk
+	// dialog's subtitle/default stage, never sent back to the server.
+	_find_plan_item(osi) {
+		for (const os of this._plan_all_rows || []) {
+			const hit = (os.items || []).find((it) => it.name === osi);
+			if (hit) return hit;
+		}
+		return null;
+	}
+
+	// Plain results summary after a bulk start — how many (item, stage) pairs
+	// actually started vs. were skipped (packing details not captured) vs.
+	// failed (e.g. stage not valid at this location), so a partial result
+	// is never silently indistinguishable from full success.
+	_show_bulk_start_results(result) {
+		const lines = [`<strong>${result.started}</strong> started`];
+		if (result.skipped) lines.push(`<strong>${result.skipped}</strong> skipped (packing details not captured)`);
+		if (result.failed) lines.push(`<strong>${result.failed}</strong> failed`);
+
+		const failedDetails = (result.details || []).filter((r) => r.status === "error");
+		const skippedDetails = (result.details || []).filter((r) => r.status === "skipped");
+		let detail_html = "";
+		if (skippedDetails.length) {
+			detail_html += `<div style="margin-top:8px"><strong>Skipped:</strong><ul style="margin:4px 0 0 18px">` +
+				skippedDetails.map((r) => `<li>${frappe.utils.escape_html(r.item_code)}</li>`).join("") + `</ul></div>`;
+		}
+		if (failedDetails.length) {
+			detail_html += `<div style="margin-top:8px"><strong>Failed:</strong><ul style="margin:4px 0 0 18px">` +
+				failedDetails.map((r) => `<li>${frappe.utils.escape_html(r.item_code)} — ${frappe.utils.escape_html(r.stage)}: ${frappe.utils.escape_html(r.message || "")}</li>`).join("") + `</ul></div>`;
+		}
+
+		frappe.msgprint({
+			title: "Bulk Start Results",
+			indicator: result.failed ? "orange" : "green",
+			message: `<div>${lines.join(" · ")}</div>${detail_html}`,
 		});
 	}
 
@@ -1337,67 +1644,67 @@ class IBProductionDashboard {
 				flex-wrap: wrap;
 				margin-bottom: 12px;
 			}
+			.ib-pd-bulk-bar {
+				position: fixed;
+				left: 50%;
+				bottom: 20px;
+				transform: translateX(-50%);
+				z-index: 100;
+				display: flex;
+				align-items: center;
+				gap: 12px;
+				background: var(--text-color, #1e293b);
+				color: #fff;
+				padding: 10px 14px 10px 18px;
+				border-radius: 10px;
+				box-shadow: 0 8px 24px rgba(0,0,0,.22), 0 2px 6px rgba(0,0,0,.12);
+			}
+			.ib-pd-bulk-bar-count {
+				font-size: 13px;
+				font-weight: 600;
+				white-space: nowrap;
+			}
+			.ib-pd-bulk-bar #ib-pd-bulk-clear-btn {
+				background: transparent;
+				border: 1px solid rgba(255,255,255,.3);
+				color: #fff;
+			}
+			.ib-pd-bulk-bar #ib-pd-bulk-clear-btn:hover { background: rgba(255,255,255,.1); }
 			.ib-pd-filter-group--search {
 				display: flex;
 				align-items: center;
 				gap: 8px;
-				background: var(--card-bg, #fff);
-				border: 1px solid var(--border-color, #e2e8f0);
-				border-radius: 8px;
-				padding: 7px 12px;
+				background: var(--control-bg, var(--card-bg, #fff));
+				border: 1px solid var(--border-color, #d1d8dd);
+				border-radius: var(--border-radius-sm, 6px);
+				padding: 0 10px;
+				height: var(--input-height, 28px);
 				flex: 1 1 280px;
 				max-width: 360px;
 				margin-bottom: 0;
-			}
-			.ib-pd-filter-group--priority {
-				display: flex;
-				align-items: center;
-				gap: 8px;
-				background: var(--card-bg, #fff);
-				border: 1px solid var(--border-color, #e2e8f0);
-				border-radius: 8px;
-				padding: 7px 12px;
-				flex: 0 0 auto;
-			}
-			.ib-pd-priority-select {
-				border: none;
-				outline: none;
-				background: none;
-				font-size: 12.5px;
-				font-weight: 600;
-				color: var(--text-color, #1e293b);
-				cursor: pointer;
-				padding: 0 2px;
-			}
-			.ib-pd-filter-group--hide-done {
-				display: flex;
-				align-items: center;
-				gap: 7px;
-				background: var(--card-bg, #fff);
-				border: 1px solid var(--border-color, #e2e8f0);
-				border-radius: 8px;
-				padding: 7px 12px;
-				flex: 0 0 auto;
-				cursor: pointer;
-				font-size: 12.5px;
-				font-weight: 600;
-				color: var(--text-color, #1e293b);
-				user-select: none;
-			}
-			.ib-pd-filter-group--hide-done input[type="checkbox"] {
-				cursor: pointer;
-				accent-color: var(--ib-primary, #d97757);
 			}
 			.ib-pd-search-input {
 				border: none;
 				outline: none;
 				background: none;
 				flex: 1;
-				font-size: 13px;
+				font-size: 12.5px;
 				color: var(--text-color, #1e293b);
 				padding: 0;
+				height: 100%;
 			}
 			.ib-pd-search-input::placeholder { color: var(--text-muted, #6b7280); }
+			/* Native frappe.ui.form.make_control Select filters (Priority/Stage) —
+			   markup + styling come straight from Frappe's own control system;
+			   this only constrains width so they sit compactly in the toolbar
+			   row instead of stretching full-width. */
+			.ib-pd-native-filter {
+				flex: 0 0 150px;
+				max-width: 150px;
+			}
+			.ib-pd-native-filter .form-control {
+				font-size: 12.5px;
+			}
 			.ib-pd-kpi-row {
 				display: flex;
 				gap: 16px;
@@ -1580,27 +1887,27 @@ class IBProductionDashboard {
 			}
 			.ib-pd-plan-card {
 				background: var(--card-bg, #fff);
-				border: 1px solid var(--border-color, #e2e8f0);
-				border-radius: 10px;
-				margin-bottom: 10px;
+				border: 1px solid var(--border-color, #eef1f5);
+				border-radius: 14px;
+				margin-bottom: 12px;
 				overflow: hidden;
-				box-shadow: 0 1px 3px rgba(0,0,0,.04);
-				transition: box-shadow .15s;
+				box-shadow: 0 1px 2px rgba(15,23,42,.04);
+				transition: box-shadow .18s, border-color .18s;
 			}
-			.ib-pd-plan-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,.07); }
+			.ib-pd-plan-card:hover { box-shadow: 0 8px 20px rgba(15,23,42,.07); border-color: var(--border-color, #e2e8f0); }
 			.ib-pd-plan-header {
 				display: flex;
 				align-items: flex-start;
-				padding: 13px 16px;
-				background: var(--subtle-fg, #f8fafc);
-				border-bottom: 1px solid var(--border-color, #e2e8f0);
+				padding: 15px 18px;
+				background: var(--card-bg, #fff);
+				border-bottom: 1px solid var(--border-color, #f1f5f9);
 				flex-wrap: wrap;
 				row-gap: 8px;
 				column-gap: 12px;
 				cursor: pointer;
 				transition: background .12s;
 			}
-			.ib-pd-plan-header:hover { background: var(--border-color, #e2e8f0); }
+			.ib-pd-plan-header:hover { background: var(--subtle-fg, #fafbfc); }
 			.ib-pd-plan-start {
 				display: flex;
 				align-items: flex-start;
@@ -1734,67 +2041,89 @@ class IBProductionDashboard {
 				align-items: center;
 			}
 			.ib-pd-plan-columns {
-				padding: 8px 16px;
-				margin-bottom: 6px;
-				font-size: 10.5px;
+				padding: 6px 18px;
+				margin-bottom: 8px;
+				font-size: 10px;
 				font-weight: 700;
 				text-transform: uppercase;
-				letter-spacing: .06em;
-				color: var(--text-muted, #6b7280);
+				letter-spacing: .07em;
+				color: var(--text-muted, #94a3b8);
 			}
 			.ib-pd-plan-row {
-				padding: 11px 16px;
+				padding: 13px 18px;
 				background: var(--card-bg, #fff);
-				border-top: 1px solid var(--border-color, #f1f5f9);
+				border-top: 1px solid var(--border-color, #f4f6f8);
 				transition: background .12s;
 			}
 			.ib-pd-plan-row:first-child { border-top: none; }
-			.ib-pd-plan-row:hover { background: var(--subtle-fg, #f8fafc); }
+			.ib-pd-plan-row:hover { background: color-mix(in srgb, var(--ib-primary, #d97757) 4%, var(--card-bg, #fff)); }
 			.ib-pd-plan-row-cell { min-width: 0; }
-			.ib-pd-plan-row-qty { font-size: 12.5px; font-weight: 600; color: var(--text-color, #1e293b); }
+			.ib-pd-plan-row-qty { font-size: 12.5px; font-weight: 600; color: var(--text-color, #1e293b); font-variant-numeric: tabular-nums; }
 			.ib-pd-plan-row-uom {
 				font-size: 10px; font-weight: 600; text-transform: uppercase;
-				color: var(--text-muted, #6b7280); margin-left: 2px;
+				color: var(--text-muted, #94a3b8); margin-left: 2px;
 			}
 			.ib-pd-plan-row-adj {
-				font-size: 9.5px; font-weight: 600; white-space: nowrap;
-				color: #c2410c; margin-top: 2px;
+				font-size: 9.5px; font-weight: 700; white-space: nowrap;
+				color: #c2410c; margin-top: 3px; letter-spacing: .02em;
 			}
 			.ib-pd-plan-row-stage-label {
 				font-size: 12px; font-weight: 600; color: var(--text-color, #1e293b);
-				margin-bottom: 5px;
+				margin-bottom: 6px;
 			}
-			.ib-pd-stg-pills { display: flex; gap: 3px; flex-wrap: wrap; }
+			.ib-pd-live-pulse {
+				vertical-align: middle;
+				margin-left: 5px;
+				overflow: visible;
+			}
+			.ib-pd-live-pulse-dot {
+				fill: #10b981;
+			}
+			.ib-pd-live-pulse-ring {
+				fill: none;
+				stroke: #10b981;
+				stroke-width: 1.5;
+				transform-origin: 6px 6px;
+				animation: ib-pd-pulse-ring 1.8s ease-out infinite;
+			}
+			@keyframes ib-pd-pulse-ring {
+				0%   { transform: scale(.45); opacity: .9; }
+				70%  { transform: scale(1.4); opacity: 0; }
+				100% { transform: scale(1.4); opacity: 0; }
+			}
+			@media (prefers-reduced-motion: reduce) {
+				.ib-pd-live-pulse-ring { animation: none; opacity: .35; }
+			}
+			.ib-pd-stg-pills { display: flex; gap: 4px; flex-wrap: wrap; }
 			.ib-pd-stg-chip {
-				font-size: 10px;
+				font-size: 9.5px;
 				font-weight: 700;
-				border-radius: 4px;
-				padding: 2px 5px;
+				border-radius: 20px;
+				padding: 2.5px 8px;
 				letter-spacing: .03em;
 				cursor: default;
 			}
-			.ib-pd-stg--done    { background: #d1fae5; color: #065f46; }
-			.ib-pd-stg--inprog  { background: #dbeafe; color: #1e3a8a; }
-			.ib-pd-stg--pending { background: #f1f5f9; color: #64748b; }
-			.ib-pd-plan-row-progress { display: flex; align-items: center; gap: 8px; }
+			.ib-pd-stg--done    { background: #dcfce7; color: #15803d; }
+			.ib-pd-stg--inprog  { background: #dbeafe; color: #1d4ed8; }
+			.ib-pd-stg--pending { background: var(--subtle-fg, #f1f5f9); color: #94a3b8; }
+			.ib-pd-plan-row-progress { display: flex; align-items: center; gap: 9px; }
 			.ib-pd-prog-bar-wrap {
-				height: 8px;
-				background: var(--subtle-fg, #f1f5f9);
-				border: 1px solid var(--border-color, #e2e8f0);
-				border-radius: 4px;
+				height: 6px;
+				background: var(--subtle-fg, #eef1f5);
+				border-radius: 20px;
 				overflow: hidden;
 				flex: 1 1 auto;
 				min-width: 40px;
 			}
 			.ib-pd-prog-bar {
 				height: 100%;
-				background: #059669;
-				border-radius: 3px;
+				background: linear-gradient(90deg, #059669, #10b981);
+				border-radius: 20px;
 				transition: width .3s;
 			}
 			.ib-pd-prog-pct {
-				font-size: 11px; font-weight: 600; color: var(--text-color, #1e293b);
-				flex-shrink: 0; min-width: 30px; text-align: right;
+				font-size: 11px; font-weight: 600; color: var(--text-muted, #64748b);
+				flex-shrink: 0; min-width: 30px; text-align: right; font-variant-numeric: tabular-nums;
 			}
 			.ib-pd-row-actions {
 				display: flex;
@@ -1802,31 +2131,42 @@ class IBProductionDashboard {
 				gap: 5px;
 				flex-wrap: wrap;
 			}
+			.ib-pd-row-select {
+				display: inline-flex;
+				align-items: center;
+				margin: 0;
+				cursor: pointer;
+			}
+			.ib-pd-row-select input { cursor: pointer; margin: 0; }
 			.ib-pd-row-btn {
 				background: var(--card-bg, #fff);
 				border: 1px solid var(--border-color, #e2e8f0);
-				border-radius: 5px;
-				padding: 3px 9px;
+				border-radius: 20px;
+				padding: 4px 12px;
 				font-size: 11px;
 				font-weight: 600;
 				color: var(--text-color, #1e293b);
 				cursor: pointer;
-				transition: background .12s, border-color .12s;
+				transition: background .12s, border-color .12s, box-shadow .12s;
 			}
 			.ib-pd-row-btn:hover { background: var(--subtle-fg, #f8fafc); border-color: var(--ib-primary, #d97757); }
 			.ib-pd-row-btn--primary {
 				background: var(--ib-primary, #d97757);
 				border-color: var(--ib-primary, #d97757);
 				color: #fff;
+				box-shadow: 0 1px 2px rgba(217,119,87,.25);
 			}
-			.ib-pd-row-btn--primary:hover { background: #c4623e; }
+			.ib-pd-row-btn--primary:hover { background: #c4623e; border-color: #c4623e; box-shadow: 0 2px 6px rgba(217,119,87,.35); }
 			.ib-pd-row-done {
 				display: inline-flex;
 				align-items: center;
-				gap: 3px;
+				gap: 4px;
 				font-size: 11px;
 				font-weight: 600;
-				color: #059669;
+				color: #15803d;
+				background: #dcfce7;
+				border-radius: 20px;
+				padding: 4px 10px;
 			}
 			@media (max-width: 640px) {
 				.ib-pd-plan-header { flex-direction: column; align-items: stretch; }
@@ -3496,8 +3836,13 @@ class IBProductionStages {
 		$panel.on("click", "#ib-wo-assign-machine", () => this._assign_machine_to_wo(wo, stage_key));
 		guarded("#ib-wo-start", () => this._update_wo_status(wo, "In Progress", stage_key));
 		guarded("#ib-wo-hold", () => this._update_wo_status(wo, "On Hold", stage_key));
-		guarded("#ib-wo-advance", () => this._advance_wo(wo, stage_key));
-		guarded("#ib-wo-complete", () => this._update_wo_status(wo, "Completed", stage_key));
+		// Advance/Complete open a dialog first (asks actual output → wastage),
+		// same reasoning as Assign Machine just above for staying unwrapped by
+		// guarded() — the real RPC (and its own disabled-state handling) only
+		// fires from the dialog's primary action; wrapping the opening click
+		// would strand the button disabled forever if the dialog is cancelled.
+		$panel.on("click", "#ib-wo-advance", () => _prompt_actual_output(wo, (qty) => this._advance_wo(wo, stage_key, qty)));
+		$panel.on("click", "#ib-wo-complete", () => _prompt_actual_output(wo, (qty) => this._update_wo_status(wo, "Completed", stage_key, qty)));
 		$panel.on("click", "#ib-wo-adjust-qty", (e) => { e.preventDefault(); this._show_adjust_qty_dialog(wo, stage_key); });
 	}
 
@@ -3695,7 +4040,7 @@ class IBProductionStages {
 		this._wo_dialog.$body.find(".ib-ps-panel-primary, #ib-wo-hold").prop("disabled", false);
 	}
 
-	_update_wo_status(wo, new_status, stage_key) {
+	_update_wo_status(wo, new_status, stage_key, actual_qty) {
 		const method_map = {
 			"In Progress": "instabiz.overrides.production.start_work_order",
 			"On Hold": "instabiz.overrides.production.hold_work_order",
@@ -3703,9 +4048,11 @@ class IBProductionStages {
 		};
 		const method = method_map[new_status];
 		if (!method) return;
+		const args = { work_order: wo.name };
+		if (new_status === "Completed" && actual_qty !== undefined) args.actual_qty = actual_qty;
 		frappe.call({
 			method,
-			args: { work_order: wo.name },
+			args,
 			callback: (r) => {
 				if (r.exc) {
 					frappe.show_alert({ message: `Failed to set status to ${new_status}.`, indicator: "red" });
@@ -3732,10 +4079,12 @@ class IBProductionStages {
 	// action from the operator's side, not a dead end they have to go find
 	// a different button for. Only the last stage (Packing, via
 	// #ib-wo-complete/_update_wo_status instead) has nothing left to prompt.
-	_advance_wo(wo, stage_key) {
+	_advance_wo(wo, stage_key, actual_qty) {
+		const args = { work_order: wo.name };
+		if (actual_qty !== undefined) args.actual_qty = actual_qty;
 		frappe.call({
 			method: "instabiz.overrides.production.advance_to_next_stage",
-			args: { work_order: wo.name },
+			args,
 			callback: (r) => {
 				if (r.exc || !r.message || r.message.status !== "ok") {
 					frappe.show_alert({ message: r.message?.message || "Failed to advance.", indicator: "red" });

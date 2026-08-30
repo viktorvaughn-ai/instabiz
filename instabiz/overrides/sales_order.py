@@ -198,6 +198,37 @@ def reopen_sales_order(name):
 
 # ── Mapper: Sales Order → Delivery Note ──────────────────────────────────────
 
+def _dn_qty_adjustment_note(sales_order_item):
+    """If production's Adjust Qty reconciliation (pcs_to_make/logs_to_make,
+    see production.py's update_production_qty) set a value different from
+    what was originally planned for this SO Item's Work Orders, return a
+    human note describing it ("Packing: 100 → 95 PCS") so it isn't invisible
+    on the Delivery Note — same "from → to" language the Production
+    Dashboard's own adj badge already uses (_render_plan in
+    ib_production_dashboard.js), just surfaced here too. Does not change the
+    DN's own delivered qty — informational only. Returns None if this SO
+    Item has no linked production, or nothing was ever adjusted."""
+    osi = frappe.db.get_value(
+        "IB Order Sheet Item", {"sales_order_item": sales_order_item}, "name"
+    )
+    if not osi:
+        return None
+
+    wos = frappe.db.get_all(
+        "IB Work Order",
+        filters={"order_sheet_item": osi, "status": ["!=", "Cancelled"]},
+        fields=["stage", "target_qty", "target_uom", "pcs_to_make", "logs_to_make"],
+    )
+    lines = []
+    for wo in wos:
+        adjusted = wo.pcs_to_make if wo.target_uom == "PCS" else wo.logs_to_make if wo.target_uom == "SQMT" else None
+        if adjusted and adjusted != wo.target_qty:
+            lines.append(f"{wo.stage}: {wo.target_qty} → {adjusted} {wo.target_uom}")
+    if not lines:
+        return None
+    return "Qty adjusted in production — " + " | ".join(lines)
+
+
 @frappe.whitelist()
 def custom_make_delivery_note(source_name, target_doc=None, item_code=None, order_sheet_item=None):
     """Map a Sales Order to a Delivery Note.
@@ -243,6 +274,9 @@ def custom_make_delivery_note(source_name, target_doc=None, item_code=None, orde
         item_postprocess(source_item, target_item, source_doc)
         if _dn_warehouse:
             target_item.warehouse = _dn_warehouse
+        note = _dn_qty_adjustment_note(source_item.name)
+        if note:
+            target_item.custom_qty_adjustment_note = note
 
     return get_mapped_doc(
         "Sales Order",

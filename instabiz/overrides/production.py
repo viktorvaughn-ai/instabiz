@@ -1205,10 +1205,36 @@ def start_work_order(work_order):
 		frappe.db.sql("SELECT RELEASE_LOCK(%s)", lock_name)
 
 
+def _compute_completion_qty(doc, actual_qty):
+	"""Resolve (qty_done, wastage_qty, wastage_pct) for a WO being completed.
+
+	actual_qty is the operator-entered real output (from the "Complete
+	Stage" dialog's "Actual Output" prompt) — the first real wastage-capture
+	path in the system. wastage = target_qty - actual_qty, clamped at 0
+	(over-target output is not negative wastage). When actual_qty isn't
+	given at all (older/API callers that predate the prompt), falls back to
+	the pre-existing behavior: qty_done = target_qty, wastage stays 0/
+	unmeasured — same as before this existed, not asserted as a real zero.
+	"""
+	if actual_qty is not None:
+		qty_done = flt(actual_qty)
+		target = flt(doc.target_qty)
+		wastage_qty = max(target - qty_done, 0.0)
+		wastage_pct = round((wastage_qty / target) * 100, 2) if target else 0.0
+		return qty_done, wastage_qty, wastage_pct
+	# completed_qty is never otherwise populated (IB Production Entry is
+	# unused by design) — fall back to target_qty so the WO/Order Sheet Item
+	# actually reach "Completed" status.
+	return (flt(doc.completed_qty) or flt(doc.target_qty)), 0.0, 0.0
+
+
 @frappe.whitelist()
-def complete_work_order(work_order):
-	"""Set status=Completed, record completed_at. Also updates Order Sheet Item status."""
+def complete_work_order(work_order, actual_qty=None):
+	"""Set status=Completed, record completed_at + real output/wastage
+	(when actual_qty is given). Also updates Order Sheet Item status."""
 	_require_production_role()
+	if actual_qty is not None and flt(actual_qty) < 0:
+		frappe.throw(_("Actual output cannot be negative."))
 	lock_name = f"IB-WO-{work_order}"
 	locked = frappe.db.sql("SELECT GET_LOCK(%s, 5)", lock_name)[0][0]
 	if not locked:
@@ -1224,24 +1250,27 @@ def complete_work_order(work_order):
 				)
 			)
 		completed_at = now()
-		# completed_qty is never populated (IB Production Entry is unused by design) — fall back
-		# to target_qty so the WO/Order Sheet Item actually reach "Completed" status.
-		qty_done = flt(doc.completed_qty) or flt(doc.target_qty)
+		qty_done, wastage_qty, wastage_pct = _compute_completion_qty(doc, actual_qty)
 		doc.completed_at = completed_at
 		doc.completed_qty = qty_done
+		doc.wastage_qty = wastage_qty
+		doc.wastage_pct = wastage_pct
 		# apply_workflow saves the doc via the IB Work Order Workflow, which fires
 		# standard Document events — IB Work Order.on_update (on_work_order_update_notify)
 		# runs automatically, no manual call needed.
 		apply_workflow(doc, "Complete")
 		# apply_workflow() internally does frappe.get_doc(doc).load_from_db() before
 		# applying the transition — load_from_db() re-inits every field from the DB
-		# row, silently discarding the completed_at/completed_qty we just set above
-		# in memory (doc.save() inside apply_workflow then persists the DISCARDED/
-		# stale values, not ours). Confirmed live: real WOs completed since the
-		# apply_workflow migration (2026-07-30) have completed_qty=0/completed_at=
-		# NULL despite this function's own return value claiming otherwise. Set
-		# them explicitly after the transition so they actually persist.
-		frappe.db.set_value("IB Work Order", doc.name, {"completed_at": completed_at, "completed_qty": qty_done})
+		# row, silently discarding the completed_at/completed_qty/wastage_* we just
+		# set above in memory (doc.save() inside apply_workflow then persists the
+		# DISCARDED/stale values, not ours). Confirmed live: real WOs completed
+		# since the apply_workflow migration (2026-07-30) have completed_qty=0/
+		# completed_at=NULL despite this function's own return value claiming
+		# otherwise. Set them explicitly after the transition so they persist.
+		frappe.db.set_value("IB Work Order", doc.name, {
+			"completed_at": completed_at, "completed_qty": qty_done,
+			"wastage_qty": wastage_qty, "wastage_pct": wastage_pct,
+		})
 
 		# Update Order Sheet Item completed_qty and status
 		if doc.order_sheet and doc.item_code:
@@ -1251,7 +1280,7 @@ def complete_work_order(work_order):
 
 		frappe.db.commit()
 		_notify_floor_update()
-		return {"status": "ok", "completed_at": completed_at}
+		return {"status": "ok", "completed_at": completed_at, "wastage_qty": wastage_qty}
 	finally:
 		frappe.db.sql("SELECT RELEASE_LOCK(%s)", lock_name)
 
@@ -1372,9 +1401,20 @@ def get_dpr(date=None):
 		as_dict=True,
 	)
 
+	# Output is kept broken down by UOM everywhere below, never blended into
+	# one scalar — a Work Order's target_uom varies by item (PCS/SQMT/ROLL/KG
+	# all occur), and summing e.g. "288 PCS + 2148 SQMT" into a bare "2436"
+	# is not a real unit of anything. Every qty this function returns is
+	# {uom, qty} pairs; a caller that wants one number still has to pick a
+	# UOM, which is the point — there is no unit-agnostic "total output".
+	summary_by_uom = {}
+	for r in rows:
+		uom = r.target_uom or "Unknown"
+		summary_by_uom[uom] = summary_by_uom.get(uom, 0.0) + flt(r.completed_qty)
+
 	summary = {
 		"wo_completed": len(rows),
-		"total_output": sum(flt(r.completed_qty) for r in rows),
+		"output_by_uom": [{"uom": u, "qty": q} for u, q in sorted(summary_by_uom.items())],
 		"total_hours": round(sum(flt(r.duration_min) for r in rows if r.duration_min) / 60, 2),
 	}
 
@@ -1384,17 +1424,22 @@ def get_dpr(date=None):
 	stage_data = {}
 	for r in rows:
 		stage = r.stage or "Unknown"
+		uom = r.target_uom or "Unknown"
 		sd = stage_data.setdefault(stage, {
-			"stage": stage, "wo_completed": 0, "output_qty": 0.0, "minutes": 0.0, "machines": {},
+			"stage": stage, "wo_completed": 0, "minutes": 0.0, "by_uom": {}, "machines": {},
 		})
 		sd["wo_completed"] += 1
-		sd["output_qty"] += flt(r.completed_qty)
 		sd["minutes"] += flt(r.duration_min) if r.duration_min else 0.0
+		su = sd["by_uom"].setdefault(uom, {"uom": uom, "wo_completed": 0, "output_qty": 0.0, "minutes": 0.0})
+		su["wo_completed"] += 1
+		su["output_qty"] += flt(r.completed_qty)
+		su["minutes"] += flt(r.duration_min) if r.duration_min else 0.0
 
 		mkey = r.machine or "Unassigned"
-		m = sd["machines"].setdefault(mkey, {"machine": mkey, "wo_completed": 0, "output_qty": 0.0})
+		m = sd["machines"].setdefault(mkey, {"machine": mkey, "wo_completed": 0, "by_uom": {}})
 		m["wo_completed"] += 1
-		m["output_qty"] += flt(r.completed_qty)
+		mu = m["by_uom"].setdefault(uom, {"uom": uom, "output_qty": 0.0})
+		mu["output_qty"] += flt(r.completed_qty)
 
 	ordered_stages = [s for s in STAGES if s in stage_data] + [s for s in stage_data if s not in STAGES]
 	stage_table = []
@@ -1402,13 +1447,27 @@ def get_dpr(date=None):
 	for stage in ordered_stages:
 		sd = stage_data[stage]
 		hours = round(sd["minutes"] / 60, 2)
-		machines = list(sd["machines"].values())
+		output = []
+		for uom in sorted(sd["by_uom"]):
+			su = sd["by_uom"][uom]
+			su_hours = round(su["minutes"] / 60, 2)
+			output.append({
+				"uom": uom,
+				"output_qty": su["output_qty"],
+				"hourly_avg": round(su["output_qty"] / su_hours, 2) if su_hours else 0.0,
+			})
+		machines = []
+		for m in sd["machines"].values():
+			machines.append({
+				"machine": m["machine"],
+				"wo_completed": m["wo_completed"],
+				"output": sorted(m["by_uom"].values(), key=lambda x: x["uom"]),
+			})
 		stage_table.append({
 			"stage": stage,
 			"wo_completed": sd["wo_completed"],
-			"output_qty": sd["output_qty"],
 			"hours": hours,
-			"hourly_avg": round(sd["output_qty"] / hours, 2) if hours else 0.0,
+			"output": output,
 			"machines": machines,
 		})
 		machine_breakdown[stage] = machines
@@ -1440,44 +1499,59 @@ def get_weekly_dpr(week_start=None, date=None):
 
 	week_end = add_days(week_start, 6)
 
+	# Grouped by day AND target_uom — same reasoning as get_dpr(): a bare
+	# SUM(completed_qty) across rows of different UOMs (PCS/SQMT/ROLL/...)
+	# isn't a real quantity of anything, so output is always kept as
+	# {uom, qty} pairs, never blended into one number.
 	wo_rows = frappe.db.sql(
 		"""
 		SELECT DATE(COALESCE(completed_at, modified)) AS day,
+			COALESCE(target_uom, 'Unknown') AS uom,
 			COUNT(*) AS wo_completed,
-			SUM(completed_qty) AS total_output_qty,
+			SUM(completed_qty) AS output_qty,
 			SUM(TIMESTAMPDIFF(MINUTE, started_at, completed_at)) AS total_minutes
 		FROM `tabIB Work Order`
 		WHERE status = 'Completed'
 			AND DATE(COALESCE(completed_at, modified)) BETWEEN %s AND %s
-		GROUP BY DATE(COALESCE(completed_at, modified))
+		GROUP BY DATE(COALESCE(completed_at, modified)), COALESCE(target_uom, 'Unknown')
 		""",
 		(week_start, week_end),
 		as_dict=True,
 	)
-	wo_row_map = {str(r.day): r for r in wo_rows}
+	day_map = {}
+	for r in wo_rows:
+		d = day_map.setdefault(str(r.day), {"wo_completed": 0, "minutes": 0.0, "by_uom": []})
+		d["wo_completed"] += r.wo_completed
+		d["minutes"] += flt(r.total_minutes)
+		d["by_uom"].append({"uom": r.uom, "qty": flt(r.output_qty)})
 
 	result = []
 	for i in range(7):
 		day = add_days(week_start, i)
 		day_str = str(day)
-		wr = wo_row_map.get(day_str)
+		dr = day_map.get(day_str)
 		result.append({
 			"date": day_str,
-			"wo_completed": wr.wo_completed if wr else 0,
-			"output_qty":   flt(wr.total_output_qty) if wr else 0.0,
-			"hours":        round(flt(wr.total_minutes) / 60, 2) if wr and wr.total_minutes else 0.0,
+			"wo_completed": dr["wo_completed"] if dr else 0,
+			"output_by_uom": sorted(dr["by_uom"], key=lambda x: x["uom"]) if dr else [],
+			"hours": round(dr["minutes"] / 60, 2) if dr else 0.0,
 		})
 
-	total_output = sum(d["output_qty"] for d in result)
+	total_by_uom = {}
+	for d in result:
+		for o in d["output_by_uom"]:
+			total_by_uom[o["uom"]] = total_by_uom.get(o["uom"], 0.0) + o["qty"]
 	days_with_data = sum(1 for d in result if d["wo_completed"] > 0)
-	avg_daily = round(total_output / days_with_data, 1) if days_with_data else 0.0
+	avg_daily_by_uom = [
+		{"uom": u, "qty": round(q / days_with_data, 1)} for u, q in sorted(total_by_uom.items())
+	] if days_with_data else []
 
 	return {
 		"week_start": str(week_start),
 		"week_end": str(week_end),
 		"summary": {
-			"total_output": total_output,
-			"avg_daily": avg_daily,
+			"output_by_uom": [{"uom": u, "qty": q} for u, q in sorted(total_by_uom.items())],
+			"avg_daily_by_uom": avg_daily_by_uom,
 		},
 		"days": result,
 	}
@@ -1569,7 +1643,7 @@ def _update_order_sheet_progress(order_sheet_name):
 
 
 @frappe.whitelist()
-def advance_to_next_stage(work_order):
+def advance_to_next_stage(work_order, actual_qty=None):
 	"""Complete the current Work Order's stage.
 
 	JIT stage model (2026-08-13, user's explicit decision): this used to also
@@ -1586,6 +1660,8 @@ def advance_to_next_stage(work_order):
 	real behavioral difference is the next_stage suggestion returned here.
 	"""
 	_require_production_role()
+	if actual_qty is not None and flt(actual_qty) < 0:
+		frappe.throw(_("Actual output cannot be negative."))
 	lock_name = f"IB-WO-{work_order}"
 	locked = frappe.db.sql("SELECT GET_LOCK(%s, 5)", lock_name)[0][0]
 	if not locked:
@@ -1615,19 +1691,22 @@ def advance_to_next_stage(work_order):
 			frappe.throw(_("Work Order {0} must be In Progress to advance. Current status: {1}").format(work_order, doc.status))
 
 		completed_at = now()
-		# completed_qty is never populated (IB Production Entry is unused by design) — fall back
-		# to target_qty so the WO/Order Sheet Item actually reach "Completed" status.
-		qty_done = flt(doc.completed_qty) or flt(doc.target_qty)
+		qty_done, wastage_qty, wastage_pct = _compute_completion_qty(doc, actual_qty)
 		doc.completed_at = completed_at
 		doc.completed_qty = qty_done
+		doc.wastage_qty = wastage_qty
+		doc.wastage_pct = wastage_pct
 		# apply_workflow saves the doc via the IB Work Order Workflow, which fires
 		# standard Document events — IB Work Order.on_update (on_work_order_update_notify)
 		# runs automatically, no manual call needed.
 		apply_workflow(doc, "Complete")
 		# See identical fix + comment in complete_work_order() — apply_workflow's
-		# internal load_from_db() discards the completed_at/completed_qty set
-		# above before its own doc.save(), so they must be persisted explicitly.
-		frappe.db.set_value("IB Work Order", doc.name, {"completed_at": completed_at, "completed_qty": qty_done})
+		# internal load_from_db() discards the completed_at/completed_qty/wastage_*
+		# set above before its own doc.save(), so they must be persisted explicitly.
+		frappe.db.set_value("IB Work Order", doc.name, {
+			"completed_at": completed_at, "completed_qty": qty_done,
+			"wastage_qty": wastage_qty, "wastage_pct": wastage_pct,
+		})
 		_update_order_sheet_item(doc.order_sheet, doc.item_code, qty_done,
 								 order_sheet_item=doc.order_sheet_item or None)
 		_update_order_sheet_progress(doc.order_sheet)
@@ -1778,6 +1857,111 @@ def start_item_stage(order_sheet_item, stage):
 		return {"status": "ok", "work_order": wo_name, "stage": stage, "machine": machine}
 	finally:
 		frappe.db.sql("SELECT RELEASE_LOCK(%s)", lock_name)
+
+
+@frappe.whitelist()
+def bulk_start_item_stages(item_stages, brand=None, core=None, ctn=None,
+	shrink_film=None, no_of_logs=None, packing_type=None, size=None):
+	"""Start stage(s) on several Order Sheet Items in one call — e.g. one SKU
+	sold as several line items at different dimensions (width/color/etc),
+	each its own Order Sheet Item, all needing production kicked off
+	together instead of clicking Start Production once per row.
+
+	item_stages is a list of {order_sheet_item, stages} — deliberately
+	per-item, not one shared stage list for the whole batch: two selected
+	items can each be resting at a genuinely different point in their own
+	route (one brand new needing Coating first, another already past
+	Coating/Slitting and just resting between stages needing Rewinding
+	next) even though both show the same "Start Production" button — a
+	single shared stage picker applied to everyone would silently force the
+	wrong stage onto whichever items don't match it. The frontend defaults
+	each item's own picker to that item's own next_stage_suggestion, but
+	still sends one independent stage list per item so a user who leaves
+	them at their defaults gets each item's own correct next step, not one
+	guess applied to all.
+
+	Pure orchestration: every (item, stage) pair is still run through
+	start_item_stage() one at a time, so it gets that function's own
+	locking, location/route validation, and machine assignment exactly as
+	if started individually — no new write path. This is additive to the
+	JIT model, not a departure from it: start_item_stage stays the one place
+	a Work Order actually gets created/moved (see bulk_wo_action's
+	2026-08-13 removal note just below this function) — the old bulk
+	feature that got removed mass-flipped raw pre-created WO status
+	directly, from before the JIT model existed; this one never touches a
+	Work Order except through that same single entry point.
+
+	Every item's one-time packing-details form (custom_packing_captured) is
+	still required before its first stage — Brand/Core/CTN/Shrink Film/
+	Packing Type are asked here once for the whole batch, since
+	dimension-variants of one SKU almost always share those (real Item/
+	Brand links, not something normally re-picked per line). Size and
+	No. of Logs are different — those describe the physical line itself and
+	genuinely do vary per dimension-variant in practice (a 72-roll line and
+	a 24-roll line of the same base SKU don't share a log count), so each
+	row in item_stages MAY carry its own "size"/"no_of_logs" override; when
+	present it wins over the shared size/no_of_logs argument for that one
+	item, same "per-item beats shared default" reasoning as the stage list
+	above. Only items that don't have custom_packing_captured yet get any of
+	this written; an item that already captured its own (different) details
+	is left alone. If nothing (shared or per-item) is given, items missing
+	capture are skipped rather than saving an empty form silently.
+	"""
+	_require_production_role()
+	if isinstance(item_stages, str):
+		item_stages = json.loads(item_stages)
+	if not item_stages:
+		frappe.throw(_("No items selected."))
+
+	shared_given = any([brand, core, ctn, shrink_film, no_of_logs, packing_type, size])
+
+	results = []
+	started = 0
+	skipped = 0
+	failed = 0
+
+	for row in item_stages:
+		osi = row.get("order_sheet_item")
+		row_stages = row.get("stages") or []
+		row_size = row.get("size") or size
+		row_no_of_logs = row.get("no_of_logs") or no_of_logs
+		item_label = frappe.db.get_value("IB Order Sheet Item", osi, "item_code") or osi
+		if not row_stages:
+			results.append({"order_sheet_item": osi, "item_code": item_label, "status": "skipped",
+				"message": "No stage picked for this item."})
+			skipped += 1
+			continue
+		# Stable stage order (route order, not click order) — same reasoning
+		# _show_start_stage_dialog's frontend counterpart uses for a single item.
+		ordered_stages = [s for s in STAGES if s in row_stages]
+
+		captured = frappe.db.get_value("IB Order Sheet Item", osi, "custom_packing_captured")
+		if not captured:
+			if not shared_given and not row_size and not row_no_of_logs:
+				results.append({"order_sheet_item": osi, "item_code": item_label, "status": "skipped",
+					"message": "Packing details not captured yet — start this one individually first."})
+				skipped += 1
+				continue
+			save_packing_details(osi, brand=brand, core=core, ctn=ctn, shrink_film=shrink_film,
+				no_of_logs=row_no_of_logs, packing_type=packing_type, size=row_size)
+		for stage in ordered_stages:
+			try:
+				r = start_item_stage(osi, stage)
+				results.append({"order_sheet_item": osi, "item_code": item_label, "stage": stage,
+					"status": "ok", "machine": r.get("machine")})
+				started += 1
+			except Exception as e:
+				results.append({"order_sheet_item": osi, "item_code": item_label, "stage": stage,
+					"status": "error", "message": str(e)})
+				failed += 1
+
+	return {
+		"total_items": len(item_stages),
+		"started": started,
+		"skipped": skipped,
+		"failed": failed,
+		"details": results,
+	}
 
 
 @frappe.whitelist()
@@ -2010,11 +2194,31 @@ def get_production_plan(limit=None, start=0, location=None, search=None, priorit
 			# the Start dialog to. Route-aware: the first stage in the item's
 			# own route with no Completed WO yet (not just "first uncompleted
 			# WO", since under JIT most stages have no WO at all).
+			#
+			# Real bug fixed here (2026-08-30): "is this item fully done" used
+			# to be computed client-side by counting stage_map entries with a
+			# status at all — but under JIT, stage_map only ever has an entry
+			# per stage that's had a Work Order created, not per stage in the
+			# item's real route. An item that just finished stage 1 of a real
+			# 5-stage route has exactly one stage_map entry (Completed), so
+			# that old count read "1 of 1 done" — 100% — and with "Hide
+			# completed items" on by default (it is), the item vanished from
+			# the Active Production Plan entirely with no way to continue it,
+			# right after its very first stage. is_fully_done is now computed
+			# here, against the item's real route length, once — the
+			# frontend no longer guesses.
+			if item.item_code not in item_route_cache:
+				item_route_cache[item.item_code] = _get_stage_route(item.item_code, os.get("location"))
+			route = item_route_cache[item.item_code]
+			completed = {s for s in route if s in stage_map and stage_map[s].status == "Completed"}
+			item["is_fully_done"] = bool(route) and completed == set(route)
+			# Same real-route basis for progress % — the frontend previously
+			# divided by "stages with any WO at all", which is the identical
+			# bug as is_fully_done above and read 100% after just stage 1.
+			item["route_length"] = len(route)
+			item["route_completed_count"] = len(completed)
+
 			if not item["current_stage"]:
-				if item.item_code not in item_route_cache:
-					item_route_cache[item.item_code] = _get_stage_route(item.item_code, os.get("location"))
-				route = item_route_cache[item.item_code]
-				completed = {s for s in route if s in stage_map and stage_map[s].status == "Completed"}
 				item["next_stage_suggestion"] = next((s for s in route if s not in completed), None)
 			else:
 				item["next_stage_suggestion"] = None

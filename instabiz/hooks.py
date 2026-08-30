@@ -362,6 +362,18 @@ override_whitelisted_methods = {
     # Workspace shortcut role filtering
     "frappe.desk.desktop.get_desktop_page":
         "instabiz.overrides.workspace_filter.get_desktop_page",
+
+    # Native Script Report client-script patches (column hides etc.) —
+    # additive, chains the original script, see report_patches.py's own
+    # module docstring for why this doesn't edit the shipped .js directly.
+    "frappe.desk.query_report.get_script":
+        "instabiz.overrides.report_patches.get_script",
+
+    # Native Script Report data patches (extra columns computed from data
+    # this app has but the native report doesn't know about) — runs the
+    # report's own native query first, only appends on top.
+    "frappe.desk.query_report.run":
+        "instabiz.overrides.report_patches.run",
 }
 
 # Exposes Python functions directly as Jinja globals (by function name, not
@@ -397,6 +409,7 @@ app_include_js  = [
     "/assets/instabiz/js/list_utils.js",            # shared list view helpers (status multiselect, extract filter values)
     "/assets/instabiz/js/comment_popover.js",       # inline comment popover on list rows
     "/assets/instabiz/js/ib_list_print.js",         # shared list view print utility
+    "/assets/instabiz/js/report_export.js",         # global: select rows on any Script Report -> branded PDF export
     "/assets/instabiz/js/ib_dash_utils.js",         # dashboard shared: countUp loader, skeleton helpers, fmt
     "/assets/instabiz/js/so_production_panel.js",  # SO form: production stage + dispatch status panel
     # ib_stock_dashboard.js is loaded by Frappe's page engine (not global)

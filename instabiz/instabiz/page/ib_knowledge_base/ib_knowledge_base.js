@@ -2460,6 +2460,20 @@ const KB_SECTIONS = [
 				],
 				note: "Additive by design — Sales Order's own Location field and everything downstream of it (GST, e-way bill, naming) is completely untouched. A machine with no Floor set keeps working exactly as before; only machines you explicitly assign a Floor to get stage-restricted. Scoped to Gujarat for now — Maharashtra/Chennai stay warehouse-only until one of them gets real factory floors of its own.",
 			},
+			{
+				num: "PROD-32", title: "Bulk Start Production — Several Lines at Once (New, 2026-08-30)",
+				desc: "One SKU sold as several separate line items at different dimensions (width/color/etc) is common — clicking Start Production once per row was slow. A checkbox now appears next to Start Production on the Active Production Plan (Dashboard tab); tick several and a Bulk Start button appears in the toolbar. The dialog shows one grid — a row per ticked line, a column per stage — each row pre-checked with that item's own next stage, since two ticked items can genuinely be at different points even though both show the same button (adjust any row individually before starting). For lines that haven't had their one-time packing-details form filled in yet, fill it in once in the same dialog and it's applied to every line that needs it. Every (item, stage) pair still goes through the exact same single-item start path under the hood, one at a time, so nothing about how a Work Order actually gets created changes.",
+				link: "/app/ib-production-dashboard", linkLabel: "Open Production",
+				tags: "bulk start production multiple lines same sku dimension variant checkbox mass start batch per item stage grid",
+				steps: [
+					"Active Production Plan (Dashboard tab): tick the checkbox next to any row still showing Start Production.",
+					"Toolbar's Bulk Start (N) button appears — click it.",
+					"Each ticked item's row comes pre-checked with its own suggested next stage — tick/untick any cell to change what starts on that specific item.",
+					"If any ticked line hasn't captured packing details yet, fill in Brand/Core/CTN/etc once — applied to every line missing it; a line that already has its own is left untouched. Leave blank to skip those lines instead (start them individually to fill this in there).",
+					"Results show how many started / were skipped / failed, then the plan refreshes.",
+				],
+				note: "Delivery Note now shows it too: if production's Adjust Qty reconciliation (Work Order side panel → ⋯ → Adjust Qty) ever differs from the originally planned quantity, the Delivery Note created from that order carries a Qty Adjustment note on the line (e.g. \"Packing: 100 → 95 PCS\") — informational only, the delivered qty itself is unchanged.",
+			},
 		],
 	},
 	{

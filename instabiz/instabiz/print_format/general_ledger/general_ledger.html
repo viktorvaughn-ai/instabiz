@@ -78,9 +78,18 @@
 {% var _total_dr = _entry_rows.reduce(function(s,r){ return s + (r.debit  || 0); }, 0); %}
 {% var _total_cr = _entry_rows.reduce(function(s,r){ return s + (r.credit || 0); }, 0); %}
 {% var _net      = _total_dr - _total_cr; %}
-{% var _open_rows = data.filter(function(r){ return _isSummary(r) && _clean(r.account) === "Opening"; }); %}
-{% var _open_dr   = _open_rows.reduce(function(s,r){ return s + (r.debit  || 0); }, 0); %}
-{% var _open_cr   = _open_rows.reduce(function(s,r){ return s + (r.credit || 0); }, 0); %}
+{% /* This engine has no {# #} comment syntax - unrecognized text outside
+   {% %}/{{ }} gets wrapped into a JS string literal by the compiler, and an
+   apostrophe in it breaks that string (silent SyntaxError, print just dies).
+   Real note: the native GL report emits one account = Opening pseudo-row per
+   account/group shown, not once overall - see get_data_with_opening_closing
+   in erpnext general_ledger.py. The true global opening balance is always
+   the very first row in the array. Summing every Opening-labelled row (the
+   old bug here) multi-counts it once per account whenever the print spans
+   more than one account, inflating Balance b/f. Take only the first match. */ %}
+{% var _open_row = data.find(function(r){ return _isSummary(r) && _clean(r.account) === "Opening"; }); %}
+{% var _open_dr   = (_open_row && _open_row.debit)  || 0; %}
+{% var _open_cr   = (_open_row && _open_row.credit) || 0; %}
 {% var _open_bal  = _open_dr - _open_cr; %}
 
 <div class="wrap">
@@ -172,7 +181,7 @@
       {% endif %}
       {% endif %}
       {% endfor %}
-      {% if (_open_rows.length > 0) { %}
+      {% if (_open_row) { %}
       <tr class="op-row" style="border-top:1.5px solid #d6c8c0;">
         <td></td>
         <td class="vt">Opening</td>
@@ -197,6 +206,13 @@
         <td class="r">{{ _fmtN(_total_cr) }}</td>
         <td class="r">
           {{ _fmtN(_net) }}&nbsp;{% if (_net !== 0) { %}<span style="font-size:7pt;font-weight:400">{{ _net > 0 ? "Dr" : "Cr" }}</span>{% endif %}
+        </td>
+      </tr>
+      {% var _closing_bal = _open_bal + _net; %}
+      <tr>
+        <td colspan="8">Closing Balance (Opening + Total)</td>
+        <td class="r">
+          {{ _fmtN(_closing_bal) }}&nbsp;{% if (_closing_bal !== 0) { %}<span style="font-size:7pt;font-weight:400">{{ _closing_bal > 0 ? "Dr" : "Cr" }}</span>{% endif %}
         </td>
       </tr>
     </tfoot>

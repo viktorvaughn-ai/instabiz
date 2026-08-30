@@ -15,6 +15,12 @@ def execute(filters=None):
 	and never written by any real completion path (Production Entry
 	submission was the only place that ever set them, and it never fires) —
 	showing a wastage number here would misrepresent it as measured.
+
+	Output Qty carries a Unit column (target_uom) — a raw qty number with no
+	unit is meaningless (a Work Order's target_uom varies per item: PCS,
+	SQMT, ROLL, KG all occur), and the chart/summary below never sum across
+	rows of different units into one blended figure, same reasoning as
+	get_dpr()'s own output_by_uom split.
 	"""
 	columns = _columns()
 	data = _data(filters)
@@ -35,6 +41,7 @@ def _columns():
 		{"fieldname": "sales_order", "label": "Sales Order", "fieldtype": "Link", "options": "Sales Order", "width": 135},
 		{"fieldname": "customer_name", "label": "Customer", "fieldtype": "Data", "width": 150},
 		{"fieldname": "output_qty", "label": "Output Qty", "fieldtype": "Float", "width": 90},
+		{"fieldname": "target_uom", "label": "Unit", "fieldtype": "Data", "width": 70},
 		{"fieldname": "hours", "label": "Hours", "fieldtype": "Float", "width": 75},
 	]
 
@@ -63,7 +70,7 @@ def _data(filters):
 		f"""
 		SELECT wo.name AS work_order, DATE(COALESCE(wo.completed_at, wo.modified)) AS completed_date,
 		       wo.item_code, wo.stage, wo.machine, wo.operator, wo.order_sheet,
-		       wo.sales_order, wo.completed_qty AS output_qty,
+		       wo.sales_order, wo.completed_qty AS output_qty, wo.target_uom,
 		       TIMESTAMPDIFF(MINUTE, wo.started_at, wo.completed_at) / 60.0 AS hours
 		FROM `tabIB Work Order` wo
 		WHERE {conditions}
@@ -78,16 +85,26 @@ def _chart(data, filters=None):
 	if not data:
 		return None
 
-	stage_output = {}
+	# One dataset per UOM (not one blended series) — a stage that produced
+	# both PCS and SQMT work gets two bars, not one bar adding them together.
+	stages = []
+	stage_output = {}  # uom -> {stage -> qty}
 	for row in data:
 		s = row.stage or "Unknown"
-		stage_output[s] = flt(stage_output.get(s, 0)) + flt(row.output_qty)
+		if s not in stages:
+			stages.append(s)
+		uom = row.target_uom or "Unknown"
+		stage_output.setdefault(uom, {})
+		stage_output[uom][s] = flt(stage_output[uom].get(s, 0)) + flt(row.output_qty)
 
 	chart_type = (filters or {}).get("chart_type", "bar")
 	return {
 		"data": {
-			"labels": list(stage_output.keys()),
-			"datasets": [{"name": "Output Qty", "values": list(stage_output.values())}],
+			"labels": stages,
+			"datasets": [
+				{"name": f"Output ({uom})", "values": [by_stage.get(s, 0) for s in stages]}
+				for uom, by_stage in sorted(stage_output.items())
+			],
 		},
 		"type": chart_type,
 		"fieldtype": "Float",
@@ -98,10 +115,17 @@ def _summary(data):
 	if not data:
 		return []
 	total_entries = len(data)
-	total_output = sum(flt(r.output_qty) for r in data)
 	total_hours = round(sum(flt(r.hours) for r in data if r.hours), 2)
-	return [
+
+	output_by_uom = {}
+	for r in data:
+		uom = r.target_uom or "Unknown"
+		output_by_uom[uom] = output_by_uom.get(uom, 0.0) + flt(r.output_qty)
+
+	summary = [
 		{"value": total_entries, "label": "Work Orders Completed", "indicator": "blue", "datatype": "Int"},
-		{"value": round(total_output, 2), "label": "Total Output Qty", "indicator": "green", "datatype": "Float"},
-		{"value": total_hours, "label": "Total Hours", "indicator": "blue", "datatype": "Float"},
 	]
+	for uom, qty in sorted(output_by_uom.items()):
+		summary.append({"value": round(qty, 2), "label": f"Output — {uom}", "indicator": "green", "datatype": "Float"})
+	summary.append({"value": total_hours, "label": "Total Hours", "indicator": "blue", "datatype": "Float"})
+	return summary
