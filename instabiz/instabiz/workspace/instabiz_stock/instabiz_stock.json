@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"data\": {\"col\": 12, \"text\": \"<span class=\\\"h5\\\"><b>INVENTORY</b></span>\"}, \"id\": \"stk-h0\", \"type\": \"paragraph\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Live Stock Balance\"}, \"id\": \"stk-sb\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Item\"}, \"id\": \"bVRTGcBOwF\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Stock Reconciliation\"}, \"id\": \"stock-recon\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Inward Stock Transfer\"}, \"id\": \"stk-inward\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Container Import\"}, \"id\": \"stk-ctn\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Scan Stock\"}, \"id\": \"stk-scan\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Analytics Hub\"}, \"id\": \"stock-analytics-hub\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Follow-Ups\"}, \"id\": \"fu-shortcut\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Warehouse\"}, \"id\": \"UkqLemnryj\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 12, \"text\": \"<span class=\\\"h5\\\"><b>REPORTS</b></span>\"}, \"id\": \"stk-h1\", \"type\": \"paragraph\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Stock Ageing\"}, \"id\": \"stk-sa\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 12, \"text\": \"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\"}, \"id\": \"stk-h2\", \"type\": \"paragraph\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Knowledge Base\"}, \"id\": \"stk-kb\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 12, \"text\": \"<span class=\\\"h5\\\"><b>PLANNING</b></span>\"}, \"id\": \"ai-h\", \"type\": \"paragraph\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"ABC Analysis\"}, \"id\": \"ai-abc\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Demand Forecast\"}, \"id\": \"ai-dem\", \"type\": \"shortcut\"}]",
+ "content": "[{\"data\": {\"col\": 12, \"text\": \"<span class=\\\"h5\\\"><b>INVENTORY</b></span>\"}, \"id\": \"stk-h0\", \"type\": \"paragraph\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Live Stock Balance\"}, \"id\": \"stk-sb\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Item\"}, \"id\": \"bVRTGcBOwF\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Stock Reconciliation\"}, \"id\": \"stock-recon\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Inward Stock Transfer\"}, \"id\": \"stk-inward\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Container Import\"}, \"id\": \"stk-ctn\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Scan Stock\"}, \"id\": \"stk-scan\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Analytics Hub\"}, \"id\": \"stock-analytics-hub\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Follow-Ups\"}, \"id\": \"fu-shortcut\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Warehouse\"}, \"id\": \"UkqLemnryj\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 12, \"text\": \"<span class=\\\"h5\\\"><b>REPORTS</b></span>\"}, \"id\": \"stk-h1\", \"type\": \"paragraph\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Stock Ageing\"}, \"id\": \"stk-sa\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 12, \"text\": \"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\"}, \"id\": \"stk-h2\", \"type\": \"paragraph\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Knowledge Base\"}, \"id\": \"stk-kb\", \"type\": \"shortcut\"}]",
  "creation": "2026-08-10 20:28:49.398810",
  "custom_blocks": [],
  "docstatus": 0,
@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz Stock",
  "links": [],
- "modified": "2026-08-25 00:33:52.981415",
+ "modified": "2026-08-30 16:18:52.160903",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz Stock",
@@ -91,22 +91,6 @@
    "label": "Stock Reconciliation",
    "link_to": "Stock Reconciliation",
    "type": "DocType"
-  },
-  {
-   "color": "",
-   "doc_view": "",
-   "label": "ABC Analysis",
-   "link_to": "IB ABC Analysis",
-   "report_ref_doctype": "IB ABC Classification",
-   "type": "Report"
-  },
-  {
-   "color": "",
-   "doc_view": "",
-   "label": "Demand Forecast",
-   "link_to": "IB Demand Forecast",
-   "report_ref_doctype": "Delivery Note",
-   "type": "Report"
   },
   {
    "color": "Blue",

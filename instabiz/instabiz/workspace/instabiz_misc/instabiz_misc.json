@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"misc-h2\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\",\"col\":12}},{\"id\":\"misc-sh\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"System Health\",\"col\":3}},{\"id\":\"misc-kb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Knowledge Base\",\"col\":3}},{\"id\":\"misc-insight\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Insights\",\"col\":3}}]",
+ "content": "[{\"id\": \"misc-h2\", \"type\": \"paragraph\", \"data\": {\"text\": \"<span class=\\\"h5\\\"><b>HELP &amp; KNOWLEDGE BASE</b></span>\", \"col\": 12}}, {\"id\": \"misc-sh\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"System Health\", \"col\": 3}}, {\"id\": \"misc-kb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Knowledge Base\", \"col\": 3}}, {\"id\": \"misc-insight\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Insights\", \"col\": 3}}, {\"data\": {\"shortcut_name\": \"Escalation Rules\", \"col\": 3}, \"id\": \"misc-escalation\", \"type\": \"shortcut\"}]",
  "creation": "2026-07-29 01:54:13.220811",
  "custom_blocks": [],
  "docstatus": 0,
@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Instabiz Misc",
  "links": [],
- "modified": "2026-08-25 01:07:18.153469",
+ "modified": "2026-08-30 15:59:08.421259",
  "modified_by": "Administrator",
  "module": "Instabiz",
  "name": "Instabiz Misc",
@@ -33,6 +33,14 @@
    "label": "System Health",
    "link_to": "ib-system-health",
    "type": "Page"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Escalation Rules",
+   "link_to": "IB Escalation Rule",
+   "stats_filter": "[]",
+   "type": "DocType"
   },
   {
    "color": "Purple",

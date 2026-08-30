@@ -42,8 +42,6 @@ scheduler_events = {
         "instabiz.overrides.asset_loan_alert.run_asset_loan_alert",
         # Monthly payroll draft creation — fires daily but only acts on the 7th
         "instabiz.overrides.payroll.run_monthly_payroll_draft",
-        # Vendor Scorecard: trailing-90-day on-time/quality/fulfillment score per vendor
-        "instabiz.overrides.vendor_scorecard.run_vendor_scorecard",
         # MRP Phase 1 — disabled 2026-08-12 alongside the production data reset,
         # at user's request. Re-enable by uncommenting if raw-material MRP
         # drafting off open SO demand is wanted again.
@@ -56,8 +54,6 @@ scheduler_events = {
         "instabiz.overrides.insight_correlation.run_fraud_watch",
     ],
     "weekly": [
-        # ABC Analysis: trailing-12-month Pareto classification of items by consumption value
-        "instabiz.overrides.abc_analysis.run_abc_analysis",
         # Price Recommender: velocity/margin-driven price suggestions per item into IB Price Suggestion
         "instabiz.overrides.price_recommender.run_weekly_price_suggestions",
     ],

@@ -95,7 +95,7 @@
    "fieldname": "source_doctype",
    "fieldtype": "Data",
    "label": "Source Doctype",
-   "description": "e.g. \"IB Supplier Score\", \"IB KPI Snapshot\""
+   "description": "e.g. \"IB Customer Score\", \"IB KPI Snapshot\""
   },
   {
    "fieldname": "source_name",

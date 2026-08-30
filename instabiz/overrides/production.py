@@ -2441,10 +2441,13 @@ def compute_oee(run_hours, output_qty, avg_wastage_pct, wo_count, capacity, capa
 	"""Pure calc: Availability x Performance x Quality for one machine on one day/window.
 
 	Deliberately takes plain pre-aggregated numbers (no frappe.db calls, no
-	doc objects) so it's directly unit-testable and reusable by both the
-	Machine Utilization report (grouped per machine per day from a date
-	range) and get_machine_wise_dashboard()'s "today" per-machine stats —
-	one formula, not two copies that can drift.
+	doc objects) so it's directly unit-testable, and shared by
+	get_machine_wise_dashboard()'s "today" per-machine stats via
+	get_machine_day_stats() below — one formula, not scattered copies that
+	can drift. (The Machine Utilization report that originally motivated
+	pulling this out into its own reusable function was removed
+	2026-08-30 at user's request — this helper stayed, still load-bearing
+	for the live dashboard.)
 
 	Grain: whatever the caller aggregated to (this app uses machine-per-day
 	both places). Formulas, and why they're shaped this way given the real
@@ -2515,11 +2518,11 @@ def compute_oee(run_hours, output_qty, avg_wastage_pct, wo_count, capacity, capa
 
 def get_machine_day_stats(machine_names, from_date, to_date=None):
 	"""Per-machine per-day production stats from real IB Work Order completions —
-	the shared aggregation both get_machine_wise_dashboard() ("today" only, one
-	call for every active machine) and the Machine Utilization / OEE report
-	(instabiz/instabiz/report/ib_machine_utilization, a real date range) build
-	on, so "today" and "date range" can never compute run_hours/output/wastage
-	differently by drifting into two separate query copies.
+	powers get_machine_wise_dashboard()'s "today" per-machine stats (one call
+	for every active machine). Takes a real from_date/to_date range (not just
+	"today") because it originally also fed the since-removed Machine
+	Utilization / OEE report — kept range-capable since it costs nothing and
+	get_machine_wise_dashboard() itself just always passes today for both.
 
 	Grain: one row per (machine, day) that machine had >=1 Completed WO. A
 	(machine, day) with zero completions simply has no row — callers treat a
