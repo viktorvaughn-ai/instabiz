@@ -25,16 +25,20 @@ frappe.listview_settings["Customer"] = {
 		// LIKE-match on the display-name field custom_sales_person, no
 		// autocomplete, typo-prone).
 		ib_setup_list_sales_user_filter(listview, "Customer");
+		// Company Name = the customer_name column; native filter was a plain
+		// text box — now an autocomplete suggesting distinct customer names.
+		ib_setup_list_autocomplete_filter(listview, "Customer", "customer_name", "Company Name");
 
-		// Filter row order = column order (2026-08-13): live columns are
-		// Company Name, Status, Location, Mobile No, Outstanding Amount,
-		// Handled By, ID. Status/Mobile No/Outstanding Amount have no
-		// filter to move. Customer Group isn't a visible column, trails
-		// after.
+		// Filter row order = column order. Live columns: Company Name, Status,
+		// Location, Mobile No, Outstanding Amount, Handled By, ID. Status/Mobile
+		// No/Outstanding Amount have no filter control. ID moves out of Frappe's
+		// default first slot to sit last in the column-matched group. Customer
+		// Group isn't a visible column, so it trails after.
 		ib_reorder_filter_row(listview, [
-			listview.page.fields_dict.customer_name && listview.page.fields_dict.customer_name.$wrapper,
+			$(".ib-customer-customer-name-filter"),
 			listview.page.fields_dict.territory && listview.page.fields_dict.territory.$wrapper,
 			$(".ib-customer-sales-user-filter"),
+			listview.page.fields_dict.name && listview.page.fields_dict.name.$wrapper,
 			listview.page.fields_dict.customer_group && listview.page.fields_dict.customer_group.$wrapper,
 		]);
 

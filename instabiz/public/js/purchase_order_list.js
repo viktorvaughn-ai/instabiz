@@ -37,18 +37,22 @@ frappe.listview_settings["Purchase Order"] = {
 	onload(listview) {
 		ib_setup_list_print(listview, "Purchase Order");
 		ib_hide_sidebar();
+		ib_setup_list_autocomplete_filter(listview, "Purchase Order", "supplier_name", "Supplier Name");
 		ib_setup_status_multiselect(listview, "Purchase Order", [
 			"Draft", "To Receive and Bill", "To Bill", "To Receive", "Completed", "Cancelled", "Closed",
 		]);
 		ib_setup_list_date_filter(listview, "Purchase Order", "transaction_date", []);
-		// Filter row order = column order (2026-08-13): live columns are
-		// Supplier Name, Status, Date, Grand Total, % Billed, ID — Supplier
-		// Name/ID stay in Frappe's own default first/second slot (title_field
-		// is supplier_name here), Status/Date move up right after them.
-		// Supplier/Company/Location aren't visible columns, trail after.
+		// Filter row order = column order. Live columns: Supplier Name, Status,
+		// Date, Grand Total, % Billed, ID (Grand Total / % Billed have no
+		// filter). Supplier Name's native filter was a plain text box — now an
+		// autocomplete suggesting distinct supplier names. ID moves out of
+		// Frappe's default first slot to sit last in the column-matched group.
+		// Supplier/Company/Location aren't visible columns, so they trail after.
 		ib_reorder_filter_row(listview, [
+			$(".ib-purchase-order-supplier-name-filter"),
 			$(".ib-purchase-order-status-multi-filter"),
 			$(".ib-purchase-order-date-range-filter"),
+			listview.page.fields_dict.name && listview.page.fields_dict.name.$wrapper,
 			listview.page.fields_dict.supplier && listview.page.fields_dict.supplier.$wrapper,
 			listview.page.fields_dict.company && listview.page.fields_dict.company.$wrapper,
 			listview.page.fields_dict.custom_location && listview.page.fields_dict.custom_location.$wrapper,

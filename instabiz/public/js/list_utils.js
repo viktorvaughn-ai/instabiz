@@ -217,6 +217,100 @@ function ib_setup_list_link_filter(listview, doctype, fieldname, placeholder, op
     }
 }
 
+// ── Generic distinct-value autocomplete filter for a free-text Data field ─────
+// Native standard filters on Data fields (customer_name, supplier_name, title,
+// company_name, …) render as plain text boxes with no suggestions. This swaps
+// one for an Autocomplete that suggests distinct existing values of that field
+// (LIKE match, debounced, capped 20) while still allowing a free-typed partial
+// (ignore_validation). Applies the same `like %x%` match the native Data filter
+// used, so behaviour is unchanged for anyone who just types. Call in the exact
+// left-to-right slot you want it, chained like every other ib_setup_list_*.
+// matchDoctype: doctype to pull suggestion values from (defaults to `doctype`).
+function ib_setup_list_autocomplete_filter(listview, doctype, fieldname, placeholder, matchDoctype) {
+    const src     = matchDoctype || doctype;
+    const slug    = doctype.toLowerCase().replace(/ /g, "-");
+    const css     = `ib-${slug}-${fieldname.replace(/_/g, "-")}-filter`;
+    const eventNs = `ib_${slug.replace(/-/g, "_")}_${fieldname}_ac_clear`;
+
+    const nativeField = listview.page.fields_dict[fieldname];
+    if (nativeField && nativeField.$wrapper) nativeField.$wrapper.hide();
+
+    $(`.${css}`).remove();
+    const $wrapper = $(
+        `<div class="form-group frappe-control input-max-width ${css}" ` +
+        `data-fieldtype="Autocomplete" data-fieldname="${fieldname}"></div>`
+    );
+    $wrapper.css({ flex: "0 0 160px", maxWidth: "160px" });
+    _ib_chain_anchor(listview, $wrapper, nativeField && nativeField.$wrapper);
+
+    const control = frappe.ui.form.make_control({
+        df: {
+            label: "",
+            fieldtype: "Autocomplete",
+            placeholder: __(placeholder),
+            input_class: "input-xs",
+            ignore_validation: 1,
+            onchange() {
+                const val = (control.get_value() || "").trim();
+                _ib_remove_filters(listview, fieldname);
+                if (val) {
+                    listview.filter_area.add([[doctype, fieldname, "like", `%${val}%`]]);
+                }
+                listview.refresh();
+            },
+        },
+        parent: $wrapper,
+        only_input: true,
+        render_input: 1,
+    });
+    control.$wrapper.removeClass("form-group");
+    control.$wrapper.css("margin-bottom", 0);
+
+    let _t = null;
+    function load(txt) {
+        clearTimeout(_t);
+        _t = setTimeout(function () {
+            frappe.db
+                .get_list(src, {
+                    fields: [fieldname],
+                    filters: txt
+                        ? [[fieldname, "like", `%${txt}%`]]
+                        : [[fieldname, "is", "set"]],
+                    order_by: `${fieldname} asc`,
+                    limit: 50,
+                })
+                .then(function (rows) {
+                    const seen = new Set();
+                    const vals = [];
+                    (rows || []).forEach(function (r) {
+                        const v = (r[fieldname] || "").toString().trim();
+                        if (v && !seen.has(v.toLowerCase())) {
+                            seen.add(v.toLowerCase());
+                            vals.push(v);
+                        }
+                    });
+                    control.set_data(vals.slice(0, 20));
+                    if (control.awesomplete && control.$input.is(":focus")) {
+                        control.awesomplete.evaluate();
+                    }
+                });
+        }, 200);
+    }
+    control.$input.on("input focus", function () {
+        load((control.$input.val() || "").trim());
+    });
+
+    const current = listview.filter_area.get().find((f) => f[1] === fieldname);
+    if (current) control.set_value(String(current[3]).replace(/^%|%$/g, ""));
+
+    const $clearBtn = listview.filter_area && listview.filter_area.filter_x_button;
+    if ($clearBtn && $clearBtn.length) {
+        $clearBtn
+            .off(`click.${eventNs}`)
+            .on(`click.${eventNs}`, () => control.set_value(""));
+    }
+}
+
 // ── Generic sales person (User link) filter ───────────────────────────────────
 function ib_setup_list_sales_user_filter(listview, doctype, placeholder) {
     placeholder = placeholder || "Sales Person";

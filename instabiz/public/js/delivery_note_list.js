@@ -45,18 +45,23 @@ frappe.listview_settings["Delivery Note"] = {
 		// hid anything; fixed while touching this file's filter setup.
 		const warehouseField = listview.page.fields_dict.set_target_warehouse;
 		if (warehouseField?.$wrapper) warehouseField.$wrapper.hide();
+		ib_setup_list_autocomplete_filter(listview, "Delivery Note", "title", "Title");
 		ib_setup_status_multiselect(listview, "Delivery Note", [
 			"Draft", "Pending", "Confirmed", "Return Issued", "Cancelled",
 		]);
 		ib_setup_list_sales_user_filter(listview, "Delivery Note");
 		ib_setup_list_date_filter(listview, "Delivery Note", "creation", []);
-		// Filter row order = column order (2026-08-13): live columns are
-		// Title, Status, % Installed, ID — Title/ID stay in Frappe's own
-		// default first/second slot, Status moves up right after Title.
-		// Customer/Company/Sales Person/Date aren't visible columns, trail
-		// after (Set Target Warehouse is now hidden, not shown at all).
+		// Filter row order = column order. Live columns: Title, Status,
+		// % Installed, ID (% Installed has no filter). Title's native filter was
+		// a plain text box — now an autocomplete suggesting distinct title
+		// values (the customer name). ID moves out of Frappe's default first
+		// slot to sit last in the column-matched group. Customer/Company/Sales
+		// Person/Date aren't visible columns, so they trail after (Set Target
+		// Warehouse is hidden, not shown at all).
 		ib_reorder_filter_row(listview, [
+			$(".ib-delivery-note-title-filter"),
 			$(".ib-delivery-note-status-multi-filter"),
+			listview.page.fields_dict.name && listview.page.fields_dict.name.$wrapper,
 			listview.page.fields_dict.customer && listview.page.fields_dict.customer.$wrapper,
 			listview.page.fields_dict.company && listview.page.fields_dict.company.$wrapper,
 			$(".ib-delivery-note-sales-user-filter"),

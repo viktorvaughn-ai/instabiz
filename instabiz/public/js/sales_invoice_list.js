@@ -41,22 +41,26 @@ frappe.listview_settings["Sales Invoice"] = {
 	onload(listview) {
 		ib_setup_list_print(listview, "Sales Invoice");
 		ib_hide_sidebar();
+		ib_setup_list_autocomplete_filter(listview, "Sales Invoice", "title", "Title");
 		ib_setup_status_multiselect(listview, "Sales Invoice", [
 			"Draft", "Unpaid", "Overdue", "Paid", "Return", "Cancelled",
 		]);
 		ib_setup_list_sales_user_filter(listview, "Sales Invoice");
 		ib_setup_list_date_filter(listview, "Sales Invoice", "posting_date", []);
-		// Filter row order = column order (2026-08-13): live columns are
-		// Title, Status, Grand Total, Is Return, ID — Title/ID stay in
-		// Frappe's own default first/second slot (title_field + ID search
-		// are always first), Status moves up to right after them. Customer/
-		// Company/Sales Person/Date aren't visible columns, so they trail
-		// after in their existing order.
+		// Filter row order = column order. Live columns: Title, Status, Grand
+		// Total, Is Return, Sales Person, Outstanding Amount, ID (Grand Total /
+		// Is Return / Outstanding have no filter). Title's native filter was a
+		// plain text box — now an autocomplete suggesting distinct title values
+		// (the customer name). ID moves out of Frappe's default first slot to
+		// sit last in the column-matched group. Customer/Company/Date aren't
+		// visible columns, so they trail after.
 		ib_reorder_filter_row(listview, [
+			$(".ib-sales-invoice-title-filter"),
 			$(".ib-sales-invoice-status-multi-filter"),
+			$(".ib-sales-invoice-sales-user-filter"),
+			listview.page.fields_dict.name && listview.page.fields_dict.name.$wrapper,
 			listview.page.fields_dict.customer && listview.page.fields_dict.customer.$wrapper,
 			listview.page.fields_dict.company && listview.page.fields_dict.company.$wrapper,
-			$(".ib-sales-invoice-sales-user-filter"),
 			$(".ib-sales-invoice-date-range-filter"),
 		]);
 		const _orig_render_list = listview.render_list.bind(listview);

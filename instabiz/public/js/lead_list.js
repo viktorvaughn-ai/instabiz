@@ -105,26 +105,35 @@ frappe.listview_settings["Lead"] = Object.assign(
 			});
 
 			ib_hide_sidebar();
+			// Company Name = proxy for the Title column (displays the lead's
+			// company name). Autocomplete suggests distinct existing values.
+			ib_setup_list_autocomplete_filter(listview, "Lead", "company_name", "Company Name");
 			ib_setup_list_link_filter(listview, "Lead", "market_segment", "Market Segment", "Market Segment");
 			ib_setup_list_link_filter(listview, "Lead", "industry", "Industry", "Industry Type");
 			ib_setup_list_link_filter(listview, "Lead", "source", "Source", "Lead Source");
-			// Territory filter relabeled "State" here (list view only, not a
-			// global field rename) — Territory values are Indian states in
-			// this app's actual usage (see lead.py territory derivation).
-			ib_setup_list_link_filter(listview, "Lead", "territory", "State", "Territory");
+			ib_setup_list_link_filter(listview, "Lead", "territory", "Territory", "Territory");
 			ib_setup_lead_team_filter(listview);
 			ib_setup_custom_status_multiselect(listview);
+			// "Assigned To" column filter — narrows by lead_owner (Sales
+			// Person / User). Column displays custom_lead_owner_name (Data
+			// mirror), but the real filterable field is the lead_owner Link.
+			ib_setup_list_link_filter(listview, "Lead", "lead_owner", "Sales Person", "User");
 
-			// Filter row order = column order (2026-08-13): live columns are
-			// Status, Assigned To, Phone, Territory, ID (Title column's own
-			// filter was removed — redundant with Company Name). Assigned
-			// To/Phone have no filter control to move. Company Name/Status/
-			// State(Territory) reordered to match; everything else that
-			// isn't a visible column trails after.
+			// Filter row order = column order. Live list columns are:
+			// Title, Status, Assigned To, Phone, Territory, ID. Filter row is
+			// reordered to read the same left-to-right: Company Name (proxy for
+			// the Title column, which displays the company/lead name) → Status →
+			// Sales Person (Assigned To / lead_owner) → Territory → ID. Phone
+			// has no filter control. The native ID (name) filter is moved out of
+			// its default first slot to sit last in this column-matched group.
+			// Everything after ID (Temperature, Next Follow-up, Market Segment,
+			// Industry, Source, Lead Team) isn't a visible column, so it trails.
 			ib_reorder_filter_row(listview, [
-				listview.page.fields_dict.company_name && listview.page.fields_dict.company_name.$wrapper,
+				$(".ib-lead-company-name-filter"),
 				$(".ib-lead-status-multi-filter"),
+				$(".ib-lead-lead-owner-filter"),
 				$(".ib-lead-territory-filter"),
+				listview.page.fields_dict.name && listview.page.fields_dict.name.$wrapper,
 				listview.page.fields_dict.custom_lead_temperature && listview.page.fields_dict.custom_lead_temperature.$wrapper,
 				listview.page.fields_dict.custom_next_follow_up_date && listview.page.fields_dict.custom_next_follow_up_date.$wrapper,
 				$(".ib-lead-market-segment-filter"),

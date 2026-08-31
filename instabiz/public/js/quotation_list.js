@@ -49,15 +49,27 @@ frappe.listview_settings["Quotation"] = {
     onload(listview) {
         ib_setup_list_print(listview, "Quotation");
         ib_hide_sidebar();
-        // Sales Person before Status: matches the row's own field order (Customer,
-        // Amount, Sales Person, Status, ID) — see list_utils.js _ib_chain_anchor,
-        // which threads filters in call order.
+        // Filter row order = column order. Live columns: Customer, Amount, Sales
+        // Person, Status, ID (Amount has no filter). The native "Customer" box
+        // is the `title` field (Quotation title = customer name) — swapped for
+        // an autocomplete suggesting distinct titles. ID moves out of Frappe's
+        // default first slot to sit last in the column-matched group. Date range
+        // / Sales Team aren't visible columns, so they trail after.
+        ib_setup_list_autocomplete_filter(listview, "Quotation", "title", "Customer");
         ib_setup_list_sales_user_filter(listview, "Quotation");
         ib_setup_status_multiselect(listview, "Quotation", [
             "Pending", "Confirmed", "Cancelled", "Draft",
         ]);
         ib_setup_list_date_filter(listview, "Quotation", "creation", ["transaction_date"]);
         ib_setup_list_team_filter(listview, "Quotation");
+        ib_reorder_filter_row(listview, [
+            $(".ib-quotation-title-filter"),
+            $(".ib-quotation-sales-user-filter"),
+            $(".ib-quotation-status-multi-filter"),
+            listview.page.fields_dict.name && listview.page.fields_dict.name.$wrapper,
+            $(".ib-quotation-date-range-filter"),
+            $(".ib-quotation-team-filter"),
+        ]);
         const _orig_render_list = listview.render_list.bind(listview);
         listview.render_list = function () {
             _orig_render_list();

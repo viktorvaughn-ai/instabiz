@@ -34,18 +34,22 @@ frappe.listview_settings["Purchase Receipt"] = {
 	onload(listview) {
 		ib_setup_list_print(listview, "Purchase Receipt");
 		ib_hide_sidebar();
+		ib_setup_list_autocomplete_filter(listview, "Purchase Receipt", "title", "Title");
 		ib_setup_status_multiselect(listview, "Purchase Receipt", [
 			"Draft", "Return Issued", "Completed", "Cancelled",
 		]);
 		ib_setup_list_date_filter(listview, "Purchase Receipt", "posting_date", []);
-		// Filter row order = column order (2026-08-13): live columns are
-		// Title, Status, Date, Grand Total, % Returned, ID — Title/ID stay
-		// in Frappe's own default first/second slot, Status/Date move up
-		// right after them. Company/Location aren't visible columns, trail
-		// after.
+		// Filter row order = column order. Live columns: Title, Status, Date,
+		// Grand Total, % Returned, ID (Grand Total / % Returned have no filter).
+		// Title's native filter was a plain text box — now an autocomplete
+		// suggesting distinct title values (the supplier name). ID moves out of
+		// Frappe's default first slot to sit last in the column-matched group.
+		// Company/Location aren't visible columns, so they trail after.
 		ib_reorder_filter_row(listview, [
+			$(".ib-purchase-receipt-title-filter"),
 			$(".ib-purchase-receipt-status-multi-filter"),
 			$(".ib-purchase-receipt-date-range-filter"),
+			listview.page.fields_dict.name && listview.page.fields_dict.name.$wrapper,
 			listview.page.fields_dict.company && listview.page.fields_dict.company.$wrapper,
 			listview.page.fields_dict.custom_location && listview.page.fields_dict.custom_location.$wrapper,
 		]);

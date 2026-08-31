@@ -46,15 +46,28 @@ frappe.listview_settings["Sales Order"] = {
     onload(listview) {
         ib_setup_list_print(listview, "Sales Order");
         ib_hide_sidebar();
-        // Sales Person before Status: matches the row's own field order (Customer,
-        // Amount, Sales Person, Status, Delivery Date, ID) — see list_utils.js
-        // _ib_chain_anchor, which threads filters in call order.
+        // Filter row order = column order. Live columns: Customer, Amount, Sales
+        // Person, Status, Delivery Date, ID (Amount has no filter). Customer is
+        // a plain-text customer_name box natively — now an autocomplete
+        // suggesting distinct customer names. The date-range control sits at the
+        // Delivery Date slot. ID moves out of Frappe's default first slot to sit
+        // last in the column-matched group. Sales Team isn't a visible column,
+        // so it trails after.
+        ib_setup_list_autocomplete_filter(listview, "Sales Order", "customer_name", "Customer");
         ib_setup_list_sales_user_filter(listview, "Sales Order");
         ib_setup_status_multiselect(listview, "Sales Order", [
             "Draft", "Pending", "Dispatched", "Confirmed", "Cancelled",
         ]);
         ib_setup_list_date_filter(listview, "Sales Order", "creation", ["transaction_date", "delivery_date"]);
         ib_setup_list_team_filter(listview, "Sales Order");
+        ib_reorder_filter_row(listview, [
+            $(".ib-sales-order-customer-name-filter"),
+            $(".ib-sales-order-sales-user-filter"),
+            $(".ib-sales-order-status-multi-filter"),
+            $(".ib-sales-order-date-range-filter"),
+            listview.page.fields_dict.name && listview.page.fields_dict.name.$wrapper,
+            $(".ib-sales-order-team-filter"),
+        ]);
         ib_setup_so_total_bar(listview);
 
         // Re-add bar on navigate-back (Frappe calls refresh() on page re-show)
