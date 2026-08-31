@@ -514,6 +514,10 @@ class IBAnalyticsHub {
 		// "me") — titles/labels read this to say "My ..." instead of the
 		// company-wide title.
 		this._scoped = !!(d.meta || {}).scoped;
+		// Docs tab has two shapes (order chain vs HR request pipeline) — the
+		// KPI-card click behaviour differs per shape, so stash it for
+		// _docs_kpi_action().
+		this._docs_chain_type = (d.meta || {}).chain_type || "order";
 		this._render_kpis(d.kpis || []);
 		this._render_trend(d.trend || []);
 		this._render_breakdown(d.breakdown || []);
@@ -637,9 +641,42 @@ class IBAnalyticsHub {
 
 		// Bind deep-link clicks
 		$kpis.find(".ib-hub-kpi").each((i, el) => {
-			const fn = this._kpi_link(this._active_tab, i);
-			if (fn) $(el).on("click", fn);
+			const fn = this._active_tab === "docs"
+				? this._docs_kpi_action(i)
+				: this._kpi_link(this._active_tab, i);
+			if (fn) {
+				$(el).on("click", fn).css("cursor", "pointer");
+			} else {
+				$(el).css("cursor", "default").removeAttr("title");
+			}
 		});
+	}
+
+	// Docs-tab KPI cards. Order-chain KPIs (Orders / Awaiting Dispatch /
+	// Awaiting Payment / Fully Paid) filter the chain table in place, matching
+	// the tab's own filter chips. HR-chain KPIs open the relevant list view.
+	_docs_kpi_action(idx) {
+		if (this._docs_chain_type === "hr") {
+			const today = frappe.datetime.get_today();
+			const m0 = today.slice(0, 7) + "-01";
+			return [
+				() => frappe.set_route("List", "Leave Application", { status: "Open", docstatus: 1 }),
+				() => frappe.set_route("List", "IB Overtime Request", { status: ["in", ["Draft", "Pending Approval"]] }),
+				() => frappe.set_route("List", "IB Full Final Settlement", { status: ["in", ["Draft", "In Review", "Approved"]] }),
+				() => frappe.set_route("List", "Salary Slip", { "start_date,>=": m0 }),
+			][idx] || null;
+		}
+		const key = ["all", "dispatch", "payment", "paid"][idx];
+		if (!key) return null;
+		return () => {
+			this._docs_filter = key;
+			this._docs_page = 0;
+			this.$wrap.find(".ib-hub-docs-filter").removeClass("active");
+			this.$wrap.find(`.ib-hub-docs-filter[data-filter="${key}"]`).addClass("active");
+			this._docs_draw_order_table();
+			const t = this.$wrap.find("#ib-hub-table-card")[0];
+			if (t) t.scrollIntoView({ behavior: "smooth", block: "start" });
+		};
 	}
 
 	_render_trend(trend) {
