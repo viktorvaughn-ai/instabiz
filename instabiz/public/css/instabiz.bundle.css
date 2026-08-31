@@ -3404,3 +3404,71 @@ iconify-icon { display: inline-flex; align-items: center; }
     .ib-pt-row-delivery { align-items: flex-start; }
 }
 
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Unified KPI / stat card styling — "Direction A": flat, hairline, monochrome.
+   Retargets every dashboard's bespoke KPI-card classes at once so they all
+   read the same way: 1px border, 12px radius, no shadow, no colour bar / top
+   border / watermark icon, near-black tabular value, muted uppercase label,
+   quiet hover (background tint only, no lift). Chrome + typography only —
+   each page keeps its own grid layout and DOM structure. Colour cues that
+   carry meaning (stage-identity names, +/- delta lines) are left alone.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── card wrappers ───────────────────────────────────────────────────────── */
+.ib-md-kpi, .ib-fin-kpi, .ib-hr-kpi, .ib-proc-kpi, .ib-col-kpi, .ib-hub-kpi,
+.ib-ch-kpi, .ib-dpr-kpi-card, .ib-si-kpi, .ib-aap-kpi, .ib-fu-kpi,
+.ib-pt-card, .ib-sd-card, .ib-iph-card, .ib-cb-stat-card,
+.ib-pd-kpi-card, .ib-pd-pipeline-card {
+    background: var(--card-bg, #fff) !important;
+    border: 1px solid var(--border-color, #e5e7eb) !important;
+    border-radius: 12px !important;
+    box-shadow: none !important;
+    transition: background .12s, border-color .12s !important;
+}
+.ib-md-kpi:hover, .ib-fin-kpi:hover, .ib-hr-kpi:hover, .ib-proc-kpi:hover,
+.ib-col-kpi:hover, .ib-hub-kpi:hover, .ib-ch-kpi:hover, .ib-dpr-kpi-card:hover,
+.ib-si-kpi:hover, .ib-aap-kpi:hover, .ib-fu-kpi:hover, .ib-pt-card:hover,
+.ib-sd-card:hover, .ib-iph-card:hover, .ib-cb-stat-card:hover,
+.ib-pd-kpi-card:hover, .ib-pd-pipeline-card:hover {
+    background: var(--subtle-fg, #f8fafc) !important;
+    border-color: var(--border-color, #d1d5db) !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+/* preserve the follow-ups active-filter highlight */
+.ib-fu-kpi.active { border-color: var(--ib-primary, var(--primary, #d97757)) !important; }
+
+/* ── values → near-black, tabular ────────────────────────────────────────── */
+.ib-md-kpi-val, .ib-fin-kpi-val, .ib-hr-kpi-val, .ib-proc-kpi-v, .ib-col-kpi-v,
+.ib-hub-kpi-val, .ib-ch-kpi-v, .ib-dpr-kpi-value, .ib-si-kpi-value,
+.ib-aap-kpi-val, .ib-fu-kpi-value, .ib-pt-card-value, .ib-sd-card-value,
+.ib-iph-card-value, .ib-cb-stat-num, .ib-pd-kpi-value, .ib-pd-pipe-total {
+    color: var(--text-color, #111827) !important;
+    font-size: 1.6rem !important;
+    font-weight: 650 !important;
+    line-height: 1.05 !important;
+    font-variant-numeric: tabular-nums !important;
+    letter-spacing: -.01em !important;
+}
+
+/* ── labels → muted uppercase ───────────────────────────────────────────── */
+.ib-md-kpi-lbl, .ib-fin-kpi-lbl, .ib-hr-kpi-lbl, .ib-proc-kpi-l, .ib-col-kpi-l,
+.ib-hub-kpi-lbl, .ib-ch-kpi-l, .ib-dpr-kpi-label, .ib-si-kpi-label,
+.ib-aap-kpi-lbl, .ib-fu-kpi-label, .ib-pt-card-label, .ib-sd-card-label,
+.ib-iph-card-label, .ib-cb-stat-lbl, .ib-pd-kpi-label {
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    letter-spacing: .06em !important;
+    text-transform: uppercase !important;
+    color: var(--text-muted, #6b7280) !important;
+}
+
+/* ── strip decorations: colour bars, watermark icons, arrows, badges ─────── */
+.ib-fin-kpi-bar, .ib-proc-kpi-bar, .ib-col-kpi-bar,
+.ib-md-kpi-icon, .ib-md-kpi-arrow, .ib-aap-kpi-icon,
+.ib-hub-kpi-badge, .ib-hub-kpi-link-hint,
+.ib-dpr-kpi-icon-wrap, .ib-pd-pipe-icon {
+    display: none !important;
+}
+.ib-si-kpi::before { display: none !important; }

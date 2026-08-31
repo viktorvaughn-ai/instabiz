@@ -80,6 +80,20 @@ class IBHrmsDashboard {
 .ib-hr-status-open { background:#fef3c7; color:#92400e; }
 .ib-hr-status-approved { background:#d1fae5; color:#065f46; }
 .ib-hr-status-rejected { background:#fee2e2; color:#991b1b; }
+/* Leave-row action buttons — house style (flat hairline, tinted on hover),
+   replacing raw Bootstrap btn-success / btn-danger. */
+.ib-hr-act-btn {
+	display:inline-flex; align-items:center; justify-content:center;
+	height:26px; padding:2px 12px;
+	background:var(--card-bg); border:1px solid var(--border-color);
+	border-radius:6px; font-size:11px; font-weight:500;
+	color:var(--text-color); cursor:pointer; white-space:nowrap;
+	transition:border-color .15s, color .15s, background .15s;
+}
+.ib-hr-act-btn + .ib-hr-act-btn { margin-left:6px; }
+.ib-hr-act-btn:hover { border-color:var(--ib-primary); color:var(--ib-primary); }
+.ib-hr-act-btn--approve:hover { border-color:#16a34a; color:#16a34a; background:#f0fdf4; }
+.ib-hr-act-btn--reject:hover  { border-color:#dc2626; color:#dc2626; background:#fef2f2; }
 .ib-hr-dept-bars { margin-top: 8px; }
 .ib-hr-bar-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
 .ib-hr-bar-lbl { width: 140px; font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -369,8 +383,8 @@ class IBHrmsDashboard {
 						<td>${r.total_leave_days || ""}</td>
 						<td>${status_badge(r.status || "")}</td>
 						${is_mgr && r.status === "Open" ? `<td>
-							<button class="btn btn-xs btn-success ib-hr-approve-btn" data-id="${frappe.utils.escape_html(r.name)}" data-employee="${frappe.utils.escape_html(r.employee_name || r.name)}">Approve</button>
-							<button class="btn btn-xs btn-danger ib-hr-reject-btn" data-id="${frappe.utils.escape_html(r.name)}" data-employee="${frappe.utils.escape_html(r.employee_name || r.name)}" style="margin-left:4px">Reject</button>
+							<button class="ib-hr-act-btn ib-hr-act-btn--approve ib-hr-approve-btn" data-id="${frappe.utils.escape_html(r.name)}" data-employee="${frappe.utils.escape_html(r.employee_name || r.name)}">Approve</button>
+							<button class="ib-hr-act-btn ib-hr-act-btn--reject ib-hr-reject-btn" data-id="${frappe.utils.escape_html(r.name)}" data-employee="${frappe.utils.escape_html(r.employee_name || r.name)}">Reject</button>
 						</td>` : `<td></td>`}
 					</tr>
 				`).join("")}</tbody>

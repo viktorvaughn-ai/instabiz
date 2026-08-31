@@ -731,6 +731,9 @@ class IBProductionDashboard {
 			{
 				label: "Pending", value: s.pending ?? 0, color: "#d97706", icon: "clock",
 				sub: "Awaiting start",
+				// Only metric that gets a colour cue — an amber status dot when
+				// there's a real backlog. Everything else stays monochrome.
+				attention: (s.pending ?? 0) > 0,
 				click: () => {
 					_go_to_production_stages({ tab: "item_wise", status: "Pending" });
 				},
@@ -747,17 +750,14 @@ class IBProductionDashboard {
 			},
 		];
 		const $kpis = this.$container.find("#ib-pd-kpis").html(kpis.map((k, i) => `
-			<div class="ib-pd-kpi-card ib-pd-kpi--link" data-kpi="${i}" style="border-top:3px solid ${k.color};cursor:pointer">
-				<div class="ib-pd-kpi-icon-row">
-					<div class="ib-pd-kpi-icon-wrap" style="background:${k.color}15;color:${k.color}">
-						<iconify-icon icon="lucide:${k.icon}" width="16" height="16"></iconify-icon>
-					</div>
-					<div class="ib-pd-kpi-arrow" style="color:${k.color}">
-						<iconify-icon icon="lucide:arrow-up-right" width="12" height="12"></iconify-icon>
-					</div>
+			<div class="ib-pd-kpi-card ib-pd-kpi--link" data-kpi="${i}">
+				<div class="ib-pd-kpi-head">
+					<span class="ib-pd-kpi-label">${k.label}</span>
+					${k.attention
+						? `<span class="ib-pd-kpi-dot" style="background:${k.color}"></span>`
+						: `<span class="ib-pd-kpi-icon"><iconify-icon icon="lucide:${k.icon}" width="14" height="14"></iconify-icon></span>`}
 				</div>
-				<div class="ib-pd-kpi-value" style="color:${k.color}">${k.value}</div>
-				<div class="ib-pd-kpi-label">${k.label}</div>
+				<div class="ib-pd-kpi-value">${k.value}</div>
 				<div class="ib-pd-kpi-sub">${k.sub || ""}</div>
 			</div>
 		`).join(""));
@@ -1706,40 +1706,54 @@ class IBProductionDashboard {
 				font-size: 12.5px;
 			}
 			.ib-pd-kpi-row {
-				display: flex;
-				gap: 16px;
+				display: grid;
+				grid-template-columns: repeat(4, 1fr);
+				gap: 12px;
 				margin-bottom: 24px;
-				flex-wrap: wrap;
 			}
 			.ib-pd-kpi-card {
-				flex: 1;
-				min-width: 155px;
 				background: var(--card-bg, #fff);
-				border: 1px solid var(--border-color, #e2e8f0);
-				border-radius: 10px;
-				padding: 16px 18px;
-				box-shadow: 0 1px 4px rgba(0,0,0,.06);
-				transition: transform .12s, box-shadow .12s;
+				border: 1px solid var(--border-color, #e5e7eb);
+				border-radius: 12px;
+				padding: 16px;
+				display: flex;
+				flex-direction: column;
+				gap: 6px;
+				transition: background .12s, border-color .12s;
 			}
-			.ib-pd-kpi-card:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0,0,0,.10); }
-			.ib-pd-kpi-icon-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-			.ib-pd-kpi-icon-wrap { width: 32px; height: 32px; border-radius: 8px; display:inline-flex; align-items:center; justify-content:center; }
-			.ib-pd-kpi-arrow { opacity: .4; }
-			.ib-pd-kpi-value {
-				font-size: 30px;
-				font-weight: 700;
-				line-height: 1.05;
+			.ib-pd-kpi--link { cursor: pointer; }
+			.ib-pd-kpi-card:hover {
+				background: var(--subtle-fg, #f8fafc);
+				border-color: var(--border-color, #d1d5db);
+			}
+			.ib-pd-kpi-head {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
 			}
 			.ib-pd-kpi-label {
-				font-size: 12px;
-				color: var(--text-color, #374151);
-				margin-top: 4px;
+				font-size: 11px;
 				font-weight: 600;
+				letter-spacing: .06em;
+				text-transform: uppercase;
+				color: var(--text-muted, #6b7280);
+			}
+			.ib-pd-kpi-icon { color: var(--text-muted, #9ca3af); display: inline-flex; }
+			.ib-pd-kpi-dot { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto; }
+			.ib-pd-kpi-value {
+				font-size: 28px;
+				font-weight: 650;
+				line-height: 1;
+				color: var(--text-color, #111827);
+				font-variant-numeric: tabular-nums;
+				letter-spacing: -.01em;
 			}
 			.ib-pd-kpi-sub {
 				font-size: 11px;
 				color: var(--text-muted, #6b7280);
-				margin-top: 2px;
+			}
+			@media (max-width: 720px) {
+				.ib-pd-kpi-row { grid-template-columns: repeat(2, 1fr); }
 			}
 			.ib-pd-section-title {
 				font-size: 13px;
