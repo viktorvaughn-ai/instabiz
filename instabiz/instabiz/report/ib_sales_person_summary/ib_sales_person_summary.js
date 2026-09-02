@@ -31,7 +31,7 @@ frappe.query_reports["IB Sales Person Summary"] = {
 		},
 		{
 			fieldname: "territory",
-			label: __("Territory"),
+			label: __("State"),
 			fieldtype: "Link",
 			options: "Territory",
 		},

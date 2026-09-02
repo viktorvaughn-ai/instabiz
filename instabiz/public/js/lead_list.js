@@ -111,31 +111,45 @@ frappe.listview_settings["Lead"] = Object.assign(
 			ib_setup_list_link_filter(listview, "Lead", "market_segment", "Market Segment", "Market Segment");
 			ib_setup_list_link_filter(listview, "Lead", "industry", "Industry", "Industry Type");
 			ib_setup_list_link_filter(listview, "Lead", "source", "Source", "Lead Source");
-			ib_setup_list_link_filter(listview, "Lead", "territory", "Territory", "Territory");
+			ib_setup_list_link_filter(listview, "Lead", "territory", "State", "Territory");
 			ib_setup_lead_team_filter(listview);
 			ib_setup_custom_status_multiselect(listview);
-			// "Assigned To" column filter — narrows by lead_owner (Sales
-			// Person / User). Column displays custom_lead_owner_name (Data
-			// mirror), but the real filterable field is the lead_owner Link.
-			ib_setup_list_link_filter(listview, "Lead", "lead_owner", "Sales Person", "User");
+			// "Assigned To"/"Handled By" column filter — narrows by lead_owner
+			// (the real Link field; the column itself displays
+			// custom_lead_owner_name, a Data mirror, but that's not filterable
+			// the same way). Column header and filter label both renamed
+			// Title→"Company Name" / Assigned To→"Handled By" via Property
+			// Setters on Lead.title / Lead.custom_lead_owner_name, so the
+			// filter's own label here is kept in sync by hand.
+			ib_setup_list_link_filter(listview, "Lead", "lead_owner", "Handled By", "User");
 
-			// Filter row order = column order. Live list columns are:
-			// Title, Status, Assigned To, Phone, Territory, ID. Filter row is
-			// reordered to read the same left-to-right: Company Name (proxy for
-			// the Title column, which displays the company/lead name) → Status →
-			// Sales Person (Assigned To / lead_owner) → Territory → ID. Phone
-			// has no filter control. The native ID (name) filter is moved out of
-			// its default first slot to sit last in this column-matched group.
-			// Everything after ID (Temperature, Next Follow-up, Market Segment,
-			// Industry, Source, Lead Team) isn't a visible column, so it trails.
+			// Native ID (name) filter and the Next Follow-up Date filter are
+			// both removed outright per user request — not hidden/reordered,
+			// gone from the filter row entirely.
+			const nameField = listview.page.fields_dict.name;
+			if (nameField && nameField.$wrapper) nameField.$wrapper.hide();
+			const nextFollowUpField = listview.page.fields_dict.custom_next_follow_up_date;
+			if (nextFollowUpField && nextFollowUpField.$wrapper) nextFollowUpField.$wrapper.hide();
+
+			// Last Activity date-range filter — matches the "Last activity: …"
+			// date already shown on every row (the list's own default sort
+			// field), so filtering and what's visible per-row line up.
+			ib_setup_list_date_filter(listview, "Lead", "custom_last_activity_at");
+
+			// Filter row order = column order. Live list columns are: Title
+			// (now "Company Name"), Status, Assigned To (now "Handled By"),
+			// Phone, Territory, ID. Filter row reads the same left-to-right:
+			// Company Name → Status → Handled By → Territory → Last Activity
+			// (date range). Phone/ID have no filter control by design. Anything
+			// not a visible column (Temperature, Market Segment, Industry,
+			// Source, Lead Team) trails after.
 			ib_reorder_filter_row(listview, [
 				$(".ib-lead-company-name-filter"),
 				$(".ib-lead-status-multi-filter"),
 				$(".ib-lead-lead-owner-filter"),
 				$(".ib-lead-territory-filter"),
-				listview.page.fields_dict.name && listview.page.fields_dict.name.$wrapper,
+				$(".ib-lead-date-range-filter"),
 				listview.page.fields_dict.custom_lead_temperature && listview.page.fields_dict.custom_lead_temperature.$wrapper,
-				listview.page.fields_dict.custom_next_follow_up_date && listview.page.fields_dict.custom_next_follow_up_date.$wrapper,
 				$(".ib-lead-market-segment-filter"),
 				$(".ib-lead-industry-filter"),
 				$(".ib-lead-source-filter"),

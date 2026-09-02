@@ -1393,7 +1393,7 @@ class IBAssignmentAdmin {
 		this.page.add_field({
 			fieldname: "admin_territory",
 			fieldtype: "Link",
-			label: "Territory",
+			label: "State",
 			options: "Territory",
 			change() {
 				self._territory = this.get_value() || null;
@@ -2218,12 +2218,12 @@ class IBAssignmentAdmin {
 					</div>
 				</div>
 
-				<!-- ── Territories column ── -->
+				<!-- ── States column ── -->
 				<div class="ib-tm-col">
 					<div class="ib-tm-section">
-						<div class="ib-tm-section-label">Add Territory</div>
+						<div class="ib-tm-section-label">Add State</div>
 						<div class="ib-tm-picker-head">
-							<input class="ib-tm-picker-search form-control" id="ib-tm-territory-search" placeholder="Search territories…" autocomplete="off">
+							<input class="ib-tm-picker-search form-control" id="ib-tm-territory-search" placeholder="Search states…" autocomplete="off">
 						</div>
 						<div class="ib-tm-picker-list" id="ib-tm-territory-picker-list">${territory_picker_rows}</div>
 						<div class="ib-tm-section-label ib-tm-section-label--sub">Assigned <span class="ib-tm-count">${team.territories.length}</span></div>
@@ -2361,7 +2361,7 @@ class IBAssignmentAdmin {
 			const other_team_t = $(this).closest(".ib-tm-picker-row").data("other-team");
 			if (other_team_t) {
 				frappe.show_alert({
-					message: __("Territory is already assigned to team \"{0}\". Remove it from that team first.", [other_team_t]),
+					message: __("State is already assigned to team \"{0}\". Remove it from that team first.", [other_team_t]),
 					indicator: "red",
 				});
 				return;
@@ -2540,7 +2540,7 @@ class IBAssignmentAdmin {
 					</div>
 					<div class="ib-va-col">
 						<div class="ib-va-col-header">
-							${IB_ICONS.svg("map_pin", 13)}<span class="ib-va-col-title">Territory</span>
+							${IB_ICONS.svg("map_pin", 13)}<span class="ib-va-col-title">State</span>
 							<span class="ib-va-badge" id="ib-va-regular-count">0</span>
 						</div>
 						<input class="ib-va-col-search form-control" id="ib-va-regular-search" placeholder="Search…" autocomplete="off">

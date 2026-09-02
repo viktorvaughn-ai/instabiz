@@ -23,7 +23,7 @@ def _columns():
 		{"label": _("Source"),        "fieldname": "source",       "fieldtype": "Data",     "width": 100},
 		{"label": _("Loss Reason"),   "fieldname": "loss_reason",  "fieldtype": "Data",     "width": 180},
 		{"label": _("Sales Person"),  "fieldname": "sales_person", "fieldtype": "Data",     "width": 180},
-		{"label": _("Territory"),     "fieldname": "territory",    "fieldtype": "Data",     "width": 140},
+		{"label": _("State"),     "fieldname": "territory",    "fieldtype": "Data",     "width": 140},
 		{"label": _("Month"),         "fieldname": "month",        "fieldtype": "Data",     "width": 100},
 		{"label": _("Count"),         "fieldname": "count",        "fieldtype": "Int",      "width": 80},
 		{"label": _("Value Lost"),    "fieldname": "value_lost",   "fieldtype": "Currency", "width": 140},

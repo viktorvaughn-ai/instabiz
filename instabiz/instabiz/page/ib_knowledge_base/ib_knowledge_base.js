@@ -1270,12 +1270,12 @@ const KB_SECTIONS = [
 		items: [
 			{
 				num: "5.1", title: "Creating a Lead",
-				desc: "CRM, Lead, New. Enter pincode — city and district auto-fill from India Post API. Lead is auto-assigned to a sales rep via round-robin within the territory team.",
+				desc: "CRM, Lead, New. Enter pincode — city and district auto-fill from India Post API. Lead is auto-assigned to a sales rep via round-robin within the state team.",
 				link: "/app/lead/new-lead-1", linkLabel: "New Lead",
 				tags: "lead prospect crm new create",
 				steps: [
 					"Go to <b>CRM, Lead, New</b>.",
-					"Fill Lead Name, Mobile No, Email, Territory.",
+					"Fill Lead Name, Mobile No, Email, State.",
 					"Enter <b>Pincode</b> — city and district auto-fill from India Post.",
 					"Save. Lead is auto-assigned to a rep via round-robin.",
 				],
@@ -1300,12 +1300,12 @@ const KB_SECTIONS = [
 			},
 			{
 				num: "5.6", title: "Converting Lead to Customer",
-				desc: "Open Lead, click Make, Customer. Custom mapper carries territory, pincode, district, city, and sales person to the new Customer automatically.",
-				tags: "convert customer lead mapper territory",
+				desc: "Open Lead, click Make, Customer. Custom mapper carries state, pincode, district, city, and sales person to the new Customer automatically.",
+				tags: "convert customer lead mapper territory state",
 				steps: [
 					"Open the Lead (status: Quoted or Hot).",
 					"Click <b>Make, Customer</b>.",
-					"Custom mapper carries: Territory, Pincode, City, District, Sales Person.",
+					"Custom mapper carries: State, Pincode, City, District, Sales Person.",
 					"New Customer record is created and linked to this Lead.",
 				],
 			},
@@ -1320,8 +1320,8 @@ const KB_SECTIONS = [
 				tags: "nudge alert no activity dormant",
 			},
 			{
-				num: "92", title: "Lead Territory Auto-Derivation",
-				desc: "Territory is set automatically on Lead save. Priority: (1) GSTIN prefix — first 2 digits map to state (27=Maharashtra, 33=Tamil Nadu, 24=Gujarat). (2) Pincode — India Post API lookup if no GSTIN. To bulk-fix existing leads, run: <code>frappe.call(\"instabiz.overrides.lead.rectify_lead_territories\", {dry_run: 0})</code> from bench console.",
+				num: "92", title: "Lead State Auto-Derivation",
+				desc: "State is set automatically on Lead save. Priority: (1) GSTIN prefix — first 2 digits map to state (27=Maharashtra, 33=Tamil Nadu, 24=Gujarat). (2) Pincode — India Post API lookup if no GSTIN. To bulk-fix existing leads, run: <code>frappe.call(\"instabiz.overrides.lead.rectify_lead_territories\", {dry_run: 0})</code> from bench console.",
 				tags: "territory lead gstin state pincode auto",
 			},
 			{
@@ -1332,18 +1332,18 @@ const KB_SECTIONS = [
 			},
 			{
 				num: "LS-1", title: "Lead Sales Team — Round-Robin Assignment Setup",
-				desc: "Lead Sales Team is a custom master that controls which sales rep gets auto-assigned to a new Lead. Each team covers one or more Territories and has a list of Members (Users). When a Lead is saved, the system matches its Territory to a team and assigns the next rep in rotation.",
+				desc: "Lead Sales Team is a custom master that controls which sales rep gets auto-assigned to a new Lead. Each team covers one or more States and has a list of Members (Users). When a Lead is saved, the system matches its State to a team and assigns the next rep in rotation.",
 				link: "/app/lead-sales-team", linkLabel: "Lead Sales Team List",
-				tags: "lead sales team round robin assignment territory member user configure setup",
+				tags: "lead sales team round robin assignment territory state member user configure setup",
 				steps: [
 					"Go to <b>Lead Sales Team List</b> (search in top bar or Workspace, CRM).",
 					"Create a new team (e.g. 'Maharashtra Sales Team').",
 					"Add <b>Members</b>: each row links a User who is a sales rep.",
-					"Add <b>Territories</b>: link each Territory this team covers.",
-					"Save. When a Lead is created with a matching Territory, the system picks the next member in the rotation automatically.",
+					"Add <b>States</b>: link each State this team covers.",
+					"Save. When a Lead is created with a matching State, the system picks the next member in the rotation automatically.",
 					"The rotation index advances per assignment — each rep gets equal turns.",
 				],
-				note: "If no matching team is found for a Lead's territory, the lead is left unassigned. If a member is removed from a team, the rotation resets.",
+				note: "If no matching team is found for a Lead's state, the lead is left unassigned. If a member is removed from a team, the rotation resets.",
 			},
 			{
 				num: "16", title: "IB Sample Request — Sample Dispatch Tracker",
@@ -1461,7 +1461,7 @@ const KB_SECTIONS = [
 				steps: [
 					"Go to <b>Reports → IB Sales KPIs</b>.",
 					"Set <b>from_date / to_date</b> for the period (default: current month).",
-					"Optional: filter by <b>Territory</b>, <b>Sales Person</b>, or <b>Source</b>.",
+					"Optional: filter by <b>State</b>, <b>Sales Person</b>, or <b>Source</b>.",
 					"Click Refresh. Each row = one rep. Conversion % columns color-coded: green ≥30%, orange ≥15%, red <15%.",
 					"Bar chart shows top-10 reps by revenue. Summary cards show aggregate totals.",
 				],
@@ -1473,7 +1473,7 @@ const KB_SECTIONS = [
 				tags: "margin profit cogs item revenue gross profit valuation rate color coded",
 				steps: [
 					"Go to <b>Reports → IB Gross Margin</b>.",
-					"Set date range. Filter by territory, item group, or sales person if needed.",
+					"Set date range. Filter by state, item group, or sales person if needed.",
 					"Refresh. COGS = <code>qty_sold × Item.valuation_rate</code> (Item master rate, not SI valuation_rate).",
 					"Margin % column: green ≥30%, orange ≥15%, red <15% — identifies unprofitable SKUs.",
 					"Bar chart shows Revenue vs Gross Profit for top 10 items.",
@@ -1482,12 +1482,12 @@ const KB_SECTIONS = [
 			},
 			{
 				num: "58", title: "IB AR Aging",
-				desc: "Outstanding Sales Invoices bucketed into 0-30, 31-60, 61-90, 90+ days. Color-coded for old invoices. Filter by customer, territory, sales person.",
+				desc: "Outstanding Sales Invoices bucketed into 0-30, 31-60, 61-90, 90+ days. Color-coded for old invoices. Filter by customer, state, sales person.",
 				link: "/app/query-report/IB AR Aging", linkLabel: "View Report",
 				tags: "ar aging outstanding overdue receivable bucket 90 days customer",
 				steps: [
 					"Go to <b>Reports → IB AR Aging</b>.",
-					"Filter by customer, territory, or sales person as needed.",
+					"Filter by customer, state, or sales person as needed.",
 					"Click Refresh. Each row = one Sales Invoice. Age column = days since posting date.",
 					"90+ bucket colored red. Summary cards: total count, unique customers, total outstanding, 90+ amount.",
 					"Use this to prioritize collection calls — sort by 90+ bucket descending.",
@@ -1495,12 +1495,12 @@ const KB_SECTIONS = [
 			},
 			{
 				num: "69", title: "IB Collections Report",
-				desc: "Per-rep: invoiced, collected, outstanding, collection %. 3-dataset bar chart (Invoiced / Collected / Outstanding). Filter by date, territory, sales person.",
+				desc: "Per-rep: invoiced, collected, outstanding, collection %. 3-dataset bar chart (Invoiced / Collected / Outstanding). Filter by date, state, sales person.",
 				link: "/app/query-report/IB Collections Report", linkLabel: "View Report",
 				tags: "collections report rep invoiced outstanding collection percent bar chart",
 				steps: [
 					"Go to <b>Reports → IB Collections Report</b>.",
-					"Set date range (defaults: month start → today). Filter by territory, sales person, or chart type.",
+					"Set date range (defaults: month start → today). Filter by state, sales person, or chart type.",
 					"Refresh. Per-rep row: invoice count, invoiced ₹, collected ₹ (grand_total − outstanding), outstanding ₹, collection % (green ≥75%, orange ≥40%, red <40%).",
 					"3-dataset bar chart: Invoiced / Collected / Outstanding per rep.",
 					"Summary cards: Total Invoiced, Collected, Outstanding, Overall Collection %.",
@@ -1545,25 +1545,25 @@ const KB_SECTIONS = [
 			},
 			{
 				num: "62", title: "IB Territory Report",
-				desc: "Per-territory breakdown: leads, quotations, orders, revenue, avg deal size, lead-to-SO conversion % (color-coded green ≥30% / orange ≥15% / red <15%), lost leads. Bar chart with Revenue and Orders datasets. Filters: from_date, to_date.",
+				desc: "Per-state breakdown: leads, quotations, orders, revenue, avg deal size, lead-to-SO conversion % (color-coded green ≥30% / orange ≥15% / red <15%), lost leads. Bar chart with Revenue and Orders datasets. Filters: from_date, to_date.",
 				link: "/app/query-report/IB Territory Report", linkLabel: "View Report",
-				tags: "territory report leads orders revenue conversion rate lost deals geographic performance",
+				tags: "territory state report leads orders revenue conversion rate lost deals geographic performance",
 				steps: [
 					"Go to <b>Reports → IB Territory Report</b>.",
 					"Set date range. Refresh.",
-					"Each row = one territory. Conversion % = Lead-to-SO %; green ≥30%, orange ≥15%, red <15%.",
-					"Bar chart shows Revenue and Orders per territory.",
-					"Use this to identify under-performing territories or allocate more reps.",
+					"Each row = one state. Conversion % = Lead-to-SO %; green ≥30%, orange ≥15%, red <15%.",
+					"Bar chart shows Revenue and Orders per state.",
+					"Use this to identify under-performing states or allocate more reps.",
 				],
 			},
 			{
 				num: "63", title: "IB SKU Report",
-				desc: "Per-item: item code, item name, item group, UOM, orders count, qty sold, revenue, avg rate, number of unique customers. Bar chart top 10 by revenue. Filters: from_date, to_date, territory, item group.",
+				desc: "Per-item: item code, item name, item group, UOM, orders count, qty sold, revenue, avg rate, number of unique customers. Bar chart top 10 by revenue. Filters: from_date, to_date, state, item group.",
 				link: "/app/query-report/IB SKU Report", linkLabel: "View Report",
-				tags: "sku item report revenue qty sold customers top items product group territory",
+				tags: "sku item report revenue qty sold customers top items product group territory state",
 				steps: [
 					"Go to <b>Reports → IB SKU Report</b>.",
-					"Set date range. Optionally filter by territory or item group.",
+					"Set date range. Optionally filter by state or item group.",
 					"Refresh. Per-item row: orders count, qty sold, revenue, avg rate, unique customers.",
 					"Bar chart shows top 10 SKUs by revenue.",
 					"Use this to identify fast-movers vs slow-movers; cross-reference with IB Gross Margin for profitability.",
@@ -1571,12 +1571,12 @@ const KB_SECTIONS = [
 			},
 			{
 				num: "25", title: "IB Lost Deal Analysis",
-				desc: "Lost Leads (custom_status=Lost) and lost Quotations (status=Lost) in one report. Columns: source, loss reason, sales person, territory, month, count, value lost, doc link. Bar chart by loss reason. Filters: date range, source, loss reason, territory, sales person.",
+				desc: "Lost Leads (custom_status=Lost) and lost Quotations (status=Lost) in one report. Columns: source, loss reason, sales person, state, month, count, value lost, doc link. Bar chart by loss reason. Filters: date range, source, loss reason, state, sales person.",
 				link: "/app/query-report/IB Lost Deal Analysis", linkLabel: "View Report",
 				tags: "lost deal analysis report lead quotation loss reason source why churn competitor price",
 				steps: [
 					"Go to <b>Reports → IB Lost Deal Analysis</b>.",
-					"Set date range. Filter by source, loss_reason, territory, or sales_person as needed.",
+					"Set date range. Filter by source, loss_reason, state, or sales_person as needed.",
 					"Refresh. Each row = one lost Lead or lost Quotation. Click the doc link to open the original.",
 					"Bar chart shows loss count by reason (Price / Competitor / No Budget / Product / etc.).",
 					"Use loss reason trends to guide product or pricing decisions.",
@@ -1597,12 +1597,12 @@ const KB_SECTIONS = [
 			},
 			{
 				num: "73", title: "IB Sales Person Summary",
-				desc: "Per-rep summary from submitted SOs: order count, total revenue, avg order value, max order value. Sales person name resolved from custom_sales_person → User full_name. Filters: from_date, to_date, sales_person_user, status, territory.",
+				desc: "Per-rep summary from submitted SOs: order count, total revenue, avg order value, max order value. Sales person name resolved from custom_sales_person → User full_name. Filters: from_date, to_date, sales_person_user, status, state.",
 				link: "/app/query-report/IB Sales Person Summary", linkLabel: "View Report",
 				tags: "sales person summary rep revenue orders performance avg max order value",
 				steps: [
 					"Go to <b>Reports → IB Sales Person Summary</b>.",
-					"Set date range. Filter by sales_person_user, status, or territory.",
+					"Set date range. Filter by sales_person_user, status, or state.",
 					"Refresh. Each row = one rep: order count, total revenue, avg order value, max order value.",
 					"Use alongside IB Sales KPIs for a complete rep performance picture.",
 				],
@@ -1642,7 +1642,7 @@ const KB_SECTIONS = [
 				tags: "price history report export item sales order rate historical",
 				steps: [
 					"Go to <b>Reports → IB Price History Report</b>.",
-					"Filter by item, customer, territory, or date range.",
+					"Filter by item, customer, state, or date range.",
 					"Export to Excel/CSV directly from the report toolbar.",
 				],
 			},
@@ -1958,7 +1958,7 @@ const KB_SECTIONS = [
 		items: [
 			{
 				num: "CB-1", title: "Customer Board (My Board + Team, merged 2026-08-05)",
-				desc: "Page: Customer Board (<b>Workspace → Customer Board</b>) — one page, replacing the previously separate Customer Board and Assignment Admin pages/shortcuts.<br><b>My Board tab</b> (every Sales User, Sales Manager, System Manager, Team Leader — everyone with access to the page has their own accounts too): 3 columns — <b>My Accounts</b> (your assigned customer pool, paginated), <b>Today</b> (to contact today, with a progress bar and Completed/Skipped stat cards), <b>Tomorrow</b> (auto-assigned at midnight). Drag a card between columns, or use the Add to Today/Tomorrow pills. Submitting a Sales Order for a customer auto-marks their Today assignment done.<br><b>Team tab</b> (Sales Manager, System Manager, Team Leader only — the tab itself is absent from the tab bar for a plain Sales User, not just hidden): the former Assignment Admin — a roster of every rep grouped by team (avatar, Done/Pending/Tomorrow counts, sales-target progress bar), <b>View As</b> to load and operate any rep's own 4-column board (My Accounts / Territory pool / Today / Tomorrow) on their behalf, team management (add/remove members and territories), and incentive-slab configuration.",
+				desc: "Page: Customer Board (<b>Workspace → Customer Board</b>) — one page, replacing the previously separate Customer Board and Assignment Admin pages/shortcuts.<br><b>My Board tab</b> (every Sales User, Sales Manager, System Manager, Team Leader — everyone with access to the page has their own accounts too): 3 columns — <b>My Accounts</b> (your assigned customer pool, paginated), <b>Today</b> (to contact today, with a progress bar and Completed/Skipped stat cards), <b>Tomorrow</b> (auto-assigned at midnight). Drag a card between columns, or use the Add to Today/Tomorrow pills. Submitting a Sales Order for a customer auto-marks their Today assignment done.<br><b>Team tab</b> (Sales Manager, System Manager, Team Leader only — the tab itself is absent from the tab bar for a plain Sales User, not just hidden): the former Assignment Admin — a roster of every rep grouped by team (avatar, Done/Pending/Tomorrow counts, sales-target progress bar), <b>View As</b> to load and operate any rep's own 4-column board (My Accounts / Regular pool / Today / Tomorrow) on their behalf, team management (add/remove members and states), and incentive-slab configuration.",
 				link: "/app/ib-customer-board", linkLabel: "Open Customer Board",
 				tags: "customer board kanban my accounts today tomorrow daily plan contact schedule assignment team roster assignment admin view as manager",
 				steps: [
@@ -1967,9 +1967,9 @@ const KB_SECTIONS = [
 					"Click <b>Add to Today</b> or <b>Tomorrow</b> on a My Accounts card to schedule it, or drag the card into the target column.",
 					"If you're a Sales Manager, System Manager, or Team Leader, a <b>Team</b> tab appears next to My Board.",
 					"On the Team tab, click a rep's <b>⋮ → View board</b> to load and operate their full kanban on their behalf.",
-					"Team tab's kebab menu also has Auto-fill, Transfer, and Set Target per rep, plus a team-level ⋮ for Manage Team (members/territories).",
+					"Team tab's kebab menu also has Auto-fill, Transfer, and Set Target per rep, plus a team-level ⋮ for Manage Team (members/states).",
 				],
-				tip: "Your monthly sales target card appears above the My Board columns — shows target amount and MTD revenue so far. The midnight scheduler auto-assigns tomorrow's batch based on your territory. Bookmarked URLs look like <code>/app/ib-customer-board</code> (My Board) or <code>/app/ib-customer-board/team</code> (Team) — the Team URL silently falls back to My Board for a non-manager, since the underlying admin RPCs are server-side role-gated independent of which tab you're looking at.",
+				tip: "Your monthly sales target card appears above the My Board columns — shows target amount and MTD revenue so far. The midnight scheduler auto-assigns tomorrow's batch based on your state. Bookmarked URLs look like <code>/app/ib-customer-board</code> (My Board) or <code>/app/ib-customer-board/team</code> (Team) — the Team URL silently falls back to My Board for a non-manager, since the underlying admin RPCs are server-side role-gated independent of which tab you're looking at.",
 				note: "Team tab pool pagination: 50 customers per page. Manager actions there are full CRUD — no restrictions on which rep's board is edited.",
 			},
 			{
@@ -1988,7 +1988,7 @@ const KB_SECTIONS = [
 			},
 			{
 				num: "CB-4", title: "IB Customer Assignment — Individual Assignment Record",
-				desc: "Each assignment is one IB Customer Assignment (ICA-.YYYY.-#####) record: customer, assigned_to (User), assigned_date, status (Pending/Contacted/Order Placed/Skipped/Rolled Over), source_pool (Dormant/Regular), territory, outcome.",
+				desc: "Each assignment is one IB Customer Assignment (ICA-.YYYY.-#####) record: customer, assigned_to (User), assigned_date, status (Pending/Contacted/Order Placed/Skipped/Rolled Over), source_pool (Dormant/Regular), state, outcome.",
 				link: "/app/ib-customer-assignment", linkLabel: "Customer Assignment List",
 				tags: "customer assignment record pending contacted order placed skipped rolled over status outcome",
 				note: "Submitting a Sales Order for a customer on their assignment date auto-updates the assignment status to Order Placed.",
@@ -2776,11 +2776,11 @@ const KB_WORKFLOWS = {
 		body: `
 <p>Start with a <b>Lead</b> (prospect) or an existing <b>Customer</b>.</p>
 <ul class="ib-kb-steps">
-  <li>Create Lead: CRM, Lead, New. Enter name, mobile, email, territory.</li>
+  <li>Create Lead: CRM, Lead, New. Enter name, mobile, email, state.</li>
   <li>Enter Pincode — city and district auto-fill from India Post API.</li>
-  <li>Lead is auto-assigned to a sales rep via round-robin (based on territory).</li>
+  <li>Lead is auto-assigned to a sales rep via round-robin (based on state).</li>
   <li>Log activities: Call, Meeting, WhatsApp, Email, Visit with outcome and next follow-up date.</li>
-  <li>When ready: Lead, Make, Customer (custom mapper carries territory, pincode, sales person).</li>
+  <li>When ready: Lead, Make, Customer (custom mapper carries state, pincode, sales person).</li>
 </ul>
 <div class="ib-kb-tip">Lead Score (0-100) is auto-computed from temperature, status, and contact completeness. Leads with score above 30 and product interest set get AI auto-quote suggestions.</div>`,
 	},
@@ -2904,7 +2904,7 @@ const SYNONYMS = {
 	report: ["analytics", "dashboard", "kpi"],
 	"customer board": ["kanban", "daily plan", "assignment"],
 	"sample request": ["sample", "trial", "demo"],
-	"sales team": ["round robin", "assignment team", "territory team"],
+	"sales team": ["round robin", "assignment team", "territory team", "state team"],
 	target: ["goal", "quota", "monthly target"],
 	dormant: ["inactive", "no order", "lapsed", "re-engage"],
 	"health score": ["customer score", "health", "green amber red"],

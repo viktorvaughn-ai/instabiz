@@ -13,7 +13,7 @@ def execute(filters=None):
 
 def _columns():
 	return [
-		{"label": _("Territory"),     "fieldname": "territory",    "fieldtype": "Link",     "options": "Territory", "width": 180},
+		{"label": _("State"),     "fieldname": "territory",    "fieldtype": "Link",     "options": "Territory", "width": 180},
 		{"label": _("Leads"),         "fieldname": "leads",        "fieldtype": "Int",      "width": 90},
 		{"label": _("Quotations"),    "fieldname": "quotations",   "fieldtype": "Int",      "width": 110},
 		{"label": _("Orders"),        "fieldname": "orders",       "fieldtype": "Int",      "width": 90},
@@ -113,7 +113,7 @@ def _summary(data):
 	if not data:
 		return None
 	return [
-		{"value": len(data),                        "label": _("Territories"),      "datatype": "Int",      "indicator": "blue"},
+		{"value": len(data),                        "label": _("States"),           "datatype": "Int",      "indicator": "blue"},
 		{"value": sum(r["leads"]   for r in data),  "label": _("Total Leads"),      "datatype": "Int",      "indicator": "orange"},
 		{"value": sum(r["orders"]  for r in data),  "label": _("Total Orders"),     "datatype": "Int",      "indicator": "green"},
 		{"value": sum(r["revenue"] for r in data),  "label": _("Total Revenue"),    "datatype": "Currency", "indicator": "green"},

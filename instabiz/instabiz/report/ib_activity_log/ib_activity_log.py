@@ -34,7 +34,7 @@ def _columns():
 		{"label": _("Reference"),     "fieldname": "reference",     "fieldtype": "Data",     "width": 160},
 		{"label": _("Contact / Name"),"fieldname": "contact_name",  "fieldtype": "Data",     "width": 180},
 		{"label": _("Sales Person"),  "fieldname": "sales_person",  "fieldtype": "Data",     "width": 160},
-		{"label": _("Territory"),     "fieldname": "territory",     "fieldtype": "Data",     "width": 120},
+		{"label": _("State"),     "fieldname": "territory",     "fieldtype": "Data",     "width": 120},
 		{"label": _("Activity"),      "fieldname": "activity_type", "fieldtype": "Data",     "width": 120},
 		{"label": _("Outcome"),       "fieldname": "outcome",       "fieldtype": "Data",     "width": 130},
 		{"label": _("Notes"),         "fieldname": "notes",         "fieldtype": "Data",     "width": 260},

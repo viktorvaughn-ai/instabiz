@@ -9,7 +9,7 @@ frappe.query_reports["IB Daily Sales Report"] = {
 		},
 		{
 			fieldname: "territory",
-			label: __("Territory"),
+			label: __("State"),
 			fieldtype: "Link",
 			options: "Territory",
 		},

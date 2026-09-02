@@ -16,7 +16,7 @@ frappe.query_reports["IB Sales KPIs"] = {
 		},
 		{
 			fieldname: "territory",
-			label: __("Territory"),
+			label: __("State"),
 			fieldtype: "Link",
 			options: "Territory",
 		},

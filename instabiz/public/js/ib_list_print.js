@@ -10,7 +10,7 @@ const _IB_LP_COLS = {
     "Customer": [
         { f: "name",                        l: "Customer",      bold: true },
         { f: "gstin",                       l: "GSTIN" },
-        { f: "territory",                   l: "Territory" },
+        { f: "territory",                   l: "State" },
         { f: "custom_contact_person_name",  l: "Contact Person" },
         { f: "mobile_no",                   l: "Mobile" },
         { f: "custom_sales_person",         l: "Handled By" },
@@ -19,7 +19,7 @@ const _IB_LP_COLS = {
         { f: "lead_name",           l: "Name",        bold: true },
         { f: "company_name",        l: "Company" },
         { f: "custom_status",       l: "Status",      badge: true },
-        { f: "territory",           l: "Territory" },
+        { f: "territory",           l: "State" },
         { f: "lead_owner",          l: "Owner" },
     ],
     "Quotation": [

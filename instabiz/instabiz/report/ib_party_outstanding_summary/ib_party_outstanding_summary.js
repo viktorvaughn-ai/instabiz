@@ -2,7 +2,7 @@ frappe.query_reports["IB Party Outstanding Summary"] = {
 	filters: [
 		{
 			fieldname: "territory",
-			label: __("Territory"),
+			label: __("State"),
 			fieldtype: "Link",
 			options: "Territory",
 		},

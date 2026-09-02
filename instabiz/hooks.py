@@ -157,7 +157,17 @@ fixtures = [
                                           "Lead", "Delivery Note", "Delivery Note Item", "Customer",
                                           "IB Credit Note", "IB Debit Note", "Purchase Invoice",
                                           "Purchase Order", "Purchase Receipt", "Sales Invoice",
-                                          "Salary Slip", "IB Work Order", "IB Order Sheet"]]]
+                                          "Salary Slip", "IB Work Order", "IB Order Sheet",
+                                          # Territory -> "State" label rename (2026-08-31, system-wide,
+                                          # label-only — see CLAUDE.md for why the doctype itself can't
+                                          # be renamed): every doctype with a Territory Link field.
+                                          "C-Form Invoice Detail", "IB Customer Assignment",
+                                          "Installation Note", "Lead Sales Team Territory",
+                                          "Loyalty Program", "Maintenance Schedule", "Maintenance Visit",
+                                          "Opportunity", "POS Invoice", "Pricing Rule",
+                                          "Process Statement Of Accounts", "Prospect", "Sales Partner",
+                                          "Selling Settings", "Territory", "Territory Item",
+                                          "Warranty Claim", "Lead Sales Team"]]]
     },
     {
         "dt": "Custom DocPerm",

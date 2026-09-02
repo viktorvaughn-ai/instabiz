@@ -16,7 +16,7 @@ frappe.query_reports["IB Collections Report"] = {
 		},
 		{
 			fieldname: "territory",
-			label:     __("Territory"),
+			label:     __("State"),
 			fieldtype: "Link",
 			options:   "Territory",
 		},

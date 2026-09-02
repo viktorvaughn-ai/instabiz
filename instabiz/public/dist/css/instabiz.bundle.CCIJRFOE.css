@@ -1,4 +1,4 @@
-/* ../../../../../tmp/tmp-3763716-GJGuY0WmDuNt/instabiz/instabiz/public/css/instabiz.bundle.css */
+/* ../../../../../tmp/tmp-428829-LgtxPdxkuUkb/instabiz/instabiz/public/css/instabiz.bundle.css */
 @keyframes ib-bell-ring {
   0%, 100% {
     transform: rotate(0deg);
@@ -4696,4 +4696,113 @@ iconify-icon {
     align-items: flex-start;
   }
 }
-/*# sourceMappingURL=instabiz.bundle.V53ZELXW.css.map */
+.ib-md-kpi,
+.ib-fin-kpi,
+.ib-hr-kpi,
+.ib-proc-kpi,
+.ib-col-kpi,
+.ib-hub-kpi,
+.ib-ch-kpi,
+.ib-dpr-kpi-card,
+.ib-si-kpi,
+.ib-aap-kpi,
+.ib-fu-kpi,
+.ib-pt-card,
+.ib-sd-card,
+.ib-iph-card,
+.ib-cb-stat-card,
+.ib-pd-kpi-card,
+.ib-pd-pipeline-card {
+  background: var(--card-bg, #fff) !important;
+  border: 1px solid var(--border-color, #e5e7eb) !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+  transition: background .12s, border-color .12s !important;
+}
+.ib-md-kpi:hover,
+.ib-fin-kpi:hover,
+.ib-hr-kpi:hover,
+.ib-proc-kpi:hover,
+.ib-col-kpi:hover,
+.ib-hub-kpi:hover,
+.ib-ch-kpi:hover,
+.ib-dpr-kpi-card:hover,
+.ib-si-kpi:hover,
+.ib-aap-kpi:hover,
+.ib-fu-kpi:hover,
+.ib-pt-card:hover,
+.ib-sd-card:hover,
+.ib-iph-card:hover,
+.ib-cb-stat-card:hover,
+.ib-pd-kpi-card:hover,
+.ib-pd-pipeline-card:hover {
+  background: var(--subtle-fg, #f8fafc) !important;
+  border-color: var(--border-color, #d1d5db) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+.ib-fu-kpi.active {
+  border-color: var(--ib-primary, var(--primary, #d97757)) !important;
+}
+.ib-md-kpi-val,
+.ib-fin-kpi-val,
+.ib-hr-kpi-val,
+.ib-proc-kpi-v,
+.ib-col-kpi-v,
+.ib-hub-kpi-val,
+.ib-ch-kpi-v,
+.ib-dpr-kpi-value,
+.ib-si-kpi-value,
+.ib-aap-kpi-val,
+.ib-fu-kpi-value,
+.ib-pt-card-value,
+.ib-sd-card-value,
+.ib-iph-card-value,
+.ib-cb-stat-num,
+.ib-pd-kpi-value,
+.ib-pd-pipe-total {
+  color: var(--text-color, #111827) !important;
+  font-size: 1.6rem !important;
+  font-weight: 650 !important;
+  line-height: 1.05 !important;
+  font-variant-numeric: tabular-nums !important;
+  letter-spacing: -.01em !important;
+}
+.ib-md-kpi-lbl,
+.ib-fin-kpi-lbl,
+.ib-hr-kpi-lbl,
+.ib-proc-kpi-l,
+.ib-col-kpi-l,
+.ib-hub-kpi-lbl,
+.ib-ch-kpi-l,
+.ib-dpr-kpi-label,
+.ib-si-kpi-label,
+.ib-aap-kpi-lbl,
+.ib-fu-kpi-label,
+.ib-pt-card-label,
+.ib-sd-card-label,
+.ib-iph-card-label,
+.ib-cb-stat-lbl,
+.ib-pd-kpi-label {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: .06em !important;
+  text-transform: uppercase !important;
+  color: var(--text-muted, #6b7280) !important;
+}
+.ib-fin-kpi-bar,
+.ib-proc-kpi-bar,
+.ib-col-kpi-bar,
+.ib-md-kpi-icon,
+.ib-md-kpi-arrow,
+.ib-aap-kpi-icon,
+.ib-hub-kpi-badge,
+.ib-hub-kpi-link-hint,
+.ib-dpr-kpi-icon-wrap,
+.ib-pd-pipe-icon {
+  display: none !important;
+}
+.ib-si-kpi::before {
+  display: none !important;
+}
+/*# sourceMappingURL=instabiz.bundle.CCIJRFOE.css.map */

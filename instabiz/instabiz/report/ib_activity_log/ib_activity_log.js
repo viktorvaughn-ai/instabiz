@@ -29,7 +29,7 @@ frappe.query_reports["IB Activity Log"] = {
 		},
 		{
 			fieldname: "territory",
-			label: __("Territory"),
+			label: __("State"),
 			fieldtype: "Link",
 			options: "Territory",
 		},
