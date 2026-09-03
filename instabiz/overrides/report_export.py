@@ -33,6 +33,19 @@ def export_selected_rows_pdf(report_name, columns, rows, filters=None):
 	if not columns or not rows:
 		frappe.throw(_("No rows selected."))
 
+	# rows/columns are client-supplied (this just re-formats what the report
+	# page already rendered — no server-side re-query), so this can't leak
+	# any report's real data on its own. But without this check, any
+	# authenticated Desk user could call the RPC directly with a real,
+	# access-restricted report's name (e.g. "IB Payroll Summary") and
+	# fabricated rows, producing a company-letterhead PDF that impersonates
+	# a report they were never permitted to run. Only enforced when
+	# report_name resolves to a real Report record — the letterhead export
+	# doubles as a generic "make me a table PDF" tool for ad-hoc data too,
+	# which never impersonates anything and stays unrestricted.
+	if frappe.db.exists("Report", report_name) and not frappe.get_doc("Report", report_name).is_permitted():
+		frappe.throw(_("You are not permitted to access this report"), frappe.PermissionError)
+
 	html = _build_html(report_name, columns, rows, filters)
 	pdf = frappe.utils.pdf.get_pdf(html, {
 		"page-size": "A4",

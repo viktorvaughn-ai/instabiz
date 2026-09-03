@@ -209,3 +209,42 @@ def sales_invoice_query_conditions(user):
 
 def sales_invoice_has_permission(doc, ptype, user):
     return _sales_doc_has_permission(doc, ptype, user)
+
+
+# ── Payment Entry: Sales User restricted to their own handled customers ───────
+# Accounts User/Accounts Manager keep their existing full (unrestricted)
+# access — this only narrows the plain Sales User role, which previously had
+# no Payment Entry permission at all (2026-09-03, user request: "let sales
+# user add payment entry only for their assigned/handled customers"). Payment
+# Entry has no custom_sales_person_user of its own — scoping is a live join
+# through party -> Customer.custom_sales_person_user, so it always reflects
+# who currently handles that customer (not a frozen creation-time snapshot
+# like Quotation/SO/DN/SI use).
+_PE_UNRESTRICTED_ROLES = _PRIVILEGED_ROLES | {"Accounts User", "Accounts Manager"}
+
+def payment_entry_query_conditions(user):
+    if not user:
+        user = frappe.session.user
+    if _PE_UNRESTRICTED_ROLES & set(frappe.get_roles(user)):
+        return "1=1"
+    if "Sales User" not in frappe.get_roles(user):
+        return "1=1"  # no scoped role at all — leave to standard doctype permission
+    u = frappe.db.escape(user)
+    return (
+        f"(`tabPayment Entry`.`party_type` = 'Customer'"
+        f" AND `tabPayment Entry`.`party` IN"
+        f" (SELECT name FROM `tabCustomer` WHERE custom_sales_person_user = {u}))"
+    )
+
+def payment_entry_has_permission(doc, ptype, user):
+    if not user:
+        user = frappe.session.user
+    if _PE_UNRESTRICTED_ROLES & set(frappe.get_roles(user)):
+        return True
+    if "Sales User" not in frappe.get_roles(user):
+        return True
+    if ptype == "create" or not doc.name:
+        return True
+    if doc.party_type != "Customer" or not doc.party:
+        return False
+    return frappe.db.get_value("Customer", doc.party, "custom_sales_person_user") == user

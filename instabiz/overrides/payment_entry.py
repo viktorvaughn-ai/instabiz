@@ -1,5 +1,6 @@
 """instabiz.overrides.payment_entry
 
+validate      → enforce_sales_user_own_customer  (Sales User: own customers only)
 before_submit → _auto_reconcile   (Receive, no refs → link open SIs FIFO)
 on_submit     → _notify_accounts, _update_so_advance
 on_cancel     → _update_so_advance
@@ -7,8 +8,29 @@ on_cancel     → _update_so_advance
 import frappe
 from frappe import _
 from frappe.utils import flt, fmt_money
+from instabiz.overrides.permissions import _PE_UNRESTRICTED_ROLES
 
 _ACCOUNTS_ROLES = frozenset({"Accounts User", "Accounts Manager", "System Manager"})
+
+
+def enforce_sales_user_own_customer(doc, method=None):
+	"""Write-time mirror of permissions.payment_entry_has_permission — a plain
+	Sales User (not Accounts User/Manager/Sales Manager/System Manager) can
+	only save a Payment Entry against a Customer they currently handle. The
+	permission-query/has_permission hooks already gate read/list access; this
+	closes the same rule on the write path, since doc.has_permission("create")
+	is always True before the party is even picked (2026-09-03, user request)."""
+	user = frappe.session.user
+	roles = frappe.get_roles(user)
+	if _PE_UNRESTRICTED_ROLES & set(roles):
+		return
+	if "Sales User" not in roles:
+		return
+	if doc.party_type != "Customer" or not doc.party:
+		frappe.throw(_("You can only create a Payment Entry against a Customer."))
+	handled_by = frappe.db.get_value("Customer", doc.party, "custom_sales_person_user")
+	if handled_by != user:
+		frappe.throw(_("{0} is not one of your assigned customers.").format(doc.party))
 
 
 def before_submit(doc, method=None):

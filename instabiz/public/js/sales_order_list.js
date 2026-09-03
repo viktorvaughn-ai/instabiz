@@ -60,10 +60,14 @@ frappe.listview_settings["Sales Order"] = {
         ]);
         ib_setup_list_date_filter(listview, "Sales Order", "creation", ["transaction_date", "delivery_date"]);
         ib_setup_list_team_filter(listview, "Sales Order");
+        ib_setup_list_multiselect_filter(listview, "Sales Order", "custom_location", "Location",
+            ["MAHARASHTRA", "GUJARAT", "CHENNAI"],
+            { MAHARASHTRA: "BHIWANDI", GUJARAT: "SARIGRAM" });
         ib_reorder_filter_row(listview, [
             $(".ib-sales-order-customer-name-filter"),
             $(".ib-sales-order-sales-user-filter"),
             $(".ib-sales-order-status-multi-filter"),
+            $(".ib-sales-order-custom-location-filter"),
             $(".ib-sales-order-date-range-filter"),
             listview.page.fields_dict.name && listview.page.fields_dict.name.$wrapper,
             $(".ib-sales-order-team-filter"),

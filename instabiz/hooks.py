@@ -170,9 +170,13 @@ fixtures = [
                                           "Warranty Claim", "Lead Sales Team"]]]
     },
     {
+        # Sales User added 2026-09-03 (user request) — create/write/submit/cancel
+        # own Payment Entries, restricted to their own handled customers via
+        # permissions.payment_entry_query_conditions/has_permission +
+        # payment_entry.enforce_sales_user_own_customer (write-time guard).
         "dt": "Custom DocPerm",
         "filters": [["parent", "=", "Payment Entry"],
-                    ["role", "in", ["Sales Manager", "Accounts User", "Accounts Manager"]]]
+                    ["role", "in", ["Sales Manager", "Accounts User", "Accounts Manager", "Sales User"]]]
     },
     {
         # Sales User's if_owner flag on Quotation/Sales Order — was 1, which
@@ -202,6 +206,16 @@ fixtures = [
         "dt": "Custom DocPerm",
         "filters": [["parent", "=", "Market Segment"],
                     ["role", "in", ["Sales User", "Sales Manager"]]]
+    },
+    {
+        # Industry Type (standard Selling doctype, Lead's "Industry" field) —
+        # Sales User create-only, Sales Manager full control (2026-09-03, user
+        # request). Same Custom DocPerm suppression gotcha as Market Segment
+        # above: Sales Master Manager's original core access is replicated
+        # unchanged here too, or it would have silently lost access.
+        "dt": "Custom DocPerm",
+        "filters": [["parent", "=", "Industry Type"],
+                    ["role", "in", ["Sales User", "Sales Manager", "Sales Master Manager"]]]
     },
     {
         "dt": "Purchase Taxes and Charges Template",
@@ -301,6 +315,7 @@ doc_events = {
         "on_trash":  "instabiz.overrides.customer.update_customer_outstanding_on_si",
     },
     "Payment Entry": {
+        "validate":      "instabiz.overrides.payment_entry.enforce_sales_user_own_customer",
         "before_submit": "instabiz.overrides.payment_entry.before_submit",
         "on_submit":     "instabiz.overrides.payment_entry.on_submit",
         "on_cancel":     "instabiz.overrides.payment_entry.on_cancel",
@@ -331,6 +346,7 @@ permission_query_conditions = {
     "Sales Invoice":     "instabiz.overrides.permissions.sales_invoice_query_conditions",
     "Employee Checkin":  "instabiz.overrides.checkin.employee_checkin_query_conditions",
     "IB Asset Loan":     "instabiz.instabiz.doctype.ib_asset_loan.ib_asset_loan.get_permission_query_conditions",
+    "Payment Entry":     "instabiz.overrides.permissions.payment_entry_query_conditions",
 }
 
 has_permission = {
@@ -341,6 +357,7 @@ has_permission = {
     "Delivery Note":     "instabiz.overrides.permissions.delivery_note_has_permission",
     "Sales Invoice":     "instabiz.overrides.permissions.sales_invoice_has_permission",
     "Employee Checkin":  "instabiz.overrides.checkin.employee_checkin_has_permission",
+    "Payment Entry":     "instabiz.overrides.permissions.payment_entry_has_permission",
 }
 
 # ── Whitelisted method overrides ──────────────────────────────────────────────

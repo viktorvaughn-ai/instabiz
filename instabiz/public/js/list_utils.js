@@ -217,6 +217,83 @@ function ib_setup_list_link_filter(listview, doctype, fieldname, placeholder, op
     }
 }
 
+// ── Generic multi-select filter for any field (e.g. custom_location) ──────────
+// Same MultiSelectList shape as ib_setup_status_multiselect above, generalized
+// to any fieldname + value list + "in" filter — no bare "Select" placeholder
+// item the way a native <select> needs one (nothing is picked = no chips, not
+// a dead first option). Optional labelMap ({realValue: "Display Label"})
+// controls what's SHOWN, both in the dropdown list and the selected-chip
+// summary — MultiSelectList's get_data() natively supports value != label
+// (unlike a plain <select>, no DOM-patching workaround needed), so the filter
+// always applies against the real value regardless of what's displayed.
+function ib_setup_list_multiselect_filter(listview, doctype, fieldname, placeholder, values, labelMap) {
+    const slug    = doctype.toLowerCase().replace(/ /g, "-");
+    const css     = `ib-${slug}-${fieldname.replace(/_/g, "-")}-filter`;
+    const eventNs = `ib_${slug.replace(/-/g, "_")}_${fieldname}_clear`;
+
+    const existingField = listview.page.fields_dict[fieldname];
+    if (existingField && existingField.$wrapper) {
+        existingField.$wrapper.hide();
+    }
+
+    $(`.${css}`).remove();
+    const $wrapper = $(
+        `<div class="form-group frappe-control input-max-width ${css}" ` +
+        `data-fieldtype="MultiSelectList" data-fieldname="${fieldname}"></div>`
+    );
+    $wrapper.css({ flex: "0 0 160px", maxWidth: "160px" });
+
+    _ib_chain_anchor(listview, $wrapper, existingField && existingField.$wrapper);
+
+    const control = frappe.ui.form.make_control({
+        df: {
+            label: "",
+            fieldtype: "MultiSelectList",
+            placeholder: __(placeholder),
+            input_class: "input-xs",
+            get_data(txt) {
+                const q = (txt || "").toLowerCase();
+                return values
+                    .filter((v) => (labelMap && labelMap[v] || v).toLowerCase().includes(q))
+                    .map((v) => ({ value: v, label: (labelMap && labelMap[v]) || v, description: __(placeholder) }));
+            },
+            onchange() {
+                const selected = ib_extract_filter_values(control.get_value());
+                _ib_remove_filters(listview, fieldname);
+                if (selected.length) {
+                    listview.filter_area.add([[doctype, fieldname, "in", selected]]);
+                }
+                listview.refresh();
+            },
+        },
+        parent: $wrapper,
+        only_input: true,
+        render_input: 1,
+    });
+    control.$wrapper.removeClass("form-group");
+    control.$wrapper.css("margin-bottom", 0);
+
+    // MultiSelectList only populates its internal _options (which set_value's
+    // label lookup reads) lazily on dropdown-open — restoring an existing
+    // filter here, before the user has ever opened it, would resolve nothing
+    // and fall back to showing the raw value instead of labelMap's label.
+    // get_data() above is synchronous, so this populates _options immediately.
+    control.set_options();
+
+    const current = listview.filter_area
+        .get()
+        .filter((f) => f[1] === fieldname)
+        .flatMap((f) => ib_extract_filter_values(f[3]));
+    if (current.length) control.set_value(current);
+
+    const $clearBtn = listview.filter_area && listview.filter_area.filter_x_button;
+    if ($clearBtn && $clearBtn.length) {
+        $clearBtn
+            .off(`click.${eventNs}`)
+            .on(`click.${eventNs}`, () => control.set_value([]));
+    }
+}
+
 // ── Generic distinct-value autocomplete filter for a free-text Data field ─────
 // Native standard filters on Data fields (customer_name, supplier_name, title,
 // company_name, …) render as plain text boxes with no suggestions. This swaps

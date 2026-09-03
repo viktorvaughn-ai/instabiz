@@ -676,7 +676,18 @@ def search_customer_pool(pool_type, search):
 	"""Multi-token pool search for the current user's board."""
 	user = frappe.session.user
 	config = get_assignment_config()
-	territories = get_user_territories(user) or _all_leaf_territories()
+	is_manager = any(r in frappe.get_roles() for r in ["Sales Manager", "System Manager"])
+	# Only a manager falls back to every territory when they have none of their
+	# own configured (managers legitimately need to find anyone, company-wide).
+	# A regular Sales User with no Lead Sales Team membership must NOT fall
+	# back the same way — that silently exposed the whole company's customers
+	# through the "Territory" search box to any rep not yet on a team, with no
+	# check at all on the other end (add_customer_to_today never validated
+	# territory either) — confirmed live as the actual cause of a Karnataka
+	# team member ending up with Gujarat customers on their board (2026-09-03).
+	territories = get_user_territories(user)
+	if not territories and is_manager:
+		territories = _all_leaf_territories()
 	threshold = config["dormant_threshold_days"]
 	# Territory search: only exclude today's Pending (same logic as Territory board column).
 	# Dormant/My-Accounts search: use wide exclude to match scheduler behaviour.
@@ -688,7 +699,6 @@ def search_customer_pool(pool_type, search):
 	else:
 		exclude = _already_assigned_customers(today())
 	cutoff = frappe.utils.add_days(today(), -threshold)
-	is_manager = any(r in frappe.get_roles() for r in ["Sales Manager", "System Manager"])
 
 	tokens = [t.strip() for t in (search or "").split() if t.strip()]
 	if not tokens:
@@ -896,7 +906,25 @@ def add_customer_to_today(customer, date=None, target_user=None):
 		if existing:
 			frappe.throw(_(f"Customer {customer} is already in your board for {date}."))
 
-		territory = frappe.db.get_value("Customer", customer, "territory")
+		territory, owner = frappe.db.get_value(
+			"Customer", customer, ["territory", "custom_sales_person_user"]
+		)
+		# Territory guard: a non-manager can always re-add a customer they
+		# already own (My Accounts / shared — ownership already implies
+		# legitimate access regardless of territory), but adding an UNOWNED
+		# customer from the Territory pool must stay within their own team's
+		# territories — search_customer_pool no longer leaks other
+		# territories, but this closes the same gap on the write side too
+		# (the actual root cause of a Karnataka-team rep ending up with
+		# Gujarat customers, confirmed live 2026-09-03).
+		is_manager = any(r in frappe.get_roles() for r in ["Sales Manager", "System Manager"])
+		if not is_manager and owner != user:
+			user_territories = get_user_territories(user)
+			if territory not in user_territories:
+				frappe.throw(
+					_("{0} is outside your assigned territory — ask a manager to reassign it.")
+					.format(customer)
+				)
 		config = get_assignment_config()
 		source_pool = classify_customer(customer, config["dormant_threshold_days"])
 		_create_assignment(customer, territory, user, date, source_pool)

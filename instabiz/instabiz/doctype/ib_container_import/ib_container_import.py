@@ -117,6 +117,7 @@ def _make_stock_entry(doc: "IBContainerImport"):
 def get_container_items(container_import: str) -> list:
 	"""Item rows for the list-view "Generate Label" picker — just enough to
 	let the user pick which item when a container has more than one."""
+	frappe.has_permission("IB Container Import", "read", container_import, throw=True)
 	return frappe.db.get_all(
 		"IB Container Import Item",
 		filters={"parent": container_import},
@@ -136,6 +137,7 @@ def generate_item_labels(container_import: str, item_code: str, count) -> None:
 	the requested count, not what's on record."""
 	from frappe.utils.print_utils import get_print
 
+	frappe.has_permission("IB Container Import", "read", container_import, throw=True)
 	count = cint(count)
 	if count <= 0:
 		frappe.throw(_("Enter a number of labels greater than 0."))
@@ -163,6 +165,7 @@ def generate_item_labels(container_import: str, item_code: str, count) -> None:
 def reprint_item_labels(container_import: str, item_code: str) -> None:
 	from frappe.utils.print_utils import get_print
 
+	frappe.has_permission("IB Container Import", "read", container_import, throw=True)
 	doc = frappe.get_doc("IB Container Import", container_import)
 	row = next((r for r in doc.items if r.item_code == item_code), None)
 	if not row:

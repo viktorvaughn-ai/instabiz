@@ -62,10 +62,14 @@ frappe.listview_settings["Quotation"] = {
         ]);
         ib_setup_list_date_filter(listview, "Quotation", "creation", ["transaction_date"]);
         ib_setup_list_team_filter(listview, "Quotation");
+        ib_setup_list_multiselect_filter(listview, "Quotation", "custom_location", "Location",
+            ["MAHARASHTRA", "GUJARAT", "CHENNAI"],
+            { MAHARASHTRA: "BHIWANDI", GUJARAT: "SARIGRAM" });
         ib_reorder_filter_row(listview, [
             $(".ib-quotation-title-filter"),
             $(".ib-quotation-sales-user-filter"),
             $(".ib-quotation-status-multi-filter"),
+            $(".ib-quotation-custom-location-filter"),
             listview.page.fields_dict.name && listview.page.fields_dict.name.$wrapper,
             $(".ib-quotation-date-range-filter"),
             $(".ib-quotation-team-filter"),

@@ -87,7 +87,7 @@ def get_my_documents(doctype: str) -> list[dict]:
 	if exclude_statuses:
 		filters["status"] = ["not in", exclude_statuses]
 
-	fields = ["name"] + cfg["display_fields"]
+	fields = ["name", "modified"] + cfg["display_fields"]
 	rows = frappe.get_all(doctype, filters=filters, fields=fields, order_by="modified desc")
 	if not rows:
 		return []
