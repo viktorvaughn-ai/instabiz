@@ -131,10 +131,20 @@ frappe.listview_settings["Lead"] = Object.assign(
 			const nextFollowUpField = listview.page.fields_dict.custom_next_follow_up_date;
 			if (nextFollowUpField && nextFollowUpField.$wrapper) nextFollowUpField.$wrapper.hide();
 
-			// Last Activity date-range filter — matches the "Last activity: …"
-			// date already shown on every row (the list's own default sort
-			// field), so filtering and what's visible per-row line up.
-			ib_setup_list_date_filter(listview, "Lead", "custom_last_activity_at");
+			// Date-range filter on `creation` — NOT custom_last_activity_at.
+			// custom_last_activity_at is only ever written by log_lead_activity()
+			// (a rep manually logging a call/meeting/etc, see overrides/lead.py)
+			// — confirmed live 2026-09-03: only ~1,055 of 3,167 real leads (33%)
+			// have it set at all. A "Between" filter on a field that's NULL for
+			// 2/3 of all leads silently excludes them no matter what dates are
+			// picked, regardless of when they were actually created — that was
+			// a real bug (user report: "from to date filter is not working
+			// properly... make sure all docs get filtered"). `creation` is
+			// never null for any document, so filtering on it is the only way
+			// every lead is guaranteed reachable by *some* date range — same
+			// field every other list in this app (Quotation/SO/DN/SI) already
+			// filters on, for the same reason (see item 106/107).
+			ib_setup_list_date_filter(listview, "Lead", "creation");
 
 			// Filter row order = column order. Live list columns are: Title
 			// (now "Company Name"), Status, Assigned To (now "Handled By"),
