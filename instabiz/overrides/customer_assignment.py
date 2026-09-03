@@ -1477,9 +1477,17 @@ def assign_customer_to_user(customer, sales_user):
 	"""Set Handled By (custom_sales_person_user) on Customer master only.
 	Does NOT create a Today board assignment — rep can manually add via their board.
 	Clears any existing shares so the new owner starts fresh.
+	Manager-facing wrapper — see _reassign_customer_ownership for the actual
+	logic, also called internally by the system-initiated 90-day dormant
+	escalation (customer_dormant_escalation.py), which has no session-user
+	manager role to check.
 	"""
 	_require_manager()
+	_reassign_customer_ownership(customer, sales_user)
+	return {"status": "ok"}
 
+
+def _reassign_customer_ownership(customer, sales_user):
 	# Verify sales_user is an active Sales User
 	if not frappe.db.get_value("User", sales_user, "enabled"):
 		frappe.throw(_("User not found or disabled."))
@@ -1518,7 +1526,6 @@ def assign_customer_to_user(customer, sales_user):
 	})
 	frappe.db.commit()
 	_notify_customer_reassignment([(customer, customer_name, old_owner)], sales_user)
-	return {"status": "ok"}
 
 
 @frappe.whitelist()

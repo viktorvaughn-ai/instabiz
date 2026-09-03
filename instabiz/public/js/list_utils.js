@@ -389,7 +389,17 @@ function ib_setup_list_autocomplete_filter(listview, doctype, fieldname, placeho
 }
 
 // ── Generic sales person (User link) filter ───────────────────────────────────
-function ib_setup_list_sales_user_filter(listview, doctype, placeholder) {
+// allowNone (opt-in, Customer only as of 2026-09-03): adds a synthetic
+// "— Unassigned —" entry to the suggestion list, alongside real Users, so a
+// manager can filter for unhandled customers (custom_sales_person_user not
+// set) the same way they'd pick any real rep — not a separate control.
+// Needs Autocomplete (not Link — a plain Link only ever suggests real rows of
+// its target doctype, no room for a non-doctype pseudo-value), so allowNone
+// swaps the control type; existing Quotation/SO callers (allowNone omitted)
+// are unaffected and keep the native Link control exactly as before.
+const IB_NONE_SALES_USER = "__none__";
+
+function ib_setup_list_sales_user_filter(listview, doctype, placeholder, allowNone) {
     placeholder = placeholder || "Sales Person";
     const slug    = doctype.toLowerCase().replace(/ /g, "-");
     const css     = `ib-${slug}-sales-user-filter`;
@@ -399,35 +409,90 @@ function ib_setup_list_sales_user_filter(listview, doctype, placeholder) {
 
     const $wrapper = $(
         `<div class="form-group frappe-control input-max-width ${css}" ` +
-        `data-fieldtype="Link" data-fieldname="custom_sales_person_user"></div>`
+        `data-fieldtype="${allowNone ? "Autocomplete" : "Link"}" data-fieldname="custom_sales_person_user"></div>`
     );
     $wrapper.css({ flex: "0 0 160px", maxWidth: "160px" });
 
     _ib_chain_anchor(listview, $wrapper);
 
-    const control = frappe.ui.form.make_control({
-        df: {
-            label: "",
-            fieldtype: "Link",
-            options: "User",
-            placeholder: __(placeholder),
-            onchange() {
-                const val = control.get_value();
-                _ib_remove_filters(listview, "custom_sales_person_user");
-                if (val) {
-                    listview.filter_area.add([
-                        [doctype, "custom_sales_person_user", "=", val],
-                    ]);
-                }
-                listview.refresh();
+    function apply(val) {
+        _ib_remove_filters(listview, "custom_sales_person_user");
+        if (val === IB_NONE_SALES_USER) {
+            listview.filter_area.add([[doctype, "custom_sales_person_user", "is", "not set"]]);
+        } else if (val) {
+            listview.filter_area.add([[doctype, "custom_sales_person_user", "=", val]]);
+        }
+        listview.refresh();
+    }
+
+    let control;
+    if (allowNone) {
+        control = frappe.ui.form.make_control({
+            df: {
+                label: "",
+                fieldtype: "Autocomplete",
+                placeholder: __(placeholder),
+                ignore_validation: 1,
+                onchange() {
+                    apply(control.get_value());
+                },
             },
-        },
-        parent: $wrapper,
-        only_input: true,
-        render_input: 1,
-    });
+            parent: $wrapper,
+            only_input: true,
+            render_input: 1,
+        });
+
+        let _t = null;
+        function load(txt) {
+            clearTimeout(_t);
+            _t = setTimeout(function () {
+                frappe.db
+                    .get_list("User", {
+                        fields: ["name", "full_name"],
+                        filters: txt ? [["full_name", "like", `%${txt}%`]] : [],
+                        order_by: "full_name asc",
+                        limit: 20,
+                    })
+                    .then(function (rows) {
+                        const data = [{ label: __("— Unassigned —"), value: IB_NONE_SALES_USER }].concat(
+                            (rows || []).map((r) => ({ label: r.full_name || r.name, value: r.name }))
+                        );
+                        control.set_data(data);
+                        if (control.awesomplete && control.$input.is(":focus")) {
+                            control.awesomplete.evaluate();
+                        }
+                    });
+            }, 200);
+        }
+        control.$input.on("input focus", function () {
+            load((control.$input.val() || "").trim());
+        });
+        load("");
+    } else {
+        control = frappe.ui.form.make_control({
+            df: {
+                label: "",
+                fieldtype: "Link",
+                options: "User",
+                placeholder: __(placeholder),
+                onchange() {
+                    apply(control.get_value());
+                },
+            },
+            parent: $wrapper,
+            only_input: true,
+            render_input: 1,
+        });
+    }
     control.$wrapper.removeClass("form-group");
     control.$wrapper.css("margin-bottom", 0);
+
+    const current = listview.filter_area.get().find((f) => f[1] === "custom_sales_person_user");
+    if (current) {
+        // "is"/"not set" filters carry no meaningful f[3] value to restore —
+        // represent them as the synthetic None entry instead of a raw value.
+        control.set_value(current[2] === "is" ? IB_NONE_SALES_USER : current[3]);
+    }
 
     const $clearBtn = listview.filter_area && listview.filter_area.filter_x_button;
     if ($clearBtn && $clearBtn.length) {

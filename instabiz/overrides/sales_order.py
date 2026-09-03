@@ -77,8 +77,8 @@ class CustomSalesOrder(IbStatusMixin, SalesOrder):
             frappe.throw(_("Fill in Cancellation Reason before cancelling this Sales Order."))
 
     def before_submit(self):
-        _check_credit_limit(self)
-        _check_overdue_block(self)
+        # _check_credit_limit(self)  # temporarily disabled 2026-09-03 (user request) — re-enable when ready
+        # _check_overdue_block(self)  # temporarily disabled 2026-09-03 (user request) — re-enable when ready
         check_advance_approval(self)
 
 

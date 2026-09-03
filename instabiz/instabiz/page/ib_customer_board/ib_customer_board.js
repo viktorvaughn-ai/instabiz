@@ -276,6 +276,15 @@ class IBCustomerBoard {
 					<iconify-icon icon="lucide:clock" width="12" height="12"></iconify-icon>
 					Updated <span id="ib-cb-refresh-time-val"></span>
 				</span>
+				<div class="ib-cb-dormant-tip">
+					<div class="ib-cb-dormant-tip-icon">
+						<iconify-icon icon="lucide:clock-alert" width="16" height="16"></iconify-icon>
+					</div>
+					<div class="ib-cb-dormant-tip-body">
+						<div class="ib-cb-dormant-tip-title">Account Follow-Up Policy</div>
+						<div class="ib-cb-dormant-tip-desc">If an account has not placed an order in 30 days, you will receive a gentle reminder. After 60 days, a second, more considerate notice will follow. Should 90 days pass without an order, the account will be reassigned to the next representative on your territory team, so it continues to receive proper attention.</div>
+					</div>
+				</div>
 				<div class="ib-cb-columns">
 					<div class="ib-cb-col" id="ib-cb-dormant">
 						<div class="ib-cb-col-header">

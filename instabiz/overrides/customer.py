@@ -610,3 +610,37 @@ def get_customer_phones(customers):
 		if r.customer not in result:
 			result[r.customer] = (r.phone or "").strip()
 	return result
+
+
+@frappe.whitelist()
+def get_customer_inactivity(customers):
+	"""Days since each customer's last submitted Sales Order — same basis
+	dormant.py/classify_customer() already use for "dormant" — for the
+	Customer list view's row-highlight tiers (2026-09-03, user request).
+	None (never ordered) is treated as maximally inactive by the caller."""
+	import json
+	names = json.loads(customers)
+	if not names:
+		return {}
+	# Same row-level isolation as get_customer_phones above — raw SQL has no
+	# permission check of its own.
+	permitted = frappe.get_list("Customer", filters={"name": ["in", names]}, pluck="name")
+	if not permitted:
+		return {}
+	rows = frappe.db.sql(
+		"""
+		SELECT customer, MAX(transaction_date) AS last_order_date
+		FROM `tabSales Order`
+		WHERE docstatus = 1 AND customer IN %(names)s
+		GROUP BY customer
+		""",
+		{"names": permitted},
+		as_dict=True,
+	)
+	last_order = {r.customer: r.last_order_date for r in rows}
+	today = frappe.utils.today()
+	result = {}
+	for name in permitted:
+		last_date = last_order.get(name)
+		result[name] = frappe.utils.date_diff(today, last_date) if last_date else None
+	return result

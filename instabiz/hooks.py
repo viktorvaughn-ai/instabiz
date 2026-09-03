@@ -16,6 +16,13 @@ scheduler_events = {
         "instabiz.overrides.customer_score.run_customer_score",
         # Flag customers with no SO in 60 days → ToDo + bell notification
         "instabiz.overrides.dormant.run_dormant_check",
+        # 3-tier owned-customer inactivity escalation: 30d notify, 60d second
+        # warning, 90d auto-reassign to the next rep on the territory team.
+        # NOT WIRED IN YET (2026-09-04) — a real test run found 631 of ~1,118
+        # currently-owned customers are already 90+ days inactive, meaning the
+        # very first live run would mass-reassign all of them at once. Left
+        # disabled until the user explicitly says go; uncomment to arm it.
+        # "instabiz.overrides.customer_dormant_escalation.run_dormant_reassignment_escalation",
         # Monthly sales target milestone notifications (50%/75% elapsed + end-of-month)
         "instabiz.overrides.sales_target.run_target_notifications",
         # Alert rep when SO has no DN after 48h
